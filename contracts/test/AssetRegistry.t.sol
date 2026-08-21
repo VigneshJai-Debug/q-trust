@@ -14,6 +14,7 @@ contract AssetRegistryTest is Test {
 
     function setUp() public {
         registry = new AssetRegistry();
+        registry.initialize();
         registry.grantRole(registry.REGISTRAR_ROLE(), registrar);
     }
 
@@ -114,5 +115,17 @@ contract AssetRegistryTest is Test {
 
         bytes32[] memory assets = registry.getAssetsByOrg(registrar);
         assertEq(assets.length, 2);
+    }
+
+    function test_PauseUnpause() public {
+        registry.pause();
+        vm.prank(registrar);
+        vm.expectRevert();
+        registry.registerCBOM(CBOM_HASH, METADATA_URI);
+
+        registry.unpause();
+        vm.prank(registrar);
+        bytes32 assetId = registry.registerCBOM(CBOM_HASH, METADATA_URI);
+        assertTrue(assetId != bytes32(0));
     }
 }

@@ -3,17 +3,25 @@ pragma solidity 0.8.24;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 /// @title AssetRegistry — registers Cryptographic Bills of Materials (CBOMs)
 /// @notice Organizations post the hash of their CBOM (asset inventory) on-chain.
 ///         The full CBOM is stored off-chain (IPFS or S3); only its hash is here.
-contract AssetRegistry is AccessControl, ReentrancyGuard {
+///         Supports EIP-712 gasless registration and UUPS proxy upgradeability.
+contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializable, UUPSUpgradeable {
 
     error AssetNotFound(bytes32 assetId);
     error AssetAlreadyExists(bytes32 assetId);
     error NotRegistrar(address caller);
     error EmptyHash();
     error AssetAlreadyRetired(bytes32 assetId);
+    error InvalidSignature();
+    error InvalidNonce(address signer, uint256 provided, uint256 expected);
+    error NotInitialized();
 
     event CBOMRegistered(
         bytes32 indexed assetId,
@@ -50,29 +58,141 @@ contract AssetRegistry is AccessControl, ReentrancyGuard {
 
     bytes32 public constant REGISTRAR_ROLE = keccak256("REGISTRAR_ROLE");
 
-    constructor() {
+    // ==================== EIP-712 (gasless CBOM registration) ====================
+    bytes32 private constant _CBOM_REGISTRATION_TYPEHASH =
+        keccak256(
+            "CBOMRegistration(bytes32 cbomHash,string metadataURI,uint256 nonce)"
+        );
+
+    bytes32 private constant _DOMAIN_TYPEHASH =
+        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+
+    bytes32 private _domainSeparator;
+    bytes32 public constant EIP712_VERSION_HASH = keccak256("1");
+
+    mapping(address => uint256) public nonces;
+
+    bool private _initialized;
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {}
+
+    function initialize() public initializer {
+        if (_initialized) revert NotInitialized();
+        _initialized = true;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(REGISTRAR_ROLE, msg.sender);
+        _domainSeparator = keccak256(
+            abi.encode(
+                _DOMAIN_TYPEHASH,
+                keccak256("QTrustAssetRegistry"),
+                EIP712_VERSION_HASH,
+                block.chainid,
+                address(this)
+            )
+        );
     }
 
-    /// @notice Register a new CBOM
+    function _authorizeUpgrade(address) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
+
+    /// @notice Domain separator for EIP-712 typed data signing.
+    function domainSeparator() external view returns (bytes32) {
+        return _domainSeparator;
+    }
+
+    /// @notice Hash the typed CBOM Registration data for EIP-712 signing.
+    function hashTypedCBOMRegistration(
+        bytes32 cbomHash,
+        string calldata metadataURI,
+        uint256 nonce
+    ) public view returns (bytes32) {
+        return keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                _domainSeparator,
+                keccak256(
+                    abi.encode(
+                        _CBOM_REGISTRATION_TYPEHASH,
+                        cbomHash,
+                        keccak256(abi.encodePacked(metadataURI)),
+                        nonce
+                    )
+                )
+            )
+        );
+    }
+
+    /// @notice Submit a gasless CBOM registration signed by the org.
+    ///         The org's signature authorizes the registration; the caller
+    ///         (any relayer) pays the gas. The recorded orgDid is the signer.
+    function registerCBOMSigned(
+        bytes32 cbomHash,
+        string calldata metadataURI,
+        uint256 nonce,
+        bytes calldata signature
+    ) external nonReentrant whenNotPaused returns (bytes32 assetId) {
+        address signer = _recoverCBOMSigner(cbomHash, metadataURI, nonce, signature);
+        if (signer == address(0)) revert InvalidSignature();
+        if (nonces[signer] != nonce) {
+            revert InvalidNonce(signer, nonce, nonces[signer]);
+        }
+
+        nonces[signer] = nonce + 1;
+
+        return _registerCBOM(signer, cbomHash, metadataURI);
+    }
+
+    /// @dev Recover the EIP-712 signer of a CBOM registration.
+    function _recoverCBOMSigner(
+        bytes32 cbomHash,
+        string calldata metadataURI,
+        uint256 nonce,
+        bytes calldata signature
+    ) internal view returns (address) {
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                _domainSeparator,
+                keccak256(
+                    abi.encode(
+                        _CBOM_REGISTRATION_TYPEHASH,
+                        cbomHash,
+                        keccak256(abi.encodePacked(metadataURI)),
+                        nonce
+                    )
+                )
+            )
+        );
+        return ECDSA.recover(digest, signature);
+    }
+
+    /// @notice Register a new CBOM (direct, requires REGISTRAR_ROLE)
     /// @param cbomHash     SHA-256 of the CBOM JSON file
     /// @param metadataURI  IPFS URI (ipfs://...) for the full CBOM
     /// @return assetId     The ID under which this CBOM is stored
     function registerCBOM(
         bytes32 cbomHash,
         string calldata metadataURI
-    ) external nonReentrant onlyRole(REGISTRAR_ROLE) returns (bytes32 assetId) {
+    ) external nonReentrant whenNotPaused onlyRole(REGISTRAR_ROLE) returns (bytes32 assetId) {
+        return _registerCBOM(msg.sender, cbomHash, metadataURI);
+    }
+
+    /// @dev Internal CBOM registration logic shared by direct and EIP-712 paths.
+    function _registerCBOM(
+        address orgDid,
+        bytes32 cbomHash,
+        string calldata metadataURI
+    ) internal returns (bytes32 assetId) {
         if (cbomHash == bytes32(0)) revert EmptyHash();
 
-        assetId = keccak256(abi.encodePacked(msg.sender, cbomHash, block.timestamp));
+        assetId = keccak256(abi.encodePacked(orgDid, cbomHash, block.timestamp));
 
         if (_assets[assetId].orgDid != address(0)) {
             revert AssetAlreadyExists(assetId);
         }
 
         _assets[assetId] = Asset({
-            orgDid: msg.sender,
+            orgDid: orgDid,
             cbomHash: cbomHash,
             metadataURI: metadataURI,
             timestamp: block.timestamp,
@@ -81,9 +201,9 @@ contract AssetRegistry is AccessControl, ReentrancyGuard {
         });
 
         _allAssetIds.push(assetId);
-        _assetsByOrg[msg.sender].push(assetId);
+        _assetsByOrg[orgDid].push(assetId);
 
-        emit CBOMRegistered(assetId, msg.sender, cbomHash, metadataURI, block.timestamp);
+        emit CBOMRegistered(assetId, orgDid, cbomHash, metadataURI, block.timestamp);
     }
 
     /// @notice Update a CBOM (e.g., after re-scanning)
@@ -91,7 +211,7 @@ contract AssetRegistry is AccessControl, ReentrancyGuard {
         bytes32 assetId,
         bytes32 newCbomHash,
         string calldata newMetadataURI
-    ) external nonReentrant {
+    ) external nonReentrant whenNotPaused {
         Asset storage asset = _assets[assetId];
         if (asset.orgDid == address(0)) revert AssetNotFound(assetId);
         if (asset.orgDid != msg.sender && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) {
@@ -104,10 +224,8 @@ contract AssetRegistry is AccessControl, ReentrancyGuard {
         emit CBOMUpdated(assetId, newCbomHash, newMetadataURI, block.timestamp);
     }
 
-    /// @notice Retire a CBOM registration. The owning org (or an admin) marks
-    ///         the asset inactive; retired assets can no longer back migration
-    ///         records and are shown as REVOKED in verification UIs.
-    function retireAsset(bytes32 assetId) external nonReentrant {
+    /// @notice Retire a CBOM registration.
+    function retireAsset(bytes32 assetId) external nonReentrant whenNotPaused {
         Asset storage asset = _assets[assetId];
         if (asset.orgDid == address(0)) revert AssetNotFound(assetId);
         if (asset.orgDid != msg.sender && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) {
@@ -118,6 +236,16 @@ contract AssetRegistry is AccessControl, ReentrancyGuard {
         asset.lastUpdated = block.timestamp;
 
         emit CBOMRetired(assetId, block.timestamp);
+    }
+
+    /// @notice Pause all registrations, updates, and retirements
+    function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _pause();
+    }
+
+    /// @notice Unpause the contract
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _unpause();
     }
 
     /// @notice Get a CBOM by ID

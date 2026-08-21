@@ -3,14 +3,16 @@ pragma solidity 0.8.24;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "./AssetRegistry.sol";
 
 /// @title MigrationRegistry — records each PQC migration step
 /// @notice Each step is one asset migrating from one algorithm to another.
-///         Evidence (e.g., HSM log) is stored off-chain; only its hash is on-chain.
-///         Migration steps are validated against the AssetRegistry: an org can
-///         only record migrations for assets it actually registered.
-contract MigrationRegistry is AccessControl, ReentrancyGuard {
+///         Supports EIP-712 gasless migration recording and UUPS proxy upgradeability.
+contract MigrationRegistry is AccessControl, ReentrancyGuard, Pausable, Initializable, UUPSUpgradeable {
 
     error MigrationNotFound(bytes32 migrationId);
     error DuplicateMigration(bytes32 migrationId);
@@ -20,6 +22,9 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard {
     error EmptyEvidenceHash();
     error SameAlgorithm(string algorithm);
     error ZeroAssetRegistry();
+    error InvalidSignature();
+    error InvalidNonce(address signer, uint256 provided, uint256 expected);
+    error NotInitialized();
 
     event MigrationRecorded(
         bytes32 indexed migrationId,
@@ -33,19 +38,19 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard {
     );
 
     struct Migration {
-        bytes32 assetId;        // Reference to AssetRegistry entry
+        bytes32 assetId;
         address orgDid;
-        string  fromAlgorithm;  // e.g., "RSA-2048"
-        string  toAlgorithm;    // e.g., "ML-DSA-441"
-        bytes32 evidenceHash;    // Hash of migration evidence (HSM logs, etc.)
-        string  evidenceURI;    // IPFS URI for evidence
+        string  fromAlgorithm;
+        string  toAlgorithm;
+        bytes32 evidenceHash;
+        string  evidenceURI;
         uint256 timestamp;
-        bool    verified;       // True if auditor verified this migration
+        bool    verified;
     }
 
     mapping(bytes32 => Migration) private _migrations;
-    mapping(bytes32 => bytes32[]) private _migrationsByAsset;   // assetId => migration IDs
-    mapping(address => bytes32[]) private _migrationsByOrg;    // org => migration IDs
+    mapping(bytes32 => bytes32[]) private _migrationsByAsset;
+    mapping(address => bytes32[]) private _migrationsByOrg;
     bytes32[] private _allMigrationIds;
 
     bytes32 public constant MIGRATOR_ROLE = keccak256("MIGRATOR_ROLE");
@@ -54,23 +59,143 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard {
     /// @notice The AssetRegistry this registry validates against.
     AssetRegistry public immutable assetRegistry;
 
+    // ==================== EIP-712 (gasless migration recording) ====================
+    bytes32 private constant _MIGRATION_RECORDING_TYPEHASH =
+        keccak256(
+            "MigrationRecording(bytes32 migrationId,bytes32 assetId,string fromAlgorithm,"
+            "string toAlgorithm,bytes32 evidenceHash,string evidenceURI,uint256 nonce)"
+        );
+
+    bytes32 private constant _DOMAIN_TYPEHASH =
+        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+
+    bytes32 private _domainSeparator;
+    bytes32 public constant EIP712_VERSION_HASH = keccak256("1");
+
+    mapping(address => uint256) public nonces;
+
+    bool private _initialized;
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address assetRegistry_) {
         if (assetRegistry_ == address(0)) revert ZeroAssetRegistry();
         assetRegistry = AssetRegistry(assetRegistry_);
+    }
+
+    function initialize() public initializer {
+        if (_initialized) revert NotInitialized();
+        _initialized = true;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(MIGRATOR_ROLE, msg.sender);
         _grantRole(AUDITOR_ROLE, msg.sender);
+        _domainSeparator = keccak256(
+            abi.encode(
+                _DOMAIN_TYPEHASH,
+                keccak256("QTrustMigrationRegistry"),
+                EIP712_VERSION_HASH,
+                block.chainid,
+                address(this)
+            )
+        );
     }
 
-    /// @notice Record a migration step. The referenced asset must exist and be
-    ///         active in the AssetRegistry, the evidence hash must be non-zero,
-    ///         and the target algorithm must differ from the source.
-    /// @param migrationId  The ID of the migration
-    /// @param assetId      The ID of the asset being migrated
-    /// @param fromAlgorithm The original algorithm
-    /// @param toAlgorithm   The target algorithm
-    /// @param evidenceHash  Hash of the migration evidence
-    /// @param evidenceURI   IPFS URI for evidence
+    function _authorizeUpgrade(address) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
+
+    /// @notice Domain separator for EIP-712 typed data signing.
+    function domainSeparator() external view returns (bytes32) {
+        return _domainSeparator;
+    }
+
+    /// @notice Hash the typed Migration Recording data for EIP-712 signing.
+    function hashTypedMigration(
+        bytes32 migrationId,
+        bytes32 assetId,
+        string calldata fromAlgorithm,
+        string calldata toAlgorithm,
+        bytes32 evidenceHash,
+        string calldata evidenceURI,
+        uint256 nonce
+    ) public view returns (bytes32) {
+        return keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                _domainSeparator,
+                keccak256(
+                    abi.encode(
+                        _MIGRATION_RECORDING_TYPEHASH,
+                        migrationId,
+                        assetId,
+                        keccak256(abi.encodePacked(fromAlgorithm)),
+                        keccak256(abi.encodePacked(toAlgorithm)),
+                        evidenceHash,
+                        keccak256(abi.encodePacked(evidenceURI)),
+                        nonce
+                    )
+                )
+            )
+        );
+    }
+
+    /// @notice Submit a gasless migration recording signed by the org.
+    ///         The org's signature authorizes the migration; the caller
+    ///         (any relayer) pays the gas. The recorded orgDid is the signer.
+    function recordMigrationSigned(
+        bytes32 migrationId,
+        bytes32 assetId,
+        string calldata fromAlgorithm,
+        string calldata toAlgorithm,
+        bytes32 evidenceHash,
+        string calldata evidenceURI,
+        uint256 nonce,
+        bytes calldata signature
+    ) external nonReentrant whenNotPaused returns (bytes32 recordedMigrationId) {
+        address signer = _recoverMigrationSigner(
+            migrationId, assetId, fromAlgorithm, toAlgorithm,
+            evidenceHash, evidenceURI, nonce, signature
+        );
+        if (signer == address(0)) revert InvalidSignature();
+        if (nonces[signer] != nonce) {
+            revert InvalidNonce(signer, nonce, nonces[signer]);
+        }
+
+        nonces[signer] = nonce + 1;
+
+        return _recordMigration(signer, migrationId, assetId, fromAlgorithm, toAlgorithm, evidenceHash, evidenceURI);
+    }
+
+    /// @dev Recover the EIP-712 signer of a migration recording.
+    function _recoverMigrationSigner(
+        bytes32 migrationId,
+        bytes32 assetId,
+        string calldata fromAlgorithm,
+        string calldata toAlgorithm,
+        bytes32 evidenceHash,
+        string calldata evidenceURI,
+        uint256 nonce,
+        bytes calldata signature
+    ) internal view returns (address) {
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                _domainSeparator,
+                keccak256(
+                    abi.encode(
+                        _MIGRATION_RECORDING_TYPEHASH,
+                        migrationId,
+                        assetId,
+                        keccak256(abi.encodePacked(fromAlgorithm)),
+                        keccak256(abi.encodePacked(toAlgorithm)),
+                        evidenceHash,
+                        keccak256(abi.encodePacked(evidenceURI)),
+                        nonce
+                    )
+                )
+            )
+        );
+        return ECDSA.recover(digest, signature);
+    }
+
+    /// @notice Record a migration step (direct, requires MIGRATOR_ROLE)
     function recordMigration(
         bytes32 migrationId,
         bytes32 assetId,
@@ -78,7 +203,20 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard {
         string calldata toAlgorithm,
         bytes32 evidenceHash,
         string calldata evidenceURI
-    ) external nonReentrant onlyRole(MIGRATOR_ROLE) {
+    ) external nonReentrant whenNotPaused onlyRole(MIGRATOR_ROLE) returns (bytes32 recordedMigrationId) {
+        return _recordMigration(msg.sender, migrationId, assetId, fromAlgorithm, toAlgorithm, evidenceHash, evidenceURI);
+    }
+
+    /// @dev Internal migration recording logic shared by direct and EIP-712 paths.
+    function _recordMigration(
+        address orgDid,
+        bytes32 migrationId,
+        bytes32 assetId,
+        string calldata fromAlgorithm,
+        string calldata toAlgorithm,
+        bytes32 evidenceHash,
+        string calldata evidenceURI
+    ) internal returns (bytes32 recordedMigrationId) {
         if (_migrations[migrationId].orgDid != address(0)) revert DuplicateMigration(migrationId);
 
         // Cross-contract integrity: the asset must exist and be active.
@@ -93,7 +231,7 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard {
 
         _migrations[migrationId] = Migration({
             assetId: assetId,
-            orgDid: msg.sender,
+            orgDid: orgDid,
             fromAlgorithm: fromAlgorithm,
             toAlgorithm: toAlgorithm,
             evidenceHash: evidenceHash,
@@ -103,19 +241,31 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard {
         });
 
         _migrationsByAsset[assetId].push(migrationId);
-        _migrationsByOrg[msg.sender].push(migrationId);
+        _migrationsByOrg[orgDid].push(migrationId);
         _allMigrationIds.push(migrationId);
 
         emit MigrationRecorded(
-            migrationId, assetId, msg.sender,
+            migrationId, assetId, orgDid,
             fromAlgorithm, toAlgorithm, evidenceHash, evidenceURI, block.timestamp
         );
+
+        return migrationId;
     }
 
     /// @notice Auditor marks a migration as verified
-    function verifyMigration(bytes32 migrationId) external onlyRole(AUDITOR_ROLE) {
+    function verifyMigration(bytes32 migrationId) external onlyRole(AUDITOR_ROLE) whenNotPaused {
         if (_migrations[migrationId].orgDid == address(0)) revert MigrationNotFound(migrationId);
         _migrations[migrationId].verified = true;
+    }
+
+    /// @notice Pause all operations
+    function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _pause();
+    }
+
+    /// @notice Unpause the contract
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _unpause();
     }
 
     // ============ View Functions ============

@@ -192,6 +192,77 @@ class QTrustClient:
             raise RuntimeError("CBOMRegistered event not found in receipt")
         return "0x" + args["assetId"].hex()
 
+    # ------------------------------------------------------------------
+    # EIP-712 gasless CBOM registration
+    # ------------------------------------------------------------------
+    def _eip712_asset_domain(self) -> dict:
+        return {
+            "name": "QTrustAssetRegistry",
+            "version": "1",
+            "chainId": self.chain_id,
+            "verifyingContract": Web3.to_checksum_address(self.asset_registry_address),
+        }
+
+    def sign_cbom_registration(
+        self, cbom_hash: str, metadata_uri: str = "", nonce: int | None = None,
+    ) -> tuple[dict, str]:
+        """Sign a CBOM registration as EIP-712 typed data.
+
+        Returns (typed_data, signature). The signature authorizes any relayer
+        to submit the registration on the org's behalf (gasless).
+        """
+        self._require_account()
+        if nonce is None:
+            nonce = self.asset_registry.functions.nonces(
+                self.account.address
+            ).call()
+        typed_data = {
+            "types": {
+                "EIP712Domain": [
+                    {"name": "name", "type": "string"},
+                    {"name": "version", "type": "string"},
+                    {"name": "chainId", "type": "uint256"},
+                    {"name": "verifyingContract", "type": "address"},
+                ],
+                "CBOMRegistration": [
+                    {"name": "cbomHash", "type": "bytes32"},
+                    {"name": "metadataURI", "type": "string"},
+                    {"name": "nonce", "type": "uint256"},
+                ],
+            },
+            "primaryType": "CBOMRegistration",
+            "domain": self._eip712_asset_domain(),
+            "message": {
+                "cbomHash": bytes.fromhex(cbom_hash[2:]),
+                "metadataURI": metadata_uri,
+                "nonce": nonce,
+            },
+        }
+        signed = self.account.sign_typed_data(full_message=typed_data)
+        return typed_data, signed.signature.hex()
+
+    def register_cbom_signed(
+        self, cbom_hash: str, metadata_uri: str, nonce: int, signature: str,
+    ) -> str:
+        """Submit a signed CBOM registration (gas paid by the caller).
+
+        The on-chain registration records the SIGNER as the org — the
+        submitting account only pays gas.
+        """
+        receipt = self._send_transaction(
+            self.asset_registry.functions.registerCBOMSigned(
+                bytes.fromhex(cbom_hash[2:]),
+                metadata_uri,
+                nonce,
+                bytes.fromhex(signature[2:] if signature.startswith("0x") else signature),
+            ),
+            gas_limit=500_000,
+        )
+        args = self._event_args(receipt, self.asset_registry, "CBOMRegistered")
+        if args is None:
+            raise RuntimeError("CBOMRegistered event not found in receipt")
+        return "0x" + args["assetId"].hex()
+
     def retire_asset(self, asset_id: str) -> str:
         """Retire a CBOM registration (owner or admin). Returns the tx hash."""
         return self._send_transaction(
@@ -423,6 +494,103 @@ class QTrustClient:
             ),
             gas_limit=500_000,
         )["transactionHash"].hex()
+
+    # ------------------------------------------------------------------
+    # EIP-712 gasless migration recording
+    # ------------------------------------------------------------------
+    def _eip712_migration_domain(self) -> dict:
+        return {
+            "name": "QTrustMigrationRegistry",
+            "version": "1",
+            "chainId": self.chain_id,
+            "verifyingContract": Web3.to_checksum_address(self.migration_registry_address),
+        }
+
+    def sign_migration(
+        self,
+        migration_id: str,
+        asset_id: str,
+        from_algorithm: str,
+        to_algorithm: str,
+        evidence_hash: str,
+        evidence_uri: str = "",
+        nonce: int | None = None,
+    ) -> tuple[dict, str]:
+        """Sign a migration recording as EIP-712 typed data.
+
+        Returns (typed_data, signature). The signature authorizes any relayer
+        to submit the migration on the org's behalf (gasless).
+        """
+        self._require_account()
+        if nonce is None:
+            nonce = self.migration_registry.functions.nonces(
+                self.account.address
+            ).call()
+        typed_data = {
+            "types": {
+                "EIP712Domain": [
+                    {"name": "name", "type": "string"},
+                    {"name": "version", "type": "string"},
+                    {"name": "chainId", "type": "uint256"},
+                    {"name": "verifyingContract", "type": "address"},
+                ],
+                "MigrationRecording": [
+                    {"name": "migrationId", "type": "bytes32"},
+                    {"name": "assetId", "type": "bytes32"},
+                    {"name": "fromAlgorithm", "type": "string"},
+                    {"name": "toAlgorithm", "type": "string"},
+                    {"name": "evidenceHash", "type": "bytes32"},
+                    {"name": "evidenceURI", "type": "string"},
+                    {"name": "nonce", "type": "uint256"},
+                ],
+            },
+            "primaryType": "MigrationRecording",
+            "domain": self._eip712_migration_domain(),
+            "message": {
+                "migrationId": bytes.fromhex(migration_id[2:]),
+                "assetId": bytes.fromhex(asset_id[2:]),
+                "fromAlgorithm": from_algorithm,
+                "toAlgorithm": to_algorithm,
+                "evidenceHash": bytes.fromhex(evidence_hash[2:]),
+                "evidenceURI": evidence_uri,
+                "nonce": nonce,
+            },
+        }
+        signed = self.account.sign_typed_data(full_message=typed_data)
+        return typed_data, signed.signature.hex()
+
+    def record_migration_signed(
+        self,
+        migration_id: str,
+        asset_id: str,
+        from_algorithm: str,
+        to_algorithm: str,
+        evidence_hash: str,
+        evidence_uri: str,
+        nonce: int,
+        signature: str,
+    ) -> str:
+        """Submit a signed migration recording (gas paid by the caller).
+
+        The on-chain migration records the SIGNER as the org — the
+        submitting account only pays gas.
+        """
+        receipt = self._send_transaction(
+            self.migration_registry.functions.recordMigrationSigned(
+                bytes.fromhex(migration_id[2:]),
+                bytes.fromhex(asset_id[2:]),
+                from_algorithm, to_algorithm,
+                bytes.fromhex(evidence_hash[2:]),
+                evidence_uri,
+                nonce,
+                bytes.fromhex(signature[2:] if signature.startswith("0x") else signature),
+            ),
+            gas_limit=500_000,
+        )
+        args = self._event_args(receipt, self.migration_registry, "MigrationRecorded")
+        if args is None:
+            raise RuntimeError("MigrationRecorded event not found in receipt")
+        return "0x" + args["migrationId"].hex()
 
     def verify_migration(self, migration_id: str) -> str:
         return self._send_transaction(

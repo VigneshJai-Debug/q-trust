@@ -3,11 +3,15 @@ pragma solidity 0.8.24;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 /// @title VendorRegistry — vendors post PQC readiness attestations
 /// @notice Vendors (DigiCert, Thales, AWS, etc.) attest which products
 ///         and versions support which PQC algorithms.
-contract VendorRegistry is AccessControl {
+///         Supports EIP-712 gasless attestations and UUPS proxy upgradeability.
+contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeable {
 
     error VendorNotFound(address vendorDid);
     error VendorAlreadyRegistered(address vendorDid);
@@ -16,14 +20,13 @@ contract VendorRegistry is AccessControl {
     error NotVendor(address caller);
     error DuplicateAttestation(bytes32 attestationId);
     error AttestationLimitExceeded(bytes32 productIdHash);
+    error InvalidSignature();
+    error InvalidNonce(address signer, uint256 provided, uint256 expected);
+    error NotInitialized();
 
-    /// @notice Maximum number of attestations per product (productId+version+algorithm)
-    ///         — bounds on-chain iteration cost in checkProductSupport.
+    /// @notice Maximum number of attestations per product
     uint256 public constant MAX_ATTESTATIONS_PER_PRODUCT = 256;
 
-    /// @notice Day-to-day operator role for onboarding vendors. Held by the
-    ///         deployer; NOT routed through the timelock (registering a vendor
-    ///         is operational, deactivating one is a governance decision).
     bytes32 public constant VENDOR_ADMIN_ROLE = keccak256("VENDOR_ADMIN_ROLE");
 
     event VendorRegistered(address indexed vendorDid, string name, string metadataURI, uint256 timestamp);
@@ -33,9 +36,9 @@ contract VendorRegistry is AccessControl {
         address indexed vendorDid,
         string  productId,
         string  version,
-        string  algorithm,     // e.g. "ML-KEM-512", "ML-DSA-441"
+        string  algorithm,
         bool    supported,
-        string  evidenceURI,   // IPFS URI for test results
+        string  evidenceURI,
         uint256 timestamp
     );
     event AttestationRevoked(bytes32 indexed attestationId, uint256 timestamp);
@@ -49,11 +52,11 @@ contract VendorRegistry is AccessControl {
 
     struct ProductAttestation {
         address vendorDid;
-        string  productId;       // e.g. "thales-luna-hsm"
-        string  version;          // e.g. "7.3.0"
-        string  algorithm;        // e.g. "ML-KEM-512"
-        bool    supported;        // true = supports PQC, false = does not
-        string  evidenceURI;     // IPFS URI for test results / evidence
+        string  productId;
+        string  version;
+        string  algorithm;
+        bool    supported;
+        string  evidenceURI;
         uint256 timestamp;
         bool    revoked;
     }
@@ -61,15 +64,11 @@ contract VendorRegistry is AccessControl {
     mapping(address => VendorInfo) private _vendors;
     mapping(bytes32 => ProductAttestation) private _attestations;
     mapping(address => bytes32[]) private _attestationsByVendor;
-    mapping(bytes32 => bytes32[]) private _attestationsByProduct; // productIdHash -> attestationIds
+    mapping(bytes32 => bytes32[]) private _attestationsByProduct;
 
     bytes32 public constant VENDOR_ROLE = keccak256("VENDOR_ROLE");
 
     // ==================== EIP-712 (gasless attestations) ====================
-    // Vendors sign typed data off-chain; any relayer can submit the signed
-    // attestation. The on-chain attestation records the SIGNER as the vendor,
-    // so the vendor never needs to hold funds or run a node.
-
     bytes32 private constant _PRODUCT_ATTESTATION_TYPEHASH =
         keccak256(
             "ProductAttestation(string productId,string version,string algorithm,"
@@ -79,18 +78,22 @@ contract VendorRegistry is AccessControl {
     bytes32 private constant _DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
-    bytes32 private immutable _DOMAIN_SEPARATOR;
+    bytes32 private _domainSeparator;
     bytes32 public constant EIP712_VERSION_HASH = keccak256("1");
 
     mapping(address => uint256) public nonces;
 
-    error InvalidSignature();
-    error InvalidNonce(address signer, uint256 provided, uint256 expected);
+    bool private _initialized;
 
-    constructor() {
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {}
+
+    function initialize() public initializer {
+        if (_initialized) revert NotInitialized();
+        _initialized = true;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(VENDOR_ADMIN_ROLE, msg.sender);
-        _DOMAIN_SEPARATOR = keccak256(
+        _domainSeparator = keccak256(
             abi.encode(
                 _DOMAIN_TYPEHASH,
                 keccak256("QTrustVendorRegistry"),
@@ -101,9 +104,11 @@ contract VendorRegistry is AccessControl {
         );
     }
 
+    function _authorizeUpgrade(address) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
+
     /// @notice Domain separator for EIP-712 typed data signing.
     function domainSeparator() external view returns (bytes32) {
-        return _DOMAIN_SEPARATOR;
+        return _domainSeparator;
     }
 
     /// @notice Hash the typed ProductAttestation data for EIP-712 signing.
@@ -118,7 +123,7 @@ contract VendorRegistry is AccessControl {
         return keccak256(
             abi.encodePacked(
                 "\x19\x01",
-                _DOMAIN_SEPARATOR,
+                _domainSeparator,
                 keccak256(
                     abi.encode(
                         _PRODUCT_ATTESTATION_TYPEHASH,
@@ -135,8 +140,6 @@ contract VendorRegistry is AccessControl {
     }
 
     /// @notice Submit a gasless product attestation signed by the vendor.
-    ///         The vendor's signature authorizes the attestation; the caller
-    ///         (any relayer) pays the gas. The recorded vendorDid is the signer.
     function attestProductSigned(
         string calldata productId,
         string calldata version,
@@ -145,7 +148,7 @@ contract VendorRegistry is AccessControl {
         string calldata evidenceURI,
         uint256 nonce,
         bytes calldata signature
-    ) external returns (bytes32 attestationId) {
+    ) external whenNotPaused returns (bytes32 attestationId) {
         address signer = _recoverSigner(
             productId, version, algorithm, supported, evidenceURI, nonce, signature
         );
@@ -163,7 +166,6 @@ contract VendorRegistry is AccessControl {
     }
 
     /// @dev Recover the EIP-712 signer of a product attestation.
-    ///      Split out so the stack stays shallow in attestProductSigned.
     function _recoverSigner(
         string calldata productId,
         string calldata version,
@@ -176,7 +178,7 @@ contract VendorRegistry is AccessControl {
         bytes32 digest = keccak256(
             abi.encodePacked(
                 "\x19\x01",
-                _DOMAIN_SEPARATOR,
+                _domainSeparator,
                 keccak256(
                     abi.encode(
                         _PRODUCT_ATTESTATION_TYPEHASH,
@@ -193,8 +195,7 @@ contract VendorRegistry is AccessControl {
         return ECDSA.recover(digest, signature);
     }
 
-    /// @dev Shared storage write for product attestations. Kept in a separate
-    ///      function to keep stack usage bounded in the signed-attestation path.
+    /// @dev Shared storage write for product attestations.
     function _storeAttestation(
         address vendorDid,
         string calldata productId,
@@ -234,7 +235,7 @@ contract VendorRegistry is AccessControl {
         address vendorDid,
         string calldata name,
         string calldata metadataURI
-    ) external onlyRole(VENDOR_ADMIN_ROLE) {
+    ) external onlyRole(VENDOR_ADMIN_ROLE) whenNotPaused {
         if (_vendors[vendorDid].registeredAt != 0) revert VendorAlreadyRegistered(vendorDid);
         _vendors[vendorDid] = VendorInfo({
             name: name,
@@ -246,10 +247,8 @@ contract VendorRegistry is AccessControl {
         emit VendorRegistered(vendorDid, name, metadataURI, block.timestamp);
     }
 
-    /// @notice Deactivate a vendor (e.g., for compliance or trust reasons).
-    ///         Deactivated vendors cannot post new attestations; existing
-    ///         attestations remain readable but should be re-checked.
-    function deactivateVendor(address vendorDid) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    /// @notice Deactivate a vendor
+    function deactivateVendor(address vendorDid) external onlyRole(DEFAULT_ADMIN_ROLE) whenNotPaused {
         if (_vendors[vendorDid].registeredAt == 0) revert VendorNotFound(vendorDid);
         if (!_vendors[vendorDid].active) return;
         _vendors[vendorDid].active = false;
@@ -261,19 +260,14 @@ contract VendorRegistry is AccessControl {
         return _vendors[vendorDid].registeredAt != 0 && _vendors[vendorDid].active;
     }
 
-    /// @notice Vendor posts a product PQC attestation
-    /// @param productId   e.g. "thales-luna-hsm"
-    /// @param version     e.g. "7.3.0"
-    /// @param algorithm   e.g. "ML-KEM-512" (see NIST FIPS 203/204/205)
-    /// @param supported   true if this product version supports this algorithm
-    /// @param evidenceURI IPFS URI for test results / evidence
+    /// @notice Vendor posts a product PQC attestation (direct, requires VENDOR_ROLE)
     function attestProduct(
         string calldata productId,
         string calldata version,
         string calldata algorithm,
         bool supported,
         string calldata evidenceURI
-    ) external onlyRole(VENDOR_ROLE) returns (bytes32 attestationId) {
+    ) external onlyRole(VENDOR_ROLE) whenNotPaused returns (bytes32 attestationId) {
         if (!_vendors[msg.sender].active) revert VendorInactive(msg.sender);
 
         bytes32 productIdHash = keccak256(abi.encodePacked(productId, version, algorithm));
@@ -310,8 +304,8 @@ contract VendorRegistry is AccessControl {
         );
     }
 
-    /// @notice Revoke an attestation (e.g., if a vulnerability was found)
-    function revokeAttestation(bytes32 attestationId) external {
+    /// @notice Revoke an attestation
+    function revokeAttestation(bytes32 attestationId) external whenNotPaused {
         ProductAttestation storage att = _attestations[attestationId];
         if (att.vendorDid == address(0)) revert AttestationNotFound(attestationId);
         if (att.vendorDid != msg.sender && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) {
@@ -319,6 +313,16 @@ contract VendorRegistry is AccessControl {
         }
         att.revoked = true;
         emit AttestationRevoked(attestationId, block.timestamp);
+    }
+
+    /// @notice Pause all operations
+    function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _pause();
+    }
+
+    /// @notice Unpause the contract
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _unpause();
     }
 
     /// @notice Get vendor info
@@ -338,7 +342,7 @@ contract VendorRegistry is AccessControl {
         return _attestationsByVendor[vendorDid];
     }
 
-    /// @notice Get all attestations for a product (productId + version + algorithm)
+    /// @notice Get all attestations for a product
     function getAttestationsByProduct(
         string calldata productId,
         string calldata version,
@@ -349,9 +353,6 @@ contract VendorRegistry is AccessControl {
     }
 
     /// @notice Check if a product version supports an algorithm
-    /// @return supported  true if any non-revoked attestation says supported
-    /// @return vendorDid   the vendor that attested
-    /// @return attestationId  the attestation ID
     function checkProductSupport(
         string calldata productId,
         string calldata version,
@@ -359,8 +360,6 @@ contract VendorRegistry is AccessControl {
     ) external view returns (bool supported, address vendorDid, bytes32 attestationId) {
         bytes32 productIdHash = keccak256(abi.encodePacked(productId, version, algorithm));
         bytes32[] memory ids = _attestationsByProduct[productIdHash];
-        // Iteration is bounded by MAX_ATTESTATIONS_PER_PRODUCT (enforced in attestProduct),
-        // so worst-case gas cost is fixed and cannot be griefed.
         uint256 n = ids.length;
         for (uint256 i = 0; i < n; i++) {
             ProductAttestation storage att = _attestations[ids[i]];

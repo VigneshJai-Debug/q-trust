@@ -46,9 +46,14 @@ import {
   attestProduct,
   recordMigration,
   relaySignedAttestation,
+  relaySignedCBOMRegistration,
+  relaySignedMigration,
   relayerAddress,
   getVendorNonce,
+  getOrgNonce,
   type SignedAttestationPayload,
+  type SignedCBOMRegistrationPayload,
+  type SignedMigrationPayload,
 } from "./services/attestation.js";
 import { startIndexer } from "./services/indexer.js";
 import { CORS_ORIGINS, API_KEYS, PLANNER_URL, CHAIN } from "./config.js";
@@ -341,6 +346,53 @@ server.post("/v1/relay/attestation", async (request, reply) => {
 server.get("/v1/relay/nonce/:did", async (request, reply) => {
   try {
     const nonce = await getVendorNonce((request.params as { did: string }).did as `0x${string}`);
+    return { did: (request.params as { did: string }).did, nonce: nonce.toString() };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return reply.status(400).send({ error: msg });
+  }
+});
+
+// EIP-712 gasless CBOM registration
+server.post("/v1/relay/cbom", async (request, reply) => {
+  const body = request.body as SignedCBOMRegistrationPayload;
+  if (!body.cbomHash || !body.signature) {
+    return reply.status(400).send({
+      error: "cbomHash, nonce and signature are required",
+    });
+  }
+  try {
+    const result = await relaySignedCBOMRegistration(body);
+    return { ...result, relayer: relayerAddress, chain_id: CHAIN.id };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const code = msg.includes("signature") || msg.includes("Nonce") ? 400 : 422;
+    return reply.status(code).send({ error: msg });
+  }
+});
+
+// EIP-712 gasless migration recording
+server.post("/v1/relay/migration", async (request, reply) => {
+  const body = request.body as SignedMigrationPayload;
+  if (!body.migrationId || !body.assetId || !body.signature) {
+    return reply.status(400).send({
+      error: "migrationId, assetId, fromAlgorithm, toAlgorithm, nonce and signature are required",
+    });
+  }
+  try {
+    const result = await relaySignedMigration(body);
+    return { ...result, relayer: relayerAddress, chain_id: CHAIN.id };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const code = msg.includes("signature") || msg.includes("Nonce") ? 400 : 422;
+    return reply.status(code).send({ error: msg });
+  }
+});
+
+// Fetch org nonce for CBOM registration
+server.get("/v1/relay/cbom-nonce/:did", async (request, reply) => {
+  try {
+    const nonce = await getOrgNonce((request.params as { did: string }).did as `0x${string}`);
     return { did: (request.params as { did: string }).did, nonce: nonce.toString() };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

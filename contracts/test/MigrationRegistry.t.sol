@@ -18,8 +18,10 @@ contract MigrationRegistryTest is Test {
 
     function setUp() public {
         assets = new AssetRegistry();
+        assets.initialize();
         assets.grantRole(assets.REGISTRAR_ROLE(), migrator);
         registry = new MigrationRegistry(address(assets));
+        registry.initialize();
         registry.grantRole(registry.MIGRATOR_ROLE(), migrator);
 
         vm.prank(migrator);
@@ -174,5 +176,31 @@ contract MigrationRegistryTest is Test {
         assertEq(registry.migrationCount(), 0, "starts at zero");
         _record(keccak256("m1"), ASSET_ID);
         assertEq(registry.migrationCount(), 1, "counts across orgs, not msg.sender");
+    }
+
+    function test_PauseUnpause() public {
+        registry.pause();
+        vm.prank(migrator);
+        vm.expectRevert();
+        registry.recordMigration(
+            keccak256("m-x"),
+            ASSET_ID,
+            "RSA-2048",
+            "ML-DSA-441",
+            EVIDENCE_HASH,
+            "ipfs://QmEvidence"
+        );
+
+        registry.unpause();
+        vm.prank(migrator);
+        registry.recordMigration(
+            keccak256("m-x"),
+            ASSET_ID,
+            "RSA-2048",
+            "ML-DSA-441",
+            EVIDENCE_HASH,
+            "ipfs://QmEvidence"
+        );
+        assertTrue(true);
     }
 }

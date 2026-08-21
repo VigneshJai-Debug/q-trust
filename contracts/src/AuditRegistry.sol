@@ -2,14 +2,15 @@
 pragma solidity 0.8.24;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "./MigrationRegistry.sol";
 
 /// @title AuditRegistry — third-party audit attestations
-/// @notice Auditors (Big 4, BSI, ORCHA) post attestations that they reviewed
-///         an organization's PQC migration posture and either passed or failed it.
-///         Audits are bound to on-chain state: the claimed number of migrated
-///         assets cannot exceed the migrations actually recorded on-chain.
-contract AuditRegistry is AccessControl {
+/// @notice Auditors post attestations that they reviewed an organization's PQC
+///         migration posture. Supports UUPS proxy upgradeability.
+contract AuditRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeable {
 
     error AuditNotFound(bytes32 auditId);
     error DuplicateAudit(bytes32 auditId);
@@ -18,16 +19,17 @@ contract AuditRegistry is AccessControl {
     error InvalidCounts(uint256 assetsReviewed, uint256 assetsMigrated);
     error MigratedCountExceedsOnChain(uint256 claimed, uint256 onChain);
     error ZeroMigrationRegistry();
+    error NotInitialized();
 
     event AuditPosted(
         bytes32 indexed auditId,
-        address indexed orgDid,        // The org being audited
-        address indexed auditorDid,    // The auditor
+        address indexed orgDid,
+        address indexed auditorDid,
         AuditResult result,
         uint256 assetsReviewed,
         uint256 assetsMigrated,
-        bytes32 reportHash,            // Hash of the audit report (off-chain)
-        string  reportURI,             // IPFS URI of the report
+        bytes32 reportHash,
+        string  reportURI,
         uint256 timestamp
     );
 
@@ -45,27 +47,31 @@ contract AuditRegistry is AccessControl {
     }
 
     mapping(bytes32 => AuditAttestation) private _audits;
-    mapping(address => bytes32[]) private _auditsByOrg;     // org -> audit IDs
-    mapping(address => bytes32[]) private _auditsByAuditor;  // auditor -> audit IDs
+    mapping(address => bytes32[]) private _auditsByOrg;
+    mapping(address => bytes32[]) private _auditsByAuditor;
 
     bytes32 public constant AUDITOR_ROLE = keccak256("AUDITOR_ROLE");
 
     /// @notice The MigrationRegistry used to bind audits to on-chain state.
     MigrationRegistry public immutable migrationRegistry;
 
+    bool private _initialized;
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address migrationRegistry_) {
         if (migrationRegistry_ == address(0)) revert ZeroMigrationRegistry();
         migrationRegistry = MigrationRegistry(migrationRegistry_);
+    }
+
+    function initialize() public initializer {
+        if (_initialized) revert NotInitialized();
+        _initialized = true;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
+    function _authorizeUpgrade(address) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
+
     /// @notice Post an audit attestation
-    /// @param orgDid          The organization being audited
-    /// @param result         Audit result (Passed/Failed/Conditional)
-    /// @param assetsReviewed Total assets the auditor reviewed
-    /// @param assetsMigrated How many of those were already migrated
-    /// @param reportHash     Hash of the audit report PDF
-    /// @param reportURI      IPFS URI of the report
     function postAudit(
         address orgDid,
         AuditResult result,
@@ -73,7 +79,7 @@ contract AuditRegistry is AccessControl {
         uint256 assetsMigrated,
         bytes32 reportHash,
         string calldata reportURI
-    ) external onlyRole(AUDITOR_ROLE) returns (bytes32 auditId) {
+    ) external onlyRole(AUDITOR_ROLE) whenNotPaused returns (bytes32 auditId) {
         if (reportHash == bytes32(0)) revert EmptyReportHash();
         if (assetsMigrated > assetsReviewed) revert InvalidCounts(assetsReviewed, assetsMigrated);
 
@@ -113,6 +119,16 @@ contract AuditRegistry is AccessControl {
         );
     }
 
+    /// @notice Pause all operations
+    function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _pause();
+    }
+
+    /// @notice Unpause the contract
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _unpause();
+    }
+
     /// @notice Get an audit by ID
     function getAudit(bytes32 auditId) external view returns (AuditAttestation memory) {
         if (_audits[auditId].auditorDid == address(0)) revert AuditNotFound(auditId);
@@ -130,9 +146,6 @@ contract AuditRegistry is AccessControl {
     }
 
     /// @notice Get the latest audit for an org
-    /// @return exists  True if any audit exists
-    /// @return result  The result of the latest audit
-    /// @return timestamp When the audit was posted
     function getLatestAudit(address orgDid)
         external view returns (bool exists, AuditResult result, uint256 timestamp)
     {

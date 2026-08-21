@@ -223,3 +223,210 @@ export async function getVendorNonce(vendor: Address): Promise<bigint> {
   });
   return BigInt(nonce as bigint | number | string);
 }
+
+// ------------------------------------------------------------------
+// EIP-712 gasless CBOM registration
+// ------------------------------------------------------------------
+export const EIP712_ASSET_DOMAIN = {
+  name: "QTrustAssetRegistry",
+  version: "1",
+  chainId: 84532,
+  verifyingContract: ASSET_REGISTRY as Address,
+};
+
+export const EIP712_CBOM_TYPES = {
+  CBOMRegistration: [
+    { name: "cbomHash", type: "bytes32" },
+    { name: "metadataURI", type: "string" },
+    { name: "nonce", type: "uint256" },
+  ],
+};
+
+export interface SignedCBOMRegistrationPayload {
+  cbomHash: string;
+  metadataURI: string;
+  nonce: number;
+  signature: string;
+}
+
+export interface RelayCBOMResult {
+  txHash: string;
+  orgDid: string;
+  assetId: string;
+}
+
+/**
+ * Verify an org's EIP-712 signature and submit the CBOM registration via the
+ * relayer. The on-chain registration records the SIGNER as the org.
+ */
+export async function relaySignedCBOMRegistration(
+  payload: SignedCBOMRegistrationPayload,
+): Promise<RelayCBOMResult> {
+  const message = {
+    cbomHash: payload.cbomHash as `0x${string}`,
+    metadataURI: payload.metadataURI,
+    nonce: payload.nonce,
+  };
+
+  let signer: Address;
+  try {
+    signer = await recoverTypedDataAddress({
+      domain: EIP712_ASSET_DOMAIN,
+      types: EIP712_CBOM_TYPES,
+      primaryType: "CBOMRegistration",
+      message,
+      signature: payload.signature as `0x${string}`,
+    });
+  } catch {
+    throw new Error("EIP-712 signature verification failed: invalid signature");
+  }
+
+  const onChainNonce = await publicClient.readContract({
+    address: ASSET_REGISTRY,
+    abi: AssetRegistryAbi,
+    functionName: "nonces",
+    args: [signer],
+  });
+  if (BigInt(onChainNonce) !== BigInt(payload.nonce)) {
+    throw new Error(
+      `Nonce mismatch: signed ${payload.nonce}, on-chain ${onChainNonce}`,
+    );
+  }
+
+  const txHash = await walletClient.writeContract({
+    address: ASSET_REGISTRY,
+    abi: AssetRegistryAbi,
+    functionName: "registerCBOMSigned",
+    args: [
+      payload.cbomHash as `0x${string}`,
+      payload.metadataURI,
+      BigInt(payload.nonce),
+      payload.signature as `0x${string}`,
+    ],
+  });
+
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+  const cbomRegisteredLog = (receipt.logs as any[]).find(
+    (log: any) => log.eventName === "CBOMRegistered",
+  );
+  const assetId = cbomRegisteredLog?.args?.assetId as string | undefined;
+
+  return { txHash, orgDid: signer, assetId: assetId ?? "" };
+}
+
+/** Fetch an org's current EIP-712 nonce for CBOM registration. */
+export async function getOrgNonce(org: Address): Promise<bigint> {
+  const nonce = await publicClient.readContract({
+    address: ASSET_REGISTRY,
+    abi: AssetRegistryAbi,
+    functionName: "nonces",
+    args: [org],
+  });
+  return BigInt(nonce as bigint | number | string);
+}
+
+// ------------------------------------------------------------------
+// EIP-712 gasless migration recording
+// ------------------------------------------------------------------
+export const EIP712_MIGRATION_DOMAIN = {
+  name: "QTrustMigrationRegistry",
+  version: "1",
+  chainId: 84532,
+  verifyingContract: MIGRATION_REGISTRY as Address,
+};
+
+export const EIP712_MIGRATION_TYPES = {
+  MigrationRecording: [
+    { name: "migrationId", type: "bytes32" },
+    { name: "assetId", type: "bytes32" },
+    { name: "fromAlgorithm", type: "string" },
+    { name: "toAlgorithm", type: "string" },
+    { name: "evidenceHash", type: "bytes32" },
+    { name: "evidenceURI", type: "string" },
+    { name: "nonce", type: "uint256" },
+  ],
+};
+
+export interface SignedMigrationPayload {
+  migrationId: string;
+  assetId: string;
+  fromAlgorithm: string;
+  toAlgorithm: string;
+  evidenceHash: string;
+  evidenceURI: string;
+  nonce: number;
+  signature: string;
+}
+
+export interface RelayMigrationResult {
+  txHash: string;
+  orgDid: string;
+  migrationId: string;
+}
+
+/**
+ * Verify an org's EIP-712 signature and submit the migration recording via the
+ * relayer. The on-chain migration records the SIGNER as the org.
+ */
+export async function relaySignedMigration(
+  payload: SignedMigrationPayload,
+): Promise<RelayMigrationResult> {
+  const message = {
+    migrationId: payload.migrationId as `0x${string}`,
+    assetId: payload.assetId as `0x${string}`,
+    fromAlgorithm: payload.fromAlgorithm,
+    toAlgorithm: payload.toAlgorithm,
+    evidenceHash: payload.evidenceHash as `0x${string}`,
+    evidenceURI: payload.evidenceURI,
+    nonce: payload.nonce,
+  };
+
+  let signer: Address;
+  try {
+    signer = await recoverTypedDataAddress({
+      domain: EIP712_MIGRATION_DOMAIN,
+      types: EIP712_MIGRATION_TYPES,
+      primaryType: "MigrationRecording",
+      message,
+      signature: payload.signature as `0x${string}`,
+    });
+  } catch {
+    throw new Error("EIP-712 signature verification failed: invalid signature");
+  }
+
+  const onChainNonce = await publicClient.readContract({
+    address: MIGRATION_REGISTRY,
+    abi: MigrationRegistryAbi,
+    functionName: "nonces",
+    args: [signer],
+  });
+  if (BigInt(onChainNonce) !== BigInt(payload.nonce)) {
+    throw new Error(
+      `Nonce mismatch: signed ${payload.nonce}, on-chain ${onChainNonce}`,
+    );
+  }
+
+  const txHash = await walletClient.writeContract({
+    address: MIGRATION_REGISTRY,
+    abi: MigrationRegistryAbi,
+    functionName: "recordMigrationSigned",
+    args: [
+      payload.migrationId as `0x${string}`,
+      payload.assetId as `0x${string}`,
+      payload.fromAlgorithm,
+      payload.toAlgorithm,
+      payload.evidenceHash as `0x${string}`,
+      payload.evidenceURI,
+      BigInt(payload.nonce),
+      payload.signature as `0x${string}`,
+    ],
+  });
+
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+  const migrationRecordedLog = (receipt.logs as any[]).find(
+    (log: any) => log.eventName === "MigrationRecorded",
+  );
+  const migrationId = migrationRecordedLog?.args?.migrationId as string | undefined;
+
+  return { txHash, orgDid: signer, migrationId: migrationId ?? "" };
+}

@@ -49,6 +49,7 @@ contract VendorRegistryTest is Test {
 
     function setUp() public {
         registry = new VendorRegistry();
+        registry.initialize();
     }
 
     function test_RegisterVendor() public {

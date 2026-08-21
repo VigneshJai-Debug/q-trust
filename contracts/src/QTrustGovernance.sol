@@ -13,14 +13,9 @@ import {AuditRegistry} from "./AuditRegistry.sol";
  * @notice Time-locked admin operations for the Q-Trust registries.
  *
  * All administrative state changes that affect trust guarantees (retiring a
- * CBOM, deactivating a vendor, changing roles) are routed through an
- * OpenZeppelin TimelockController so that no single key can mutate the
- * registry without a public notice period.
- *
- * The TimelockController holds DEFAULT_ADMIN_ROLE on every registry; this
- * contract is a thin proposer-side convenience wrapper that encodes the
- * calls. The executor (typically the same admin set) calls
- * `timelock.execute(...)` after the delay elapses.
+ * CBOM, deactivating a vendor, changing roles, pausing, upgrading) are routed
+ * through an OpenZeppelin TimelockController so that no single key can mutate
+ * the registry without a public notice period.
  */
 contract QTrustGovernance {
     TimelockController public immutable timelock;
@@ -71,14 +66,22 @@ contract QTrustGovernance {
         address account,
         bytes32 salt
     ) external {
-        address target;
-        if (registryIndex == 0) target = address(assetRegistry);
-        else if (registryIndex == 1) target = address(vendorRegistry);
-        else if (registryIndex == 2) target = address(migrationRegistry);
-        else if (registryIndex == 3) target = address(auditRegistry);
-        else revert("QTrustGovernance: invalid registry index");
-
+        address target = _getRegistry(registryIndex);
         bytes memory data = abi.encodeCall(IAccessControl.grantRole, (role, account));
+        _schedule(target, data, salt);
+    }
+
+    /** @notice Schedule pausing a registry. */
+    function schedulePause(uint256 registryIndex, bytes32 salt) external {
+        address target = _getRegistry(registryIndex);
+        bytes memory data = abi.encodeCall(AssetRegistry.pause, ());
+        _schedule(target, data, salt);
+    }
+
+    /** @notice Schedule unpausing a registry. */
+    function scheduleUnpause(uint256 registryIndex, bytes32 salt) external {
+        address target = _getRegistry(registryIndex);
+        bytes memory data = abi.encodeCall(AssetRegistry.unpause, ());
         _schedule(target, data, salt);
     }
 
@@ -95,5 +98,13 @@ contract QTrustGovernance {
     /** @notice Execute a previously scheduled call (after its delay elapses). */
     function execute(address target, bytes calldata data, bytes32 salt) external {
         timelock.execute(target, 0, data, bytes32(0), salt);
+    }
+
+    function _getRegistry(uint256 registryIndex) internal view returns (address) {
+        if (registryIndex == 0) return address(assetRegistry);
+        else if (registryIndex == 1) return address(vendorRegistry);
+        else if (registryIndex == 2) return address(migrationRegistry);
+        else if (registryIndex == 3) return address(auditRegistry);
+        else revert("QTrustGovernance: invalid registry index");
     }
 }

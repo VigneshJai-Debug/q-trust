@@ -25,9 +25,13 @@ contract QTrustGovernanceTest is Test {
     function setUp() public {
         vm.startPrank(deployer);
         assets = new AssetRegistry();
+        assets.initialize();
         vendors = new VendorRegistry();
+        vendors.initialize();
         migrations = new MigrationRegistry(address(assets));
+        migrations.initialize();
         audits = new AuditRegistry(address(migrations));
+        audits.initialize();
 
         address[] memory proposers = new address[](1);
         proposers[0] = admin;
