@@ -1,0 +1,215 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.24;
+
+import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+
+/// @title SchemaRegistry — register and query credential schemas
+/// @notice Issuers and verifiers reference schemas by URN. The registry resolves
+///         schemas to their JSON Schema documents and tracks versions.
+///         Schemas can have cross-domain equivalence mappings.
+///         Supports UUPS proxy upgradeability.
+contract SchemaRegistry is AccessControl, ReentrancyGuard, Pausable, Initializable, UUPSUpgradeable {
+
+    error SchemaNotFound(string schemaId);
+    error SchemaAlreadyExists(string schemaId);
+    error EmptySchemaHash();
+    error NotSchemaAuthority(address caller);
+    error NotInitialized();
+
+    event SchemaRegistered(
+        string  indexed schemaId,
+        uint256 indexed version,
+        bytes32 schemaHash,
+        string  schemaURI,
+        string  schemaType,
+        address registeredBy,
+        uint256 timestamp
+    );
+
+    event SchemaEquivalenceAdded(
+        string  indexed fromSchemaId,
+        string  indexed toSchemaId,
+        string  equivalenceType,
+        uint256 timestamp
+    );
+
+    struct SchemaInfo {
+        string  schemaId;
+        uint256 version;
+        bytes32 schemaHash;
+        string  schemaURI;
+        string  schemaType;      // e.g., "pqc-readiness", "sbom", "audit-note"
+        address registeredBy;
+        uint256 timestamp;
+        bool    active;
+    }
+
+    struct SchemaEntry {
+        uint256 latestVersion;
+        uint256 totalVersions;
+        bool    exists;
+    }
+
+    struct EquivalenceMapping {
+        string fromSchemaId;
+        string toSchemaId;
+        string equivalenceType;  // e.g., "equivalent", "subset", "superset"
+    }
+
+    mapping(string => SchemaEntry) private _schemas;
+    mapping(string => mapping(uint256 => SchemaInfo)) private _schemaVersions;
+    mapping(string => uint256[]) private _versionsBySchemaId;
+    string[] private _allSchemaIds;
+
+    mapping(string => EquivalenceMapping[]) private _equivalences;
+
+    bytes32 public constant SCHEMA_AUTHORITY_ROLE = keccak256("SCHEMA_AUTHORITY_ROLE");
+
+    bool private _initialized;
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {}
+
+    function initialize() public initializer {
+        if (_initialized) revert NotInitialized();
+        _initialized = true;
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(SCHEMA_AUTHORITY_ROLE, msg.sender);
+    }
+
+    function _authorizeUpgrade(address) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
+
+    /// @notice Register a new schema (direct, requires SCHEMA_AUTHORITY_ROLE)
+    /// @param schemaId   Unique schema identifier (e.g., "https://qtrust.dev/schemas/pqc-readiness/v1")
+    /// @param version    Version number (must be latestVersion + 1 for existing schemas)
+    /// @param schemaHash SHA-256 of the JSON Schema document
+    /// @param schemaURI  IPFS URI for the full JSON Schema
+    /// @param schemaType Human-readable type (e.g., "pqc-readiness")
+    function registerSchema(
+        string calldata schemaId,
+        uint256 version,
+        bytes32 schemaHash,
+        string calldata schemaURI,
+        string calldata schemaType
+    ) external nonReentrant whenNotPaused onlyRole(SCHEMA_AUTHORITY_ROLE) {
+        if (schemaHash == bytes32(0)) revert EmptySchemaHash();
+
+        SchemaEntry storage entry = _schemas[schemaId];
+        if (entry.exists) {
+            if (version <= _schemaVersions[schemaId][entry.latestVersion].version) {
+                revert SchemaAlreadyExists(schemaId);
+            }
+        }
+
+        _schemaVersions[schemaId][version] = SchemaInfo({
+            schemaId: schemaId,
+            version: version,
+            schemaHash: schemaHash,
+            schemaURI: schemaURI,
+            schemaType: schemaType,
+            registeredBy: msg.sender,
+            timestamp: block.timestamp,
+            active: true
+        });
+
+        _versionsBySchemaId[schemaId].push(version);
+
+        if (!entry.exists) {
+            _allSchemaIds.push(schemaId);
+            entry.exists = true;
+        }
+        entry.latestVersion = version;
+        entry.totalVersions++;
+
+        emit SchemaRegistered(schemaId, version, schemaHash, schemaURI, schemaType, msg.sender, block.timestamp);
+    }
+
+    /// @notice Add a cross-domain equivalence mapping (admin only)
+    function addEquivalence(
+        string calldata fromSchemaId,
+        string calldata toSchemaId,
+        string calldata equivalenceType
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _equivalences[fromSchemaId].push(EquivalenceMapping({
+            fromSchemaId: fromSchemaId,
+            toSchemaId: toSchemaId,
+            equivalenceType: equivalenceType
+        }));
+
+        emit SchemaEquivalenceAdded(fromSchemaId, toSchemaId, equivalenceType, block.timestamp);
+    }
+
+    /// @notice Deactivate a schema version (admin only)
+    function deactivateSchema(
+        string calldata schemaId,
+        uint256 version
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        SchemaInfo storage sv = _schemaVersions[schemaId][version];
+        if (sv.timestamp == 0) revert SchemaNotFound(schemaId);
+        sv.active = false;
+    }
+
+    /// @notice Pause all operations
+    function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _pause();
+    }
+
+    /// @notice Unpause the contract
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _unpause();
+    }
+
+    // ============ View Functions ============
+
+    /// @notice Get a specific schema version
+    function getSchema(
+        string calldata schemaId,
+        uint256 version
+    ) external view returns (SchemaInfo memory) {
+        SchemaInfo storage sv = _schemaVersions[schemaId][version];
+        if (sv.timestamp == 0) revert SchemaNotFound(schemaId);
+        return sv;
+    }
+
+    /// @notice Get schema entry info
+    function getSchemaEntry(string calldata schemaId) external view returns (SchemaEntry memory) {
+        return _schemas[schemaId];
+    }
+
+    /// @notice Get all versions for a schema
+    function getVersionsBySchemaId(string calldata schemaId) external view returns (uint256[] memory) {
+        return _versionsBySchemaId[schemaId];
+    }
+
+    /// @notice Get all schema IDs
+    function getAllSchemaIds() external view returns (string[] memory) {
+        return _allSchemaIds;
+    }
+
+    /// @notice Get equivalence mappings for a schema
+    function getEquivalences(string calldata schemaId)
+        external view returns (EquivalenceMapping[] memory)
+    {
+        return _equivalences[schemaId];
+    }
+
+    /// @notice Verify a schema: hash matches the registered version
+    function verifySchema(
+        string calldata schemaId,
+        uint256 version,
+        bytes32 schemaHash
+    ) external view returns (bool) {
+        SchemaInfo storage sv = _schemaVersions[schemaId][version];
+        if (sv.timestamp == 0) return false;
+        return sv.schemaHash == schemaHash && sv.active;
+    }
+
+    /// @notice Total number of distinct schemas
+    function schemaCount() external view returns (uint256) {
+        return _allSchemaIds.length;
+    }
+}

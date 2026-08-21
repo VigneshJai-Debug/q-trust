@@ -22,6 +22,19 @@ export const AssetRegistryAbi = [
     },
     {
         "type": "function",
+        "name": "EIP712_VERSION_HASH",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "REGISTRAR_ROLE",
         "inputs": [],
         "outputs": [
@@ -35,6 +48,19 @@ export const AssetRegistryAbi = [
     },
     {
         "type": "function",
+        "name": "UPGRADE_INTERFACE_VERSION",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "string",
+                "internalType": "string"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "assetCount",
         "inputs": [],
         "outputs": [
@@ -42,6 +68,19 @@ export const AssetRegistryAbi = [
                 "name": "",
                 "type": "uint256",
                 "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "domainSeparator",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
             }
         ],
         "stateMutability": "view"
@@ -208,6 +247,94 @@ export const AssetRegistryAbi = [
     },
     {
         "type": "function",
+        "name": "hashTypedCBOMRegistration",
+        "inputs": [
+            {
+                "name": "cbomHash",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "metadataURI",
+                "type": "string",
+                "internalType": "string"
+            },
+            {
+                "name": "nonce",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "initialize",
+        "inputs": [],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "nonces",
+        "inputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "pause",
+        "inputs": [],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "paused",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bool",
+                "internalType": "bool"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "proxiableUUID",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "registerCBOM",
         "inputs": [
             {
@@ -219,6 +346,40 @@ export const AssetRegistryAbi = [
                 "name": "metadataURI",
                 "type": "string",
                 "internalType": "string"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "assetId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "registerCBOMSigned",
+        "inputs": [
+            {
+                "name": "cbomHash",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "metadataURI",
+                "type": "string",
+                "internalType": "string"
+            },
+            {
+                "name": "nonce",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "signature",
+                "type": "bytes",
+                "internalType": "bytes"
             }
         ],
         "outputs": [
@@ -300,6 +461,13 @@ export const AssetRegistryAbi = [
     },
     {
         "type": "function",
+        "name": "unpause",
+        "inputs": [],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "updateCBOM",
         "inputs": [
             {
@@ -320,6 +488,24 @@ export const AssetRegistryAbi = [
         ],
         "outputs": [],
         "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "upgradeToAndCall",
+        "inputs": [
+            {
+                "name": "newImplementation",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "data",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "payable"
     },
     {
         "type": "function",
@@ -439,6 +625,32 @@ export const AssetRegistryAbi = [
     },
     {
         "type": "event",
+        "name": "Initialized",
+        "inputs": [
+            {
+                "name": "version",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Paused",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "indexed": false,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
         "name": "RoleAdminChanged",
         "inputs": [
             {
@@ -513,6 +725,32 @@ export const AssetRegistryAbi = [
         "anonymous": false
     },
     {
+        "type": "event",
+        "name": "Unpaused",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "indexed": false,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Upgraded",
+        "inputs": [
+            {
+                "name": "implementation",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
         "type": "error",
         "name": "AccessControlBadConfirmation",
         "inputs": []
@@ -530,6 +768,17 @@ export const AssetRegistryAbi = [
                 "name": "neededRole",
                 "type": "bytes32",
                 "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "AddressEmptyCode",
+        "inputs": [
+            {
+                "name": "target",
+                "type": "address",
+                "internalType": "address"
             }
         ]
     },
@@ -568,7 +817,106 @@ export const AssetRegistryAbi = [
     },
     {
         "type": "error",
+        "name": "ECDSAInvalidSignature",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "ECDSAInvalidSignatureLength",
+        "inputs": [
+            {
+                "name": "length",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "ECDSAInvalidSignatureS",
+        "inputs": [
+            {
+                "name": "s",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "ERC1967InvalidImplementation",
+        "inputs": [
+            {
+                "name": "implementation",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "ERC1967NonPayable",
+        "inputs": []
+    },
+    {
+        "type": "error",
         "name": "EmptyHash",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "EnforcedPause",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "ExpectedPause",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "FailedCall",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidInitialization",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidNonce",
+        "inputs": [
+            {
+                "name": "signer",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "provided",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "expected",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidSignature",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "NotInitialized",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "NotInitializing",
         "inputs": []
     },
     {
@@ -586,6 +934,22 @@ export const AssetRegistryAbi = [
         "type": "error",
         "name": "ReentrancyGuardReentrantCall",
         "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "UUPSUnauthorizedCallContext",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "UUPSUnsupportedProxiableUUID",
+        "inputs": [
+            {
+                "name": "slot",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
     }
 ] as const;
 
@@ -630,6 +994,19 @@ export const VendorRegistryAbi = [
                 "name": "",
                 "type": "uint256",
                 "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "UPGRADE_INTERFACE_VERSION",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "string",
+                "internalType": "string"
             }
         ],
         "stateMutability": "view"
@@ -1070,6 +1447,13 @@ export const VendorRegistryAbi = [
     },
     {
         "type": "function",
+        "name": "initialize",
+        "inputs": [],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "isVendorActive",
         "inputs": [
             {
@@ -1102,6 +1486,39 @@ export const VendorRegistryAbi = [
                 "name": "",
                 "type": "uint256",
                 "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "pause",
+        "inputs": [],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "paused",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bool",
+                "internalType": "bool"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "proxiableUUID",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
             }
         ],
         "stateMutability": "view"
@@ -1198,6 +1615,31 @@ export const VendorRegistryAbi = [
         "stateMutability": "view"
     },
     {
+        "type": "function",
+        "name": "unpause",
+        "inputs": [],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "upgradeToAndCall",
+        "inputs": [
+            {
+                "name": "newImplementation",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "data",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "payable"
+    },
+    {
         "type": "event",
         "name": "AttestationRevoked",
         "inputs": [
@@ -1212,6 +1654,32 @@ export const VendorRegistryAbi = [
                 "type": "uint256",
                 "indexed": false,
                 "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Initialized",
+        "inputs": [
+            {
+                "name": "version",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Paused",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "indexed": false,
+                "internalType": "address"
             }
         ],
         "anonymous": false
@@ -1348,6 +1816,32 @@ export const VendorRegistryAbi = [
     },
     {
         "type": "event",
+        "name": "Unpaused",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "indexed": false,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Upgraded",
+        "inputs": [
+            {
+                "name": "implementation",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
         "name": "VendorDeactivated",
         "inputs": [
             {
@@ -1419,6 +1913,17 @@ export const VendorRegistryAbi = [
     },
     {
         "type": "error",
+        "name": "AddressEmptyCode",
+        "inputs": [
+            {
+                "name": "target",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
         "name": "AttestationLimitExceeded",
         "inputs": [
             {
@@ -1479,6 +1984,42 @@ export const VendorRegistryAbi = [
     },
     {
         "type": "error",
+        "name": "ERC1967InvalidImplementation",
+        "inputs": [
+            {
+                "name": "implementation",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "ERC1967NonPayable",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "EnforcedPause",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "ExpectedPause",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "FailedCall",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidInitialization",
+        "inputs": []
+    },
+    {
+        "type": "error",
         "name": "InvalidNonce",
         "inputs": [
             {
@@ -1505,12 +2046,38 @@ export const VendorRegistryAbi = [
     },
     {
         "type": "error",
+        "name": "NotInitialized",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "NotInitializing",
+        "inputs": []
+    },
+    {
+        "type": "error",
         "name": "NotVendor",
         "inputs": [
             {
                 "name": "caller",
                 "type": "address",
                 "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "UUPSUnauthorizedCallContext",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "UUPSUnsupportedProxiableUUID",
+        "inputs": [
+            {
+                "name": "slot",
+                "type": "bytes32",
+                "internalType": "bytes32"
             }
         ]
     },
@@ -1552,13 +2119,7 @@ export const VendorRegistryAbi = [
 export const MigrationRegistryAbi = [
     {
         "type": "constructor",
-        "inputs": [
-            {
-                "name": "assetRegistry_",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
+        "inputs": [],
         "stateMutability": "nonpayable"
     },
     {
@@ -1589,6 +2150,19 @@ export const MigrationRegistryAbi = [
     },
     {
         "type": "function",
+        "name": "EIP712_VERSION_HASH",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "MIGRATOR_ROLE",
         "inputs": [],
         "outputs": [
@@ -1602,6 +2176,19 @@ export const MigrationRegistryAbi = [
     },
     {
         "type": "function",
+        "name": "UPGRADE_INTERFACE_VERSION",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "string",
+                "internalType": "string"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "assetRegistry",
         "inputs": [],
         "outputs": [
@@ -1609,6 +2196,19 @@ export const MigrationRegistryAbi = [
                 "name": "",
                 "type": "address",
                 "internalType": "contract AssetRegistry"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "domainSeparator",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
             }
         ],
         "stateMutability": "view"
@@ -1775,6 +2375,68 @@ export const MigrationRegistryAbi = [
     },
     {
         "type": "function",
+        "name": "hashTypedMigration",
+        "inputs": [
+            {
+                "name": "migrationId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "assetId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "fromAlgorithm",
+                "type": "string",
+                "internalType": "string"
+            },
+            {
+                "name": "toAlgorithm",
+                "type": "string",
+                "internalType": "string"
+            },
+            {
+                "name": "evidenceHash",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "evidenceURI",
+                "type": "string",
+                "internalType": "string"
+            },
+            {
+                "name": "nonce",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "initialize",
+        "inputs": [
+            {
+                "name": "assetRegistry_",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "migrationCount",
         "inputs": [],
         "outputs": [
@@ -1782,6 +2444,58 @@ export const MigrationRegistryAbi = [
                 "name": "",
                 "type": "uint256",
                 "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "nonces",
+        "inputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "pause",
+        "inputs": [],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "paused",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bool",
+                "internalType": "bool"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "proxiableUUID",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
             }
         ],
         "stateMutability": "view"
@@ -1821,7 +2535,67 @@ export const MigrationRegistryAbi = [
                 "internalType": "string"
             }
         ],
-        "outputs": [],
+        "outputs": [
+            {
+                "name": "recordedMigrationId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "recordMigrationSigned",
+        "inputs": [
+            {
+                "name": "migrationId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "assetId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "fromAlgorithm",
+                "type": "string",
+                "internalType": "string"
+            },
+            {
+                "name": "toAlgorithm",
+                "type": "string",
+                "internalType": "string"
+            },
+            {
+                "name": "evidenceHash",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "evidenceURI",
+                "type": "string",
+                "internalType": "string"
+            },
+            {
+                "name": "nonce",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "signature",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "recordedMigrationId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
         "stateMutability": "nonpayable"
     },
     {
@@ -1881,6 +2655,31 @@ export const MigrationRegistryAbi = [
     },
     {
         "type": "function",
+        "name": "unpause",
+        "inputs": [],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "upgradeToAndCall",
+        "inputs": [
+            {
+                "name": "newImplementation",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "data",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "payable"
+    },
+    {
+        "type": "function",
         "name": "verifyMigration",
         "inputs": [
             {
@@ -1891,6 +2690,19 @@ export const MigrationRegistryAbi = [
         ],
         "outputs": [],
         "stateMutability": "nonpayable"
+    },
+    {
+        "type": "event",
+        "name": "Initialized",
+        "inputs": [
+            {
+                "name": "version",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
     },
     {
         "type": "event",
@@ -1943,6 +2755,19 @@ export const MigrationRegistryAbi = [
                 "type": "uint256",
                 "indexed": false,
                 "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Paused",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "indexed": false,
+                "internalType": "address"
             }
         ],
         "anonymous": false
@@ -2023,6 +2848,32 @@ export const MigrationRegistryAbi = [
         "anonymous": false
     },
     {
+        "type": "event",
+        "name": "Unpaused",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "indexed": false,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Upgraded",
+        "inputs": [
+            {
+                "name": "implementation",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
         "type": "error",
         "name": "AccessControlBadConfirmation",
         "inputs": []
@@ -2040,6 +2891,17 @@ export const MigrationRegistryAbi = [
                 "name": "neededRole",
                 "type": "bytes32",
                 "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "AddressEmptyCode",
+        "inputs": [
+            {
+                "name": "target",
+                "type": "address",
+                "internalType": "address"
             }
         ]
     },
@@ -2078,7 +2940,96 @@ export const MigrationRegistryAbi = [
     },
     {
         "type": "error",
+        "name": "ECDSAInvalidSignature",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "ECDSAInvalidSignatureLength",
+        "inputs": [
+            {
+                "name": "length",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "ECDSAInvalidSignatureS",
+        "inputs": [
+            {
+                "name": "s",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "ERC1967InvalidImplementation",
+        "inputs": [
+            {
+                "name": "implementation",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "ERC1967NonPayable",
+        "inputs": []
+    },
+    {
+        "type": "error",
         "name": "EmptyEvidenceHash",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "EnforcedPause",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "ExpectedPause",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "FailedCall",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidInitialization",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidNonce",
+        "inputs": [
+            {
+                "name": "signer",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "provided",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "expected",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidSignature",
         "inputs": []
     },
     {
@@ -2091,6 +3042,16 @@ export const MigrationRegistryAbi = [
                 "internalType": "bytes32"
             }
         ]
+    },
+    {
+        "type": "error",
+        "name": "NotInitialized",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "NotInitializing",
+        "inputs": []
     },
     {
         "type": "error",
@@ -2121,6 +3082,22 @@ export const MigrationRegistryAbi = [
     },
     {
         "type": "error",
+        "name": "UUPSUnauthorizedCallContext",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "UUPSUnsupportedProxiableUUID",
+        "inputs": [
+            {
+                "name": "slot",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
         "name": "ZeroAssetRegistry",
         "inputs": []
     }
@@ -2129,13 +3106,7 @@ export const MigrationRegistryAbi = [
 export const AuditRegistryAbi = [
     {
         "type": "constructor",
-        "inputs": [
-            {
-                "name": "migrationRegistry_",
-                "type": "address",
-                "internalType": "address"
-            }
-        ],
+        "inputs": [],
         "stateMutability": "nonpayable"
     },
     {
@@ -2160,6 +3131,19 @@ export const AuditRegistryAbi = [
                 "name": "",
                 "type": "bytes32",
                 "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "UPGRADE_INTERFACE_VERSION",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "string",
+                "internalType": "string"
             }
         ],
         "stateMutability": "view"
@@ -2355,6 +3339,19 @@ export const AuditRegistryAbi = [
     },
     {
         "type": "function",
+        "name": "initialize",
+        "inputs": [
+            {
+                "name": "migrationRegistry_",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "migrationRegistry",
         "inputs": [],
         "outputs": [
@@ -2362,6 +3359,26 @@ export const AuditRegistryAbi = [
                 "name": "",
                 "type": "address",
                 "internalType": "contract MigrationRegistry"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "pause",
+        "inputs": [],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "paused",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bool",
+                "internalType": "bool"
             }
         ],
         "stateMutability": "view"
@@ -2409,6 +3426,19 @@ export const AuditRegistryAbi = [
             }
         ],
         "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "proxiableUUID",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
     },
     {
         "type": "function",
@@ -2464,6 +3494,31 @@ export const AuditRegistryAbi = [
             }
         ],
         "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "unpause",
+        "inputs": [],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "upgradeToAndCall",
+        "inputs": [
+            {
+                "name": "newImplementation",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "data",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "payable"
     },
     {
         "type": "event",
@@ -2522,6 +3577,32 @@ export const AuditRegistryAbi = [
                 "type": "uint256",
                 "indexed": false,
                 "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Initialized",
+        "inputs": [
+            {
+                "name": "version",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Paused",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "indexed": false,
+                "internalType": "address"
             }
         ],
         "anonymous": false
@@ -2602,6 +3683,32 @@ export const AuditRegistryAbi = [
         "anonymous": false
     },
     {
+        "type": "event",
+        "name": "Unpaused",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "indexed": false,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "Upgraded",
+        "inputs": [
+            {
+                "name": "implementation",
+                "type": "address",
+                "indexed": true,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
         "type": "error",
         "name": "AccessControlBadConfirmation",
         "inputs": []
@@ -2619,6 +3726,17 @@ export const AuditRegistryAbi = [
                 "name": "neededRole",
                 "type": "bytes32",
                 "internalType": "bytes32"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "AddressEmptyCode",
+        "inputs": [
+            {
+                "name": "target",
+                "type": "address",
+                "internalType": "address"
             }
         ]
     },
@@ -2646,7 +3764,38 @@ export const AuditRegistryAbi = [
     },
     {
         "type": "error",
+        "name": "ERC1967InvalidImplementation",
+        "inputs": [
+            {
+                "name": "implementation",
+                "type": "address",
+                "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "ERC1967NonPayable",
+        "inputs": []
+    },
+    {
+        "type": "error",
         "name": "EmptyReportHash",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "EnforcedPause",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "ExpectedPause",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "FailedCall",
         "inputs": []
     },
     {
@@ -2664,6 +3813,11 @@ export const AuditRegistryAbi = [
                 "internalType": "uint256"
             }
         ]
+    },
+    {
+        "type": "error",
+        "name": "InvalidInitialization",
+        "inputs": []
     },
     {
         "type": "error",
@@ -2689,6 +3843,32 @@ export const AuditRegistryAbi = [
                 "name": "caller",
                 "type": "address",
                 "internalType": "address"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "NotInitialized",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "NotInitializing",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "UUPSUnauthorizedCallContext",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "UUPSUnsupportedProxiableUUID",
+        "inputs": [
+            {
+                "name": "slot",
+                "type": "bytes32",
+                "internalType": "bytes32"
             }
         ]
     },
@@ -2877,12 +4057,48 @@ export const QTrustGovernanceAbi = [
     },
     {
         "type": "function",
+        "name": "schedulePause",
+        "inputs": [
+            {
+                "name": "registryIndex",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "salt",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
         "name": "scheduleRetireAsset",
         "inputs": [
             {
                 "name": "assetId",
                 "type": "bytes32",
                 "internalType": "bytes32"
+            },
+            {
+                "name": "salt",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "scheduleUnpause",
+        "inputs": [
+            {
+                "name": "registryIndex",
+                "type": "uint256",
+                "internalType": "uint256"
             },
             {
                 "name": "salt",

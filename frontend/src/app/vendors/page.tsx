@@ -1,12 +1,15 @@
 /**
  * Vendor portal — attestations for a vendor address, product support lookup.
+ * Role-aware: shows onboarding for new vendors, portal for existing ones.
  */
 "use client";
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import { QueryProvider } from "@/components/query-provider";
 import { useWallet } from "@/components/dynamic-provider";
+import { useUserRole } from "@/hooks/use-user-role";
 import { AttestationForm } from "@/components/attestation-form";
 import { ShieldCheckIcon, XCircleIcon } from "@/app/icons";
 import { fetchVendorAttestations, checkProductSupport, type VendorAttestationInfo } from "@/lib/api";
@@ -48,6 +51,7 @@ function AttestationRow({ att }: { att: VendorAttestationInfo }) {
 function VendorsInner() {
   const { user, loading, connect } = useWallet();
   const vendor = user?.isAuthenticated ? user.address : null;
+  const { isVendor, isLoading: roleLoading } = useUserRole();
 
   const [productId, setProductId] = useState("DigiCert-TLS");
   const [version, setVersion] = useState("5.2.1");
@@ -64,6 +68,37 @@ function VendorsInner() {
     queryFn: () => checkProductSupport(productId, version, algorithm),
     enabled: Boolean(productId && version && algorithm),
   });
+
+  if (loading || roleLoading) {
+    return <div className="py-24 text-center text-sm text-slate-500">Loading wallet…</div>;
+  }
+
+  // Role-aware routing: show onboarding for non-vendors
+  if (vendor && !isVendor) {
+    return (
+      <div className="mx-auto max-w-md py-24 text-center">
+        <h1 className="text-xl font-bold text-slate-900">Welcome to Q-Trust Vendor Portal</h1>
+        <p className="mt-3 text-sm text-slate-600">
+          Your wallet is connected, but you're not registered as a vendor yet.
+        </p>
+        <div className="mt-6 space-y-3">
+          <Link
+            href="/"
+            className="block rounded-lg bg-qtrust-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-qtrust-700"
+          >
+            Register as a vendor
+          </Link>
+          <p className="text-xs text-slate-500">
+            Or visit the{" "}
+            <Link href="/dashboard" className="text-qtrust-600 hover:underline">
+              org dashboard
+            </Link>{" "}
+            if you're an organization.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">

@@ -1,12 +1,14 @@
 /**
  * Org dashboard — migration progress, latest audit result, asset list.
  * Uses the mock wallet (or Dynamic SDK) for the org address.
+ * Role-aware: shows onboarding wizard for new orgs, dashboard for existing ones.
  */
 "use client";
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useWallet } from "@/components/dynamic-provider";
+import { useUserRole } from "@/hooks/use-user-role";
 import { QueryProvider } from "@/components/query-provider";
 import { PlanningPanel } from "@/components/planning-panel";
 import { ShieldCheckIcon, XCircleIcon, ClockIcon } from "@/app/icons";
@@ -47,6 +49,7 @@ function AuditBadge({ code, exists }: { code: number | null; exists: boolean }) 
 function DashboardInner() {
   const { user, loading, connect } = useWallet();
   const org = user?.isAuthenticated ? user.address : null;
+  const { role, isOrg, isLoading: roleLoading } = useUserRole();
 
   const orgQuery = useQuery({
     queryKey: ["org", org],
@@ -61,7 +64,7 @@ function DashboardInner() {
     staleTime: 30_000,
   });
 
-  if (loading) {
+  if (loading || roleLoading) {
     return <div className="py-24 text-center text-sm text-slate-500">Loading wallet…</div>;
   }
 
@@ -78,6 +81,33 @@ function DashboardInner() {
         >
           Connect wallet (MetaMask or dev mock)
         </button>
+      </div>
+    );
+  }
+
+  // Role-aware routing: show onboarding for new orgs, dashboard for existing ones
+  if (!isOrg) {
+    return (
+      <div className="mx-auto max-w-md py-24 text-center">
+        <h1 className="text-xl font-bold text-slate-900">Welcome to Q-Trust</h1>
+        <p className="mt-3 text-sm text-slate-600">
+          Your wallet is connected, but you haven't registered any assets yet.
+        </p>
+        <div className="mt-6 space-y-3">
+          <Link
+            href="/"
+            className="block rounded-lg bg-qtrust-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-qtrust-700"
+          >
+            Register your organization
+          </Link>
+          <p className="text-xs text-slate-500">
+            Or visit the{" "}
+            <Link href="/vendors" className="text-qtrust-600 hover:underline">
+              vendor portal
+            </Link>{" "}
+            if you're a vendor.
+          </p>
+        </div>
       </div>
     );
   }

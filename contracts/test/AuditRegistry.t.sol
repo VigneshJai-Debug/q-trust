@@ -23,11 +23,11 @@ contract AuditRegistryTest is Test {
         assets = new AssetRegistry();
         assets.initialize();
         assets.grantRole(assets.REGISTRAR_ROLE(), org);
-        migrations = new MigrationRegistry(address(assets));
-        migrations.initialize();
+        migrations = new MigrationRegistry();
+        migrations.initialize(address(assets));
         migrations.grantRole(migrations.MIGRATOR_ROLE(), org);
-        registry = new AuditRegistry(address(migrations));
-        registry.initialize();
+        registry = new AuditRegistry();
+        registry.initialize(address(migrations));
         registry.grantRole(registry.AUDITOR_ROLE(), auditor);
 
         vm.startPrank(org);

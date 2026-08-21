@@ -57,7 +57,7 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard, Pausable, Initiali
     bytes32 public constant AUDITOR_ROLE = keccak256("AUDITOR_ROLE");
 
     /// @notice The AssetRegistry this registry validates against.
-    AssetRegistry public immutable assetRegistry;
+    AssetRegistry public assetRegistry;
 
     // ==================== EIP-712 (gasless migration recording) ====================
     bytes32 private constant _MIGRATION_RECORDING_TYPEHASH =
@@ -77,14 +77,13 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard, Pausable, Initiali
     bool private _initialized;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address assetRegistry_) {
-        if (assetRegistry_ == address(0)) revert ZeroAssetRegistry();
-        assetRegistry = AssetRegistry(assetRegistry_);
-    }
+    constructor() {}
 
-    function initialize() public initializer {
+    function initialize(address assetRegistry_) public initializer {
         if (_initialized) revert NotInitialized();
+        if (assetRegistry_ == address(0)) revert ZeroAssetRegistry();
         _initialized = true;
+        assetRegistry = AssetRegistry(assetRegistry_);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(MIGRATOR_ROLE, msg.sender);
         _grantRole(AUDITOR_ROLE, msg.sender);

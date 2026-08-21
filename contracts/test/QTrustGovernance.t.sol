@@ -28,10 +28,10 @@ contract QTrustGovernanceTest is Test {
         assets.initialize();
         vendors = new VendorRegistry();
         vendors.initialize();
-        migrations = new MigrationRegistry(address(assets));
-        migrations.initialize();
-        audits = new AuditRegistry(address(migrations));
-        audits.initialize();
+        migrations = new MigrationRegistry();
+        migrations.initialize(address(assets));
+        audits = new AuditRegistry();
+        audits.initialize(address(migrations));
 
         address[] memory proposers = new address[](1);
         proposers[0] = admin;

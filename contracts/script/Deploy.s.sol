@@ -9,6 +9,10 @@ import "../src/VendorRegistry.sol";
 import "../src/MigrationRegistry.sol";
 import "../src/AuditRegistry.sol";
 import "../src/QTrustGovernance.sol";
+import "../src/RevocationAnchor.sol";
+import "../src/PolicyCommitment.sol";
+import "../src/SchemaRegistry.sol";
+import "../src/TrustAnchorRegistry.sol";
 
 contract Deploy is Script {
     function run() external {
@@ -16,70 +20,11 @@ contract Deploy is Script {
         address deployer = vm.addr(deployerPrivateKey);
         vm.startBroadcast(deployerPrivateKey);
 
-        // Deploy implementation contracts
-        AssetRegistry assetsImpl = new AssetRegistry();
-        VendorRegistry vendorsImpl = new VendorRegistry();
-        MigrationRegistry migrationsImpl = new MigrationRegistry(address(assetsImpl));
-        AuditRegistry auditsImpl = new AuditRegistry(address(migrationsImpl));
+        (AssetRegistry assets, VendorRegistry vendors, MigrationRegistry migrations, AuditRegistry audits) =
+            _deployRegistries(deployer);
 
-        // Deploy proxies — the proxy admin is a separate TransparentAdminHelper
-        // For simplicity, we use UUPS with deployer as initial admin.
-        // Note: In production, the proxy admin should be a separate multisig.
-        bytes memory emptyInit = "";
-
-        AssetRegistry assets = AssetRegistry(
-            address(new TransparentUpgradeableProxy(
-                address(assetsImpl),
-                deployer,  // proxy admin
-                abi.encodeCall(AssetRegistry.initialize, ())
-            ))
-        );
-
-        VendorRegistry vendors = VendorRegistry(
-            address(new TransparentUpgradeableProxy(
-                address(vendorsImpl),
-                deployer,
-                abi.encodeCall(VendorRegistry.initialize, ())
-            ))
-        );
-
-        // MigrationRegistry needs assetRegistry address — pass via initialize
-        MigrationRegistry migrations = MigrationRegistry(
-            address(new TransparentUpgradeableProxy(
-                address(migrationsImpl),
-                deployer,
-                abi.encodeCall(MigrationRegistry.initialize, ())
-            ))
-        );
-
-        AuditRegistry audits = AuditRegistry(
-            address(new TransparentUpgradeableProxy(
-                address(auditsImpl),
-                deployer,
-                abi.encodeCall(AuditRegistry.initialize, ())
-            ))
-        );
-
-        // Governance: every trust-affecting admin action goes through a
-        // TimelockController with a 2-day notice period.
-        address[] memory proposers = new address[](1);
-        proposers[0] = deployer;
-        address[] memory executors = new address[](1);
-        executors[0] = deployer;
-        TimelockController timelock = new TimelockController(2 days, proposers, executors, deployer);
-
-        // Pre-grant operational roles before handing admin to timelock.
-        audits.grantRole(audits.AUDITOR_ROLE(), deployer);
-        audits.grantRole(audits.AUDITOR_ROLE(), 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC);
-        migrations.grantRole(migrations.AUDITOR_ROLE(), deployer);
-        migrations.grantRole(migrations.MIGRATOR_ROLE(), deployer);
-
-        // Hand DEFAULT_ADMIN_ROLE of every registry to the timelock.
-        bytes32 adminRole = 0x00;
-        assets.grantRole(adminRole, address(timelock));
-        vendors.grantRole(adminRole, address(timelock));
-        migrations.grantRole(adminRole, address(timelock));
-        audits.grantRole(adminRole, address(timelock));
+        TimelockController timelock = _deployTimelock(deployer);
+        _handAdminToTimelock(assets, vendors, migrations, audits, timelock);
 
         QTrustGovernance governance = new QTrustGovernance(
             address(timelock),
@@ -88,29 +33,144 @@ contract Deploy is Script {
             address(migrations),
             address(audits)
         );
-
-        // The governance wrapper is the proposer and executor for the timelock.
         timelock.grantRole(timelock.PROPOSER_ROLE(), address(governance));
         timelock.grantRole(timelock.EXECUTOR_ROLE(), address(governance));
 
-        // Renounce the deployer's admin role on every registry (only the
-        // timelock can now change trust-affecting state).
-        assets.renounceRole(adminRole, deployer);
-        vendors.renounceRole(adminRole, deployer);
-        migrations.renounceRole(adminRole, deployer);
-        audits.renounceRole(adminRole, deployer);
+        console2.log("TimelockController deployed: ", address(timelock));
+        console2.log("QTrustGovernance deployed:   ", address(governance));
 
-        console2.log("AssetRegistry impl deployed at:     ", address(assetsImpl));
-        console2.log("VendorRegistry impl deployed at:    ", address(vendorsImpl));
-        console2.log("MigrationRegistry impl deployed at: ", address(migrationsImpl));
-        console2.log("AuditRegistry impl deployed at:     ", address(auditsImpl));
-        console2.log("AssetRegistry proxy deployed at:    ", address(assets));
-        console2.log("VendorRegistry proxy deployed at:   ", address(vendors));
-        console2.log("MigrationRegistry proxy deployed at:", address(migrations));
-        console2.log("AuditRegistry proxy deployed at:    ", address(audits));
-        console2.log("TimelockController deployed:        ", address(timelock));
-        console2.log("QTrustGovernance deployed:          ", address(governance));
+        // Deploy new trust infrastructure contracts
+        _deployTrustInfrastructure(deployer, timelock);
 
         vm.stopBroadcast();
+    }
+
+    function _deployRegistries(address deployer)
+        internal
+        returns (AssetRegistry, VendorRegistry, MigrationRegistry, AuditRegistry)
+    {
+        AssetRegistry assetsImpl = new AssetRegistry();
+        VendorRegistry vendorsImpl = new VendorRegistry();
+        MigrationRegistry migrationsImpl = new MigrationRegistry();
+        AuditRegistry auditsImpl = new AuditRegistry();
+
+        AssetRegistry assets = AssetRegistry(
+            address(new TransparentUpgradeableProxy(
+                address(assetsImpl), deployer,
+                abi.encodeCall(AssetRegistry.initialize, ())
+            ))
+        );
+        VendorRegistry vendors = VendorRegistry(
+            address(new TransparentUpgradeableProxy(
+                address(vendorsImpl), deployer,
+                abi.encodeCall(VendorRegistry.initialize, ())
+            ))
+        );
+        MigrationRegistry migrations = MigrationRegistry(
+            address(new TransparentUpgradeableProxy(
+                address(migrationsImpl), deployer,
+                abi.encodeCall(MigrationRegistry.initialize, (address(assets)))
+            ))
+        );
+        AuditRegistry audits = AuditRegistry(
+            address(new TransparentUpgradeableProxy(
+                address(auditsImpl), deployer,
+                abi.encodeCall(AuditRegistry.initialize, (address(migrations)))
+            ))
+        );
+
+        console2.log("AssetRegistry impl:     ", address(assetsImpl));
+        console2.log("VendorRegistry impl:    ", address(vendorsImpl));
+        console2.log("MigrationRegistry impl: ", address(migrationsImpl));
+        console2.log("AuditRegistry impl:     ", address(auditsImpl));
+        console2.log("AssetRegistry proxy:    ", address(assets));
+        console2.log("VendorRegistry proxy:   ", address(vendors));
+        console2.log("MigrationRegistry proxy:", address(migrations));
+        console2.log("AuditRegistry proxy:    ", address(audits));
+
+        return (assets, vendors, migrations, audits);
+    }
+
+    function _deployTrustInfrastructure(address deployer, TimelockController timelock) internal {
+        // RevocationAnchor
+        RevocationAnchor revocationImpl = new RevocationAnchor();
+        RevocationAnchor revocation = RevocationAnchor(
+            address(new TransparentUpgradeableProxy(
+                address(revocationImpl), deployer,
+                abi.encodeCall(RevocationAnchor.initialize, ())
+            ))
+        );
+        bytes32 adminRole = 0x00;
+        revocation.grantRole(adminRole, address(timelock));
+        revocation.renounceRole(adminRole, deployer);
+
+        // PolicyCommitment
+        PolicyCommitment policyImpl = new PolicyCommitment();
+        PolicyCommitment policy = PolicyCommitment(
+            address(new TransparentUpgradeableProxy(
+                address(policyImpl), deployer,
+                abi.encodeCall(PolicyCommitment.initialize, ())
+            ))
+        );
+        policy.grantRole(adminRole, address(timelock));
+        policy.renounceRole(adminRole, deployer);
+
+        // SchemaRegistry
+        SchemaRegistry schemaImpl = new SchemaRegistry();
+        SchemaRegistry schema = SchemaRegistry(
+            address(new TransparentUpgradeableProxy(
+                address(schemaImpl), deployer,
+                abi.encodeCall(SchemaRegistry.initialize, ())
+            ))
+        );
+        schema.grantRole(adminRole, address(timelock));
+        schema.renounceRole(adminRole, deployer);
+
+        // TrustAnchorRegistry
+        TrustAnchorRegistry trustAnchorImpl = new TrustAnchorRegistry();
+        TrustAnchorRegistry trustAnchor = TrustAnchorRegistry(
+            address(new TransparentUpgradeableProxy(
+                address(trustAnchorImpl), deployer,
+                abi.encodeCall(TrustAnchorRegistry.initialize, ())
+            ))
+        );
+        trustAnchor.grantRole(adminRole, address(timelock));
+        trustAnchor.renounceRole(adminRole, deployer);
+
+        console2.log("RevocationAnchor impl:      ", address(revocationImpl));
+        console2.log("RevocationAnchor proxy:     ", address(revocation));
+        console2.log("PolicyCommitment impl:      ", address(policyImpl));
+        console2.log("PolicyCommitment proxy:     ", address(policy));
+        console2.log("SchemaRegistry impl:        ", address(schemaImpl));
+        console2.log("SchemaRegistry proxy:       ", address(schema));
+        console2.log("TrustAnchorRegistry impl:   ", address(trustAnchorImpl));
+        console2.log("TrustAnchorRegistry proxy:  ", address(trustAnchor));
+    }
+
+    function _deployTimelock(address deployer) internal returns (TimelockController) {
+        address[] memory proposers = new address[](1);
+        proposers[0] = deployer;
+        address[] memory executors = new address[](1);
+        executors[0] = deployer;
+        return new TimelockController(2 days, proposers, executors, deployer);
+    }
+
+    function _handAdminToTimelock(
+        AssetRegistry assets,
+        VendorRegistry vendors,
+        MigrationRegistry migrations,
+        AuditRegistry audits,
+        TimelockController timelock
+    ) internal {
+        bytes32 adminRole = 0x00;
+        assets.grantRole(adminRole, address(timelock));
+        vendors.grantRole(adminRole, address(timelock));
+        migrations.grantRole(adminRole, address(timelock));
+        audits.grantRole(adminRole, address(timelock));
+
+        assets.renounceRole(adminRole, msg.sender);
+        vendors.renounceRole(adminRole, msg.sender);
+        migrations.renounceRole(adminRole, msg.sender);
+        audits.renounceRole(adminRole, msg.sender);
     }
 }

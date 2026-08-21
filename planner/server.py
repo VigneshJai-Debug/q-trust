@@ -4,6 +4,8 @@ Exposes the trained MigrationGNN as an HTTP service so the backend can proxy
 migration planning requests to it. Adds deadline-aware scheduling on top of
 the GNN priority ordering.
 
+Falls back to a rule-based heuristic when no trained model is available.
+
 Endpoints:
     GET  /health           — liveness + model info
     POST /plan             — plan a migration from a CBOM (+ optional deadline)
@@ -17,22 +19,17 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import torch
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
-from torch_geometric.data import Data
 
-from qtrust_planner.model import MigrationGNN, encode_algorithm_type
-from qtrust_planner.predict import cbom_to_graph
-
-app = FastAPI(title="Q-Trust Planner", version="0.2.0")
+app = FastAPI(title="Q-Trust Planner", version="0.3.0")
 
 MODEL_PATH = os.environ.get("QTRUST_MODEL_PATH", str(Path(__file__).resolve().parents[1] / "model.pt"))
 DEADLINES_PATH = os.environ.get(
     "QTRUST_DEADLINES_PATH", str(Path(__file__).resolve().parents[1] / "data" / "algorithms.json")
 )
 
-_model: MigrationGNN | None = None
+_model = None
 _model_info: dict[str, Any] = {}
 _deadlines: dict[str, Any] = {}
 
@@ -45,18 +42,78 @@ except FileNotFoundError:
 
 def _load_model() -> None:
     global _model, _model_info
+    try:
+        import torch
+        from qtrust_planner.model import MigrationGNN
+    except ImportError:
+        _model_info = {"mode": "heuristic", "reason": "torch not installed"}
+        return
+
     if not os.path.exists(MODEL_PATH):
-        raise FileNotFoundError(f"Model not found at {MODEL_PATH}. Train it first (qtrust_planner.train).")
-    checkpoint = torch.load(MODEL_PATH, map_location="cpu", weights_only=False)
-    config = checkpoint.get("model_config", {"input_features": 6, "hidden_dim": 64, "embedding_dim": 32})
-    _model = MigrationGNN(**config)
-    _model.load_state_dict(checkpoint["model_state_dict"])
-    _model.eval()
-    _model_info = {
-        "path": MODEL_PATH,
-        "config": config,
-        "eval_metrics": checkpoint.get("eval_metrics", {}),
-    }
+        _model_info = {"mode": "heuristic", "reason": "model.pt not found"}
+        return
+
+    try:
+        checkpoint = torch.load(MODEL_PATH, map_location="cpu", weights_only=False)
+        config = checkpoint.get("model_config", {"input_features": 6, "hidden_dim": 64, "embedding_dim": 32})
+        _model = MigrationGNN(**config)
+        _model.load_state_dict(checkpoint["model_state_dict"])
+        _model.eval()
+        _model_info = {
+            "mode": "gnn",
+            "path": MODEL_PATH,
+            "config": config,
+            "eval_metrics": checkpoint.get("eval_metrics", {}),
+        }
+    except Exception as exc:
+        _model_info = {"mode": "heuristic", "reason": f"model load failed: {exc}"}
+
+
+def _heuristic_priority(asset: dict[str, Any]) -> float:
+    """Rule-based priority score for an asset. Higher = migrate first."""
+    criticality_map = {"Critical": 5, "High": 4, "Medium": 3, "Low": 2, "Info": 1}
+    crit = criticality_map.get(asset.get("criticality", "Medium"), 3)
+    key_size = asset.get("key_size", 0)
+    pqc_ready = asset.get("pqc_ready", False)
+    algorithm = asset.get("algorithm", "unknown")
+    family = algorithm.split("-")[0] if "-" in algorithm else algorithm
+
+    score = 0.0
+
+    # Criticality贡献 (0-5)
+    score += crit
+
+    # 非PQC算法加分
+    if not pqc_ready:
+        if family in ("RSA", "ECC", "DSA", "DH", "ECDH", "ECDSA"):
+            score += 3.0
+        elif family in ("EdDSA",):
+            score += 2.0
+        else:
+            score += 1.0
+
+    # 大密钥加分
+    if key_size >= 4096:
+        score += 2.0
+    elif key_size >= 2048:
+        score += 1.0
+
+    # PQC-ready算法减分（不需要迁移）
+    if pqc_ready:
+        score -= 2.0
+
+    return score
+
+
+def _heuristic_risk(asset: dict[str, Any]) -> float:
+    """Rule-based risk score. Higher = riskier to migrate now."""
+    criticality_map = {"Critical": 5, "High": 4, "Medium": 3, "Low": 2, "Info": 1}
+    crit = criticality_map.get(asset.get("criticality", "Medium"), 3)
+    pqc_ready = asset.get("pqc_ready", False)
+
+    if pqc_ready:
+        return 0.1
+    return crit / 5.0
 
 
 class PlanRequest(BaseModel):
@@ -90,25 +147,50 @@ def _startup() -> None:
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    if _model is None:
+    if not _model_info:
         _load_model()
     return {"status": "ok", "model": _model_info}
 
 
 @app.post("/plan")
 def plan(req: PlanRequest) -> dict[str, Any]:
-    if _model is None:
+    if not _model_info:
         _load_model()
+
     try:
+        from qtrust_planner.predict import cbom_to_graph
         data, asset_records = cbom_to_graph(req.cbom, None if req.deps is None else str(req.deps))
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (ImportError, ValueError) as exc:
+        # Fallback: parse CBOM directly without PyG
+        assets = req.cbom.get("assets", [])
+        if not assets:
+            raise HTTPException(status_code=422, detail="CBOM has no assets") from exc
+        asset_records = [
+            {
+                "index": i,
+                "asset_id": a.get("asset_id", f"asset-{i:04d}"),
+                "algorithm": a.get("algorithm", "unknown"),
+                "host": a.get("host", ""),
+                "port": a.get("port", 0),
+                "key_size": int(a.get("key_size", 0) or 0),
+                "criticality": a.get("criticality", "Medium"),
+                "pqc_ready": bool(a.get("pqc_ready", False)),
+            }
+            for i, a in enumerate(assets)
+        ]
 
-    with torch.no_grad():
-        order_logits, risk_logits = _model(data)
+    use_gnn = _model is not None
 
-    priority_scores = order_logits.cpu().numpy()
-    risk_scores = risk_logits.cpu().numpy()
+    if use_gnn:
+        import torch
+        with torch.no_grad():
+            order_logits, risk_logits = _model(data)
+        priority_scores = order_logits.cpu().numpy()
+        risk_scores = risk_logits.cpu().numpy()
+    else:
+        priority_scores = [_heuristic_priority(a) for a in asset_records]
+        risk_scores = [_heuristic_risk(a) for a in asset_records]
+
     sorted_indices = sorted(range(len(asset_records)), key=lambda i: -priority_scores[i])
 
     deadline_date = None
@@ -127,8 +209,8 @@ def plan(req: PlanRequest) -> dict[str, Any]:
             "rank": rank + 1,
             "asset_id": asset["asset_id"],
             "algorithm": algorithm,
-            "host": asset["host"],
-            "port": asset["port"],
+            "host": asset.get("host", ""),
+            "port": asset.get("port", 0),
             "key_size": asset["key_size"],
             "criticality": asset["criticality"],
             "pqc_ready": asset["pqc_ready"],
@@ -157,7 +239,7 @@ def plan_with_deadline(req: DeadlineRequest) -> dict[str, Any]:
 
 
 def _build_schedule(migration_order: list[dict[str, Any]], deadline: date) -> dict[str, Any]:
-    """Greedy schedule: migrate in GNN order, one asset at a time, backfilled
+    """Greedy schedule: migrate in priority order, one asset at a time, backfilled
     from the deadline so the most critical assets finish first.
     """
     today = date.today()
@@ -166,7 +248,6 @@ def _build_schedule(migration_order: list[dict[str, Any]], deadline: date) -> di
     total_effort = sum(float(a["migrate_days"]) for a in migration_order)
     feasible = total_effort <= max(days_available, 1)
 
-    # Backfill: last asset ends on the deadline; earlier assets stack behind it.
     cursor = deadline
     windows: list[dict[str, Any]] = []
     for asset in reversed(migration_order):

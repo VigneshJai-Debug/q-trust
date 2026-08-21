@@ -20,8 +20,8 @@ contract MigrationRegistryTest is Test {
         assets = new AssetRegistry();
         assets.initialize();
         assets.grantRole(assets.REGISTRAR_ROLE(), migrator);
-        registry = new MigrationRegistry(address(assets));
-        registry.initialize();
+        registry = new MigrationRegistry();
+        registry.initialize(address(assets));
         registry.grantRole(registry.MIGRATOR_ROLE(), migrator);
 
         vm.prank(migrator);

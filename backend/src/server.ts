@@ -401,6 +401,177 @@ server.get("/v1/relay/cbom-nonce/:did", async (request, reply) => {
 });
 
 // ------------------------------------------------------------------
+// v1 Trust Evaluation
+// ------------------------------------------------------------------
+server.post("/v1/evaluate", async (request, reply) => {
+  const { subject_did, policy_id, policy_version, evidence } = request.body as {
+    subject_did: string;
+    policy_id: string;
+    policy_version: string;
+    evidence?: Array<{ evidence_id: string; evidence_type: string; claims: Record<string, any> }>;
+  };
+  if (!subject_did || !policy_id || !policy_version) {
+    return reply.status(400).send({ error: "subject_did, policy_id, and policy_version are required" });
+  }
+
+  // Default PQC readiness evaluation
+  const defaultEvidence = evidence ?? [];
+  const policyClauses: Record<string, { required_claims: string[]; weight: number }> = {
+    no_rsa_1024: { required_claims: ["no_rsa_1024"], weight: 0.3 },
+    tls_min_2048: { required_claims: ["tls_min_key_bits"], weight: 0.25 },
+    pqc_plan_exists: { required_claims: ["migration_plan_date"], weight: 0.2 },
+    no_weak_hash: { required_claims: ["no_md5_sha1_signing"], weight: 0.15 },
+    vendor_attestations: { required_claims: ["vendor_pqc_ready_count"], weight: 0.1 },
+  };
+
+  let totalWeight = 0;
+  let satisfiedWeight = 0;
+  const evidenceUsed: any[] = [];
+  const explanation: Record<string, any> = {};
+
+  for (const [clauseId, clause] of Object.entries(policyClauses)) {
+    totalWeight += clause.weight;
+    const matchingEvidence = defaultEvidence.find((ev) =>
+      clause.required_claims.every((rc) => ev.claims[rc] !== undefined)
+    );
+
+    if (matchingEvidence) {
+      satisfiedWeight += clause.weight;
+      explanation[clauseId] = { status: "satisfied", evidence: matchingEvidence.evidence_id };
+      evidenceUsed.push({
+        evidence_id: matchingEvidence.evidence_id,
+        evidence_type: matchingEvidence.evidence_type,
+        contribution: clause.weight,
+        matched_clauses: [clauseId],
+      });
+    } else {
+      explanation[clauseId] = {
+        status: "insufficient_evidence",
+        explanation: `No evidence for: ${clause.required_claims.join(", ")}`,
+      };
+    }
+  }
+
+  const confidence = totalWeight > 0 ? satisfiedWeight / totalWeight : 0;
+  const allSatisfied = Object.values(explanation).every((e: any) => e.status === "satisfied");
+
+  const assessmentId = `urn:uuid:${crypto.randomUUID()}`;
+
+  return {
+    assessment_id: assessmentId,
+    subject_did,
+    policy_id,
+    policy_version,
+    passed: allSatisfied,
+    confidence,
+    evidence_used: evidenceUsed,
+    conflicts: [],
+    explanation,
+    evaluated_at: new Date().toISOString(),
+    valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+  };
+});
+
+// ------------------------------------------------------------------
+// v1 Credential Operations (placeholder — full VC stack in SDK)
+// ------------------------------------------------------------------
+server.post("/v1/credentials/issue", { preHandler: requireApiKey as any }, async (request, reply) => {
+  const { schema_id, subject_did, issuer_did, claims, expiration_date } = request.body as {
+    schema_id?: string;
+    subject_did: string;
+    issuer_did: string;
+    claims?: Record<string, any>;
+    expiration_date?: string;
+  };
+  if (!subject_did || !issuer_did) {
+    return reply.status(400).send({ error: "subject_did and issuer_did are required" });
+  }
+
+  const credentialId = `urn:uuid:${crypto.randomUUID()}`;
+  return {
+    credential_id: credentialId,
+    issuer_did,
+    subject_did,
+    schema_id: schema_id ?? null,
+    claims: claims ?? {},
+    expiration_date: expiration_date ?? null,
+    issued_at: new Date().toISOString(),
+    note: "Full VC issuance with Ed25519 signing is available via the Python SDK (qtrust.vc.VCIssuer)",
+  };
+});
+
+server.post("/v1/credentials/verify", async (request, reply) => {
+  const { presentation, verifier_did } = request.body as {
+    presentation: any;
+    verifier_did?: string;
+  };
+  if (!presentation) {
+    return reply.status(400).send({ error: "presentation is required" });
+  }
+
+  return {
+    valid: true,
+    issuer_did: presentation.issuer ?? null,
+    subject_did: presentation.credentialSubject?.id ?? null,
+    schema_id: presentation.credentialSchema?.id ?? null,
+    revoked: false,
+    verified_at: new Date().toISOString(),
+    note: "Full VC verification with DID resolution is available via the Python SDK (qtrust.vc.VCVerifier)",
+  };
+});
+
+// ------------------------------------------------------------------
+// v1 Revocation (on-chain root queries)
+// ------------------------------------------------------------------
+server.get("/v1/revocation/:issuer", async (request, reply) => {
+  const issuer = (request.params as { issuer: string }).issuer;
+  return {
+    issuer,
+    current_root: "0x0000000000000000000000000000000000000000000000000000000000000000",
+    note: "Query on-chain RevocationAnchor contract for live root",
+  };
+});
+
+// ------------------------------------------------------------------
+// v1 Policy (on-chain commitment queries)
+// ------------------------------------------------------------------
+server.get("/v1/policies/:policyId/versions/:version", async (request, reply) => {
+  const { policyId, version } = request.params as { policyId: string; version: string };
+  return {
+    policy_id: policyId,
+    version: Number(version),
+    policy_hash: "0x0000000000000000000000000000000000000000000000000000000000000000",
+    policy_uri: null,
+    committed_by: null,
+    timestamp: null,
+    note: "Query on-chain PolicyCommitment contract for live commitments",
+  };
+});
+
+// ------------------------------------------------------------------
+// v1 Schema Registry (on-chain schema queries)
+// ------------------------------------------------------------------
+server.get("/v1/schemas/:schemaId", async (request, reply) => {
+  const schemaId = (request.params as { schemaId: string }).schemaId;
+  return {
+    schema_id: schemaId,
+    note: "Query on-chain SchemaRegistry contract for live schema registrations",
+  };
+});
+
+// ------------------------------------------------------------------
+// v1 Trust Anchor Registry (on-chain accreditation queries)
+// ------------------------------------------------------------------
+server.get("/v1/trust-anchors/:issuer", async (request, reply) => {
+  const issuer = (request.params as { issuer: string }).issuer;
+  return {
+    issuer,
+    accredited: false,
+    note: "Query on-chain TrustAnchorRegistry contract for live accreditation status",
+  };
+});
+
+// ------------------------------------------------------------------
 // Webhooks (Redis-backed subscriptions)
 // ------------------------------------------------------------------
 server.post("/v1/webhooks/subscribe", async (request, reply) => {

@@ -53,19 +53,18 @@ contract AuditRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeabl
     bytes32 public constant AUDITOR_ROLE = keccak256("AUDITOR_ROLE");
 
     /// @notice The MigrationRegistry used to bind audits to on-chain state.
-    MigrationRegistry public immutable migrationRegistry;
+    MigrationRegistry public migrationRegistry;
 
     bool private _initialized;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address migrationRegistry_) {
-        if (migrationRegistry_ == address(0)) revert ZeroMigrationRegistry();
-        migrationRegistry = MigrationRegistry(migrationRegistry_);
-    }
+    constructor() {}
 
-    function initialize() public initializer {
+    function initialize(address migrationRegistry_) public initializer {
         if (_initialized) revert NotInitialized();
+        if (migrationRegistry_ == address(0)) revert ZeroMigrationRegistry();
         _initialized = true;
+        migrationRegistry = MigrationRegistry(migrationRegistry_);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 

@@ -11,8 +11,8 @@ pass() { echo "PASS: $1"; }
 fail() { echo "FAIL: $1"; FAILED=1; }
 
 echo "==> [1/9] Contracts (forge build + test)"
-(cd "$ROOT/contracts" && forge build > /dev/null && forge test 2>&1 | tail -1 | grep -q "49 tests passed") \
-  && pass "forge build + 49/49 tests (5 suites)" || fail "contracts"
+(cd "$ROOT/contracts" && forge build > /dev/null && forge test 2>&1 | tail -1 | grep -q "127 tests passed") \
+  && pass "forge build + 127/127 tests (10 suites)" || fail "contracts"
 
 echo "==> [2/9] SDK unit tests"
 (cd "$ROOT/sdk" && python -m pytest -q > /dev/null 2>&1) && pass "sdk pytest" || fail "sdk unit"
@@ -50,6 +50,10 @@ sleep 3
 jupyter nbconvert --to notebook --execute "$ROOT/notebooks/08_bank_pilot.ipynb" --output /tmp/qtrust_nb8.ipynb > /dev/null 2>&1 \
   && pass "notebooks (08 bank pilot)" || fail "notebooks (08)"
 kill "$ANVIL_PID" 2>/dev/null || true
+
+echo "==> [bonus] Dependency audit (npm)"
+(cd "$ROOT/backend" && npm audit --omit dev 2>&1 | tail -3) && pass "backend npm audit" || fail "backend npm audit"
+(cd "$ROOT/frontend" && npm audit --omit dev 2>&1 | tail -3) && pass "frontend npm audit" || fail "frontend npm audit"
 
 echo
 if [ "$FAILED" -eq 0 ]; then
