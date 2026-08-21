@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qtrust-sdk"
+version = "0.1.0"
+description = "Q-Trust SDK — Verifiable post-quantum cryptography migration provenance on Base L2."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Q-Trust Protocol", email = "dev@qtrust.dev" },
+]
+keywords = ["post-quantum", "pqc", "base", "ethereum", "cbom", "migration", "cryptography"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security :: Cryptography",
+]
+dependencies = [
+    "web3>=6.0.0",
+    "eth-account>=0.10.0",
+    "pydantic>=2.0.0",
+    "requests>=2.28.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/qtrust/qtrust"
+Documentation = "https://docs.qtrust.dev"
+Repository = "https://github.com/qtrust/qtrust"
+Issues = "https://github.com/qtrust/qtrust/issues"
+
+[tool.setuptools.packages.find]
+include = ["qtrust*"]
+exclude = ["tests*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true

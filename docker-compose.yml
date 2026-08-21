@@ -1,0 +1,124 @@
+# Q-Trust backend docker-compose.
+# Starts the API, the webhook watcher, the Postgres indexer store,
+# Redis, and the AI planner microservice.
+#
+# Usage:
+#   cp .env.example .env
+#   # edit .env with your RPC URL, private key, and contract addresses
+#   docker compose up -d
+
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: qtrust-backend:0.1.0
+    container_name: qtrust-api
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - HOST=0.0.0.0
+      - QTRUST_REDIS_URL=redis://redis:6379
+      - QTRUST_PG_URL=postgres://qtrust:qtrust@postgres:5432/qtrust
+      - QTRUST_PLANNER_URL=http://planner:8000
+      - QTRUST_BASE_SEPOLIA_RPC=http://host.docker.internal:8545
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - qtrust-net
+
+  webhook:
+    image: qtrust-backend:0.1.0
+    container_name: qtrust-webhook
+    restart: unless-stopped
+    command: ["bun", "run", "dist/services/webhook.js"]
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - QTRUST_REDIS_URL=redis://redis:6379
+      - QTRUST_BASE_SEPOLIA_RPC=http://host.docker.internal:8545
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+    healthcheck:
+      disable: true
+    networks:
+      - qtrust-net
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: qtrust-postgres
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=qtrust
+      - POSTGRES_PASSWORD=qtrust
+      - POSTGRES_DB=qtrust
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./backend/src/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qtrust -d qtrust"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - qtrust-net
+
+  planner:
+    build:
+      context: ./planner
+      dockerfile: Dockerfile
+    image: qtrust-planner:0.1.0
+    container_name: qtrust-planner
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - QTRUST_MODEL_PATH=/app/model.pt
+      - QTRUST_DEADLINES_PATH=/app/data/algorithms.json
+    networks:
+      - qtrust-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: qtrust-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - qtrust-net
+
+volumes:
+  redis-data:
+    driver: local
+  postgres-data:
+    driver: local
+
+networks:
+  qtrust-net:
+    driver: bridge

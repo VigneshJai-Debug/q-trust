@@ -1,0 +1,213 @@
+{
+  "schema_version": "1.0",
+  "algorithm_profiles": {
+    "RSA-1024": {
+      "family": "RSA",
+      "pqc_ready": false,
+      "severity": 1.0,
+      "recommended_replacement": "ML-KEM-768",
+      "migrate_days": 1.0,
+      "notes": "Broken by Shor's algorithm; migrate immediately."
+    },
+    "RSA-2048": {
+      "family": "RSA",
+      "pqc_ready": false,
+      "severity": 0.95,
+      "recommended_replacement": "ML-KEM-768",
+      "migrate_days": 1.5,
+      "notes": "Broken by Shor's algorithm; migrate immediately."
+    },
+    "RSA-3072": {
+      "family": "RSA",
+      "pqc_ready": false,
+      "severity": 0.85,
+      "recommended_replacement": "ML-KEM-1024",
+      "migrate_days": 2.0,
+      "notes": "Sensitive data with long confidentiality horizon."
+    },
+    "RSA-4096": {
+      "family": "RSA",
+      "pqc_ready": false,
+      "severity": 0.8,
+      "recommended_replacement": "ML-KEM-1024",
+      "migrate_days": 2.5,
+      "notes": "Not a defense against quantum harvesting; still migrate."
+    },
+    "ECC-P256": {
+      "family": "ECC",
+      "pqc_ready": false,
+      "severity": 0.85,
+      "recommended_replacement": "ML-KEM-768",
+      "migrate_days": 1.5,
+      "notes": "Broken by Shor's algorithm for quantum-capable adversaries."
+    },
+    "ECC-P384": {
+      "family": "ECC",
+      "pqc_ready": false,
+      "severity": 0.75,
+      "recommended_replacement": "ML-KEM-768",
+      "migrate_days": 2.0,
+      "notes": "Slightly longer security horizon; still quantum-vulnerable."
+    },
+    "ECC-P521": {
+      "family": "ECC",
+      "pqc_ready": false,
+      "severity": 0.7,
+      "recommended_replacement": "ML-KEM-1024",
+      "migrate_days": 2.0,
+      "notes": "Security margin does not survive Shor's algorithm."
+    },
+    "DSA-1024": {
+      "family": "DSA",
+      "pqc_ready": false,
+      "severity": 1.0,
+      "recommended_replacement": "ML-DSA-659",
+      "migrate_days": 1.0,
+      "notes": "1024-bit DSA is deprecated; migrate immediately."
+    },
+    "DSA-2048": {
+      "family": "DSA",
+      "pqc_ready": false,
+      "severity": 0.9,
+      "recommended_replacement": "ML-DSA-659",
+      "migrate_days": 1.5,
+      "notes": "Quantum-vulnerable; migrate."
+    },
+    "DH-2048": {
+      "family": "DH",
+      "pqc_ready": false,
+      "severity": 0.9,
+      "recommended_replacement": "ML-KEM-768",
+      "migrate_days": 1.5,
+      "notes": "Classic Diffie-Hellman is quantum-vulnerable."
+    },
+    "ECDH-P256": {
+      "family": "ECDH",
+      "pqc_ready": false,
+      "severity": 0.85,
+      "recommended_replacement": "ML-KEM-768",
+      "migrate_days": 1.5,
+      "notes": "Hybrid ECDH+ML-KEM is the current NIST recommendation."
+    },
+    "ECDSA-P256": {
+      "family": "ECDSA",
+      "pqc_ready": false,
+      "severity": 0.85,
+      "recommended_replacement": "ML-DSA-659",
+      "migrate_days": 1.5,
+      "notes": "Hybrid ECDSA+ML-DSA is the current NIST recommendation."
+    },
+    "Ed25519": {
+      "family": "EdDSA",
+      "pqc_ready": false,
+      "severity": 0.8,
+      "recommended_replacement": "ML-DSA-659",
+      "migrate_days": 1.5,
+      "notes": "Quantum-vulnerable for signing."
+    },
+    "Ed448": {
+      "family": "EdDSA",
+      "pqc_ready": false,
+      "severity": 0.7,
+      "recommended_replacement": "ML-DSA-659",
+      "migrate_days": 2.0,
+      "notes": "Quantum-vulnerable for signing."
+    },
+    "SHA-256": {
+      "family": "SHA",
+      "pqc_ready": true,
+      "severity": 0.1,
+      "recommended_replacement": "SHA-384 (SHA-2 family)",
+      "migrate_days": 0.5,
+      "notes": "Hash functions are quantum-resistant; only lengthen where needed."
+    },
+    "SHA-384": {
+      "family": "SHA",
+      "pqc_ready": true,
+      "severity": 0.05,
+      "recommended_replacement": "none",
+      "migrate_days": 0.0,
+      "notes": "Already quantum-resistant."
+    },
+    "AES-128": {
+      "family": "AES",
+      "pqc_ready": true,
+      "severity": 0.4,
+      "recommended_replacement": "AES-256 (double-key for long-term data)",
+      "migrate_days": 0.5,
+      "notes": "Grover's search halves effective key strength; AES-256 recommended."
+    },
+    "AES-256": {
+      "family": "AES",
+      "pqc_ready": true,
+      "severity": 0.05,
+      "recommended_replacement": "none",
+      "migrate_days": 0.0,
+      "notes": "Already quantum-resistant."
+    },
+    "HMAC-SHA256": {
+      "family": "HMAC",
+      "pqc_ready": true,
+      "severity": 0.1,
+      "recommended_replacement": "none",
+      "migrate_days": 0.0,
+      "notes": "Already quantum-resistant."
+    },
+    "ChaCha20-Poly1305": {
+      "family": "ChaCha20",
+      "pqc_ready": true,
+      "severity": 0.1,
+      "recommended_replacement": "none",
+      "migrate_days": 0.0,
+      "notes": "Already quantum-resistant for symmetric encryption."
+    },
+    "ML-KEM-512": {
+      "family": "ML-KEM",
+      "pqc_ready": true,
+      "severity": 0.05,
+      "recommended_replacement": "none",
+      "migrate_days": 0.0,
+      "notes": "NIST FIPS 203; already post-quantum."
+    },
+    "ML-KEM-768": {
+      "family": "ML-KEM",
+      "pqc_ready": true,
+      "severity": 0.05,
+      "recommended_replacement": "none",
+      "migrate_days": 0.0,
+      "notes": "NIST FIPS 203; already post-quantum."
+    },
+    "ML-KEM-1024": {
+      "family": "ML-KEM",
+      "pqc_ready": true,
+      "severity": 0.05,
+      "recommended_replacement": "none",
+      "migrate_days": 0.0,
+      "notes": "NIST FIPS 203; already post-quantum."
+    },
+    "ML-DSA-441": {
+      "family": "ML-DSA",
+      "pqc_ready": true,
+      "severity": 0.05,
+      "recommended_replacement": "none",
+      "migrate_days": 0.0,
+      "notes": "NIST FIPS 204; already post-quantum."
+    },
+    "ML-DSA-659": {
+      "family": "ML-DSA",
+      "pqc_ready": true,
+      "severity": 0.05,
+      "recommended_replacement": "none",
+      "migrate_days": 0.0,
+      "notes": "NIST FIPS 204; already post-quantum."
+    },
+    "ML-DSA-877": {
+      "family": "ML-DSA",
+      "pqc_ready": true,
+      "severity": 0.05,
+      "recommended_replacement": "none",
+      "migrate_days": 0.0,
+      "notes": "NIST FIPS 204; already post-quantum."
+    }
+  }
+}
