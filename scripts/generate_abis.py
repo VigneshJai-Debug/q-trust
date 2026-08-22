@@ -28,7 +28,14 @@ GOVERNANCE_CONTRACTS = {
     "TimelockController": "TimelockController",
 }
 
-ALL_CONTRACTS = {**CORE_REGISTRIES, **GOVERNANCE_CONTRACTS}
+TRUST_INFRA_CONTRACTS = {
+    "RevocationAnchor": "RevocationAnchor",
+    "PolicyCommitment": "PolicyCommitment",
+    "SchemaRegistry": "SchemaRegistry",
+    "TrustAnchorRegistry": "TrustAnchorRegistry",
+}
+
+ALL_CONTRACTS = {**CORE_REGISTRIES, **GOVERNANCE_CONTRACTS, **TRUST_INFRA_CONTRACTS}
 
 
 # ── TypeScript generation ────────────────────────────────────────────────────

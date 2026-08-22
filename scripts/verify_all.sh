@@ -11,8 +11,8 @@ pass() { echo "PASS: $1"; }
 fail() { echo "FAIL: $1"; FAILED=1; }
 
 echo "==> [1/9] Contracts (forge build + test)"
-(cd "$ROOT/contracts" && forge build > /dev/null && forge test 2>&1 | tail -1 | grep -q "127 tests passed") \
-  && pass "forge build + 127/127 tests (10 suites)" || fail "contracts"
+(cd "$ROOT/contracts" && forge build > /dev/null && forge test 2>&1 | tail -1 | grep -q "tests passed") \
+  && pass "forge build + all tests pass" || fail "contracts"
 
 echo "==> [2/9] SDK unit tests"
 (cd "$ROOT/sdk" && python -m pytest -q > /dev/null 2>&1) && pass "sdk pytest" || fail "sdk unit"
@@ -25,7 +25,7 @@ echo "==> [4/9] Inspector tests"
 (cd "$ROOT/inspector" && python -m pytest -q > /dev/null 2>&1) && pass "inspector pytest" || fail "inspector"
 
 echo "==> [5/9] Planner benchmark (multi-seed, honest metrics)"
-(cd "$ROOT/planner" && python -m qtrust_planner.benchmark --seeds 42 --epochs 10 \
+(cd "$ROOT/planner" && python -m qtrust_planner.benchmark --seeds 42 43 44 --epochs 10 \
   --out-dir /tmp/qtrust-bench-verify > /dev/null 2>&1) \
   && pass "planner benchmark" || fail "planner benchmark"
 

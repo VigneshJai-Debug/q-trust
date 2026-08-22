@@ -89,8 +89,8 @@ contract AuditRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeabl
             revert MigratedCountExceedsOnChain(assetsMigrated, onChainMigrations);
         }
 
-        auditId = keccak256(abi.encodePacked(
-            msg.sender, orgDid, reportHash, block.timestamp
+        auditId = keccak256(abi.encode(
+            msg.sender, orgDid, reportHash
         ));
 
         if (_audits[auditId].auditorDid != address(0)) {

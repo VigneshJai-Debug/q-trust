@@ -148,15 +148,20 @@ contract VendorRegistryTest is Test {
     }
 
     function test_AttestationLimitEnforced() public {
-        registry.registerVendor(vendor, "DigiCert", "ipfs://QmDigiCert");
-        vm.startPrank(vendor);
-
         uint256 limit = registry.MAX_ATTESTATIONS_PER_PRODUCT();
+
+        // Register vendors and have each attest to the same product
         for (uint256 i = 0; i < limit; i++) {
-            vm.warp(block.timestamp + 1);
+            address v = address(uint160(0xBEEF0000 + i));
+            registry.registerVendor(v, string(abi.encodePacked("V", bytes6(uint48(i)))), "ipfs://Qm");
+            vm.prank(v);
             registry.attestProduct("Prod", "1.0", "ML-KEM-512", true, "ipfs://QmE");
         }
 
+        // The (limit+1)th vendor hitting the per-product cap
+        address overflow = address(uint160(0xBEEF0000 + limit));
+        registry.registerVendor(overflow, "Overflow", "ipfs://Qm");
+        vm.prank(overflow);
         vm.expectRevert(
             abi.encodeWithSelector(
                 VendorRegistry.AttestationLimitExceeded.selector,
@@ -164,7 +169,6 @@ contract VendorRegistryTest is Test {
             )
         );
         registry.attestProduct("Prod", "1.0", "ML-KEM-512", true, "ipfs://QmE");
-        vm.stopPrank();
     }
 
     function test_CheckProductSupport_BoundedAfterLimit() public {
@@ -172,12 +176,12 @@ contract VendorRegistryTest is Test {
         vm.startPrank(vendor);
         uint256 limit = registry.MAX_ATTESTATIONS_PER_PRODUCT();
         for (uint256 i = 0; i < limit; i++) {
-            vm.warp(block.timestamp + 1);
-            registry.attestProduct("Prod", "1.0", "ML-KEM-512", false, "ipfs://QmE");
+            // Vary version to produce unique deterministic IDs
+            registry.attestProduct("Prod", string(abi.encodePacked("1.0-", bytes6(uint48(i)))), "ML-KEM-512", false, "ipfs://QmE");
         }
         vm.stopPrank();
 
-        (bool supported, address v, bytes32 attId) = registry.checkProductSupport("Prod", "1.0", "ML-KEM-512");
+        (bool supported, address v, bytes32 attId) = registry.checkProductSupport("Prod", "1.0-0", "ML-KEM-512");
         assertFalse(supported, "all attestations unsupported");
         assertEq(v, address(0));
         assertEq(attId, bytes32(0));

@@ -120,6 +120,12 @@ export function DynamicProvider({ children }: { children: ReactNode }) {
 
   return (
     <WalletContext.Provider value={{ user, loading, connect, disconnect }}>
+      {user?.mock && (
+        <div className="bg-yellow-500/10 border-b border-yellow-500/30 px-4 py-2 text-center text-sm text-yellow-600 dark:text-yellow-400">
+          Mock wallet active ({user.address.slice(0, 6)}...{user.address.slice(-4)}).
+          Connect MetaMask for real transactions.
+        </div>
+      )}
       {children}
     </WalletContext.Provider>
   );

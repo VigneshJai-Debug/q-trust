@@ -208,7 +208,7 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
         if (_attestationsByProduct[productIdHash].length >= MAX_ATTESTATIONS_PER_PRODUCT) {
             revert AttestationLimitExceeded(productIdHash);
         }
-        attestationId = keccak256(abi.encodePacked(vendorDid, productIdHash, block.timestamp));
+        attestationId = keccak256(abi.encode(vendorDid, productIdHash));
 
         _attestations[attestationId] = ProductAttestation({
             vendorDid: vendorDid,
@@ -276,8 +276,8 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
             revert AttestationLimitExceeded(productIdHash);
         }
 
-        attestationId = keccak256(abi.encodePacked(
-            msg.sender, productIdHash, block.timestamp
+        attestationId = keccak256(abi.encode(
+            msg.sender, productIdHash
         ));
 
         if (_attestations[attestationId].vendorDid != address(0)) {

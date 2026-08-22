@@ -18,6 +18,7 @@ contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
     error AssetAlreadyExists(bytes32 assetId);
     error NotRegistrar(address caller);
     error EmptyHash();
+    error MetadataTooLong();
     error AssetAlreadyRetired(bytes32 assetId);
     error InvalidSignature();
     error InvalidNonce(address signer, uint256 provided, uint256 expected);
@@ -184,8 +185,9 @@ contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
         string calldata metadataURI
     ) internal returns (bytes32 assetId) {
         if (cbomHash == bytes32(0)) revert EmptyHash();
+        if (bytes(metadataURI).length > 512) revert MetadataTooLong();
 
-        assetId = keccak256(abi.encodePacked(orgDid, cbomHash, block.timestamp));
+        assetId = keccak256(abi.encode(orgDid, cbomHash));
 
         if (_assets[assetId].orgDid != address(0)) {
             revert AssetAlreadyExists(assetId);

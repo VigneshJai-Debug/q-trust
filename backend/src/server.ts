@@ -56,7 +56,13 @@ import {
   type SignedMigrationPayload,
 } from "./services/attestation.js";
 import { startIndexer } from "./services/indexer.js";
-import { CORS_ORIGINS, API_KEYS, PLANNER_URL, CHAIN } from "./config.js";
+import { CORS_ORIGINS, API_KEYS, API_KEY_REQUIRED, PLANNER_URL, CHAIN, CHAIN_ID, publicClient, CONTRACTS } from "./config.js";
+import {
+  RevocationAnchorAbi,
+  PolicyCommitmentAbi,
+  SchemaRegistryAbi,
+  TrustAnchorRegistryAbi,
+} from "./lib/abis.js";
 
 dotenv.config();
 
@@ -96,8 +102,8 @@ server.register(rateLimit, {
 /** Require a valid admin API key on write routes. */
 function requireApiKey(request: any, reply: any, done: () => void): void {
   const key = request.headers["x-api-key"] as string | undefined;
-  if (!API_KEYS.length) {
-    // No keys configured — dev mode, allow writes.
+  if (!API_KEY_REQUIRED) {
+    // Dev mode (no keys configured or not production) — allow writes.
     return done();
   }
   if (!key || !API_KEYS.includes(key)) {
@@ -111,7 +117,7 @@ function requireApiKey(request: any, reply: any, done: () => void): void {
 // ------------------------------------------------------------------
 server.get("/health", async () => ({
   status: "ok",
-  chain_id: CHAIN.id,
+  chain_id: CHAIN_ID,
   relayer: relayerAddress,
 }));
 
@@ -509,6 +515,15 @@ server.post("/v1/credentials/verify", async (request, reply) => {
     return reply.status(400).send({ error: "presentation is required" });
   }
 
+  // Structural validation — reject obviously malformed presentations
+  if (!presentation.issuer || !presentation.credentialSubject) {
+    return {
+      valid: false,
+      error: "Missing required fields: issuer, credentialSubject",
+      verified_at: new Date().toISOString(),
+    };
+  }
+
   return {
     valid: true,
     issuer_did: presentation.issuer ?? null,
@@ -516,7 +531,7 @@ server.post("/v1/credentials/verify", async (request, reply) => {
     schema_id: presentation.credentialSchema?.id ?? null,
     revoked: false,
     verified_at: new Date().toISOString(),
-    note: "Full VC verification with DID resolution is available via the Python SDK (qtrust.vc.VCVerifier)",
+    note: "Full VC verification with DID resolution and signature verification is available via the Python SDK (qtrust.vc.VCVerifier)",
   };
 });
 
@@ -525,11 +540,23 @@ server.post("/v1/credentials/verify", async (request, reply) => {
 // ------------------------------------------------------------------
 server.get("/v1/revocation/:issuer", async (request, reply) => {
   const issuer = (request.params as { issuer: string }).issuer;
-  return {
-    issuer,
-    current_root: "0x0000000000000000000000000000000000000000000000000000000000000000",
-    note: "Query on-chain RevocationAnchor contract for live root",
-  };
+  if (!issuer.startsWith("0x") || issuer.length !== 42) {
+    return reply.status(400).send({ error: "Invalid issuer address" });
+  }
+  if (CONTRACTS.revocationAnchor === "0x0") {
+    return { issuer, current_root: null, configured: false, note: "RevocationAnchor contract not configured" };
+  }
+  try {
+    const root = await publicClient.readContract({
+      address: CONTRACTS.revocationAnchor,
+      abi: RevocationAnchorAbi,
+      functionName: "getRevocationRoot",
+      args: [issuer as `0x${string}`],
+    });
+    return { issuer, current_root: root, configured: true };
+  } catch {
+    return { issuer, current_root: "0x" + "0".repeat(64), configured: true, note: "Issuer not registered or query failed" };
+  }
 });
 
 // ------------------------------------------------------------------
@@ -537,15 +564,29 @@ server.get("/v1/revocation/:issuer", async (request, reply) => {
 // ------------------------------------------------------------------
 server.get("/v1/policies/:policyId/versions/:version", async (request, reply) => {
   const { policyId, version } = request.params as { policyId: string; version: string };
-  return {
-    policy_id: policyId,
-    version: Number(version),
-    policy_hash: "0x0000000000000000000000000000000000000000000000000000000000000000",
-    policy_uri: null,
-    committed_by: null,
-    timestamp: null,
-    note: "Query on-chain PolicyCommitment contract for live commitments",
-  };
+  if (CONTRACTS.policyCommitment === "0x0") {
+    return { policy_id: policyId, version: Number(version), configured: false, note: "PolicyCommitment contract not configured" };
+  }
+  try {
+    const pv = await publicClient.readContract({
+      address: CONTRACTS.policyCommitment,
+      abi: PolicyCommitmentAbi,
+      functionName: "getPolicyVersion",
+      args: [policyId, BigInt(version)],
+    });
+    return {
+      policy_id: pv.policyId,
+      version: Number(pv.version),
+      policy_hash: pv.policyHash,
+      policy_uri: pv.policyURI,
+      committed_by: pv.committedBy,
+      timestamp: Number(pv.timestamp),
+      active: pv.active,
+      configured: true,
+    };
+  } catch {
+    return { policy_id: policyId, version: Number(version), configured: true, note: "Policy version not found" };
+  }
 });
 
 // ------------------------------------------------------------------
@@ -553,10 +594,39 @@ server.get("/v1/policies/:policyId/versions/:version", async (request, reply) =>
 // ------------------------------------------------------------------
 server.get("/v1/schemas/:schemaId", async (request, reply) => {
   const schemaId = (request.params as { schemaId: string }).schemaId;
-  return {
-    schema_id: schemaId,
-    note: "Query on-chain SchemaRegistry contract for live schema registrations",
-  };
+  if (CONTRACTS.schemaRegistry === "0x0") {
+    return { schema_id: schemaId, configured: false, note: "SchemaRegistry contract not configured" };
+  }
+  try {
+    const entry = await publicClient.readContract({
+      address: CONTRACTS.schemaRegistry,
+      abi: SchemaRegistryAbi,
+      functionName: "getSchemaEntry",
+      args: [schemaId],
+    });
+    if (!entry.exists) {
+      return { schema_id: schemaId, configured: true, exists: false };
+    }
+    const sv = await publicClient.readContract({
+      address: CONTRACTS.schemaRegistry,
+      abi: SchemaRegistryAbi,
+      functionName: "getSchema",
+      args: [schemaId, entry.latestVersion],
+    });
+    return {
+      schema_id: sv.schemaId,
+      version: Number(sv.version),
+      schema_hash: sv.schemaHash,
+      schema_uri: sv.schemaURI,
+      schema_type: sv.schemaType,
+      registered_by: sv.registeredBy,
+      timestamp: Number(sv.timestamp),
+      active: sv.active,
+      configured: true,
+    };
+  } catch {
+    return { schema_id: schemaId, configured: true, note: "Schema not found or query failed" };
+  }
 });
 
 // ------------------------------------------------------------------
@@ -564,11 +634,23 @@ server.get("/v1/schemas/:schemaId", async (request, reply) => {
 // ------------------------------------------------------------------
 server.get("/v1/trust-anchors/:issuer", async (request, reply) => {
   const issuer = (request.params as { issuer: string }).issuer;
-  return {
-    issuer,
-    accredited: false,
-    note: "Query on-chain TrustAnchorRegistry contract for live accreditation status",
-  };
+  if (!issuer.startsWith("0x") || issuer.length !== 42) {
+    return reply.status(400).send({ error: "Invalid issuer address" });
+  }
+  if (CONTRACTS.trustAnchorRegistry === "0x0") {
+    return { issuer, accredited: false, configured: false, note: "TrustAnchorRegistry contract not configured" };
+  }
+  try {
+    const result = await publicClient.readContract({
+      address: CONTRACTS.trustAnchorRegistry,
+      abi: TrustAnchorRegistryAbi,
+      functionName: "isIssuerAccredited",
+      args: [issuer as `0x${string}`],
+    });
+    return { issuer, accredited: result, configured: true };
+  } catch {
+    return { issuer, accredited: false, configured: true, note: "Issuer not found or query failed" };
+  }
 });
 
 // ------------------------------------------------------------------
@@ -627,15 +709,20 @@ server.get("/v1/webhooks/subscribers", async () => {
 });
 
 // ------------------------------------------------------------------
-// Legacy (pre-v1) aliases
+// Legacy (pre-v1) aliases — deprecated, use /v1/* routes
 // ------------------------------------------------------------------
 server.get("/assets/:id", async (request, reply) => {
+  reply.header("Deprecation", "true");
+  reply.header("Sunset", "2026-12-31");
+  reply.header("Link", `</v1/assets/${(request.params as { id: string }).id}>; rel="successor-version"`);
   const asset = await getAsset((request.params as { id: string }).id);
   if (!asset) return reply.status(404).send({ error: "Asset not found" });
   return asset;
 });
 
 server.get("/migration/progress/:org", async (request, reply) => {
+  reply.header("Deprecation", "true");
+  reply.header("Sunset", "2026-12-31");
   return getMigrationProgress((request.params as { org: string }).org as `0x${string}`);
 });
 

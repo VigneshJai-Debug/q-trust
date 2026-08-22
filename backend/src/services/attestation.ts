@@ -9,7 +9,6 @@
  * hold funds or run a node. The contract records the SIGNER as the vendor.
  */
 import { createPublicClient, createWalletClient, http, recoverTypedDataAddress, type Address } from "viem";
-import { baseSepolia } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 import * as dotenv from "dotenv";
 import {
@@ -17,6 +16,7 @@ import {
   VendorRegistryAbi,
   MigrationRegistryAbi,
 } from "../lib/abis.js";
+import { CHAIN, CHAIN_ID } from "../config.js";
 
 dotenv.config();
 
@@ -33,11 +33,11 @@ if (!RELAYER_KEY) {
 const account = privateKeyToAccount(RELAYER_KEY as `0x${string}`);
 const walletClient = createWalletClient({
   account,
-  chain: baseSepolia,
+  chain: CHAIN,
   transport: http(RPC_URL),
 });
 const publicClient = createPublicClient({
-  chain: baseSepolia,
+  chain: CHAIN,
   transport: http(RPC_URL),
 });
 
@@ -124,7 +124,7 @@ export interface SignedAttestationPayload {
 export const EIP712_DOMAIN = {
   name: "QTrustVendorRegistry",
   version: "1",
-  chainId: 84532,
+  chainId: CHAIN_ID,
   verifyingContract: VENDOR_REGISTRY as Address,
 };
 
@@ -230,7 +230,7 @@ export async function getVendorNonce(vendor: Address): Promise<bigint> {
 export const EIP712_ASSET_DOMAIN = {
   name: "QTrustAssetRegistry",
   version: "1",
-  chainId: 84532,
+  chainId: CHAIN_ID,
   verifyingContract: ASSET_REGISTRY as Address,
 };
 
@@ -331,7 +331,7 @@ export async function getOrgNonce(org: Address): Promise<bigint> {
 export const EIP712_MIGRATION_DOMAIN = {
   name: "QTrustMigrationRegistry",
   version: "1",
-  chainId: 84532,
+  chainId: CHAIN_ID,
   verifyingContract: MIGRATION_REGISTRY as Address,
 };
 

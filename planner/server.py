@@ -19,10 +19,40 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+import time
+from collections import defaultdict
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 app = FastAPI(title="Q-Trust Planner", version="0.3.0")
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Simple in-memory rate limiter: 60 requests per minute per IP."""
+
+    def __init__(self, app, max_requests: int = 60, window_seconds: int = 60):
+        super().__init__(app)
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self._requests: dict[str, list[float]] = defaultdict(list)
+
+    async def dispatch(self, request: Request, call_next):
+        client_ip = request.client.host if request.client else "unknown"
+        now = time.time()
+        cutoff = now - self.window_seconds
+        self._requests[client_ip] = [t for t in self._requests[client_ip] if t > cutoff]
+        if len(self._requests[client_ip]) >= self.max_requests:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Rate limit exceeded. Try again later."},
+            )
+        self._requests[client_ip].append(now)
+        return await call_next(request)
+
+
+app.add_middleware(RateLimitMiddleware)
 
 MODEL_PATH = os.environ.get("QTRUST_MODEL_PATH", str(Path(__file__).resolve().parents[1] / "model.pt"))
 DEADLINES_PATH = os.environ.get(
@@ -80,10 +110,10 @@ def _heuristic_priority(asset: dict[str, Any]) -> float:
 
     score = 0.0
 
-    # Criticality贡献 (0-5)
+    # Criticality contribution (0-5)
     score += crit
 
-    # 非PQC算法加分
+    # Non-PQC algorithm bonus
     if not pqc_ready:
         if family in ("RSA", "ECC", "DSA", "DH", "ECDH", "ECDSA"):
             score += 3.0
@@ -92,13 +122,13 @@ def _heuristic_priority(asset: dict[str, Any]) -> float:
         else:
             score += 1.0
 
-    # 大密钥加分
+    # Large key bonus
     if key_size >= 4096:
         score += 2.0
     elif key_size >= 2048:
         score += 1.0
 
-    # PQC-ready算法减分（不需要迁移）
+    # PQC-ready algorithm deduction (no migration needed)
     if pqc_ready:
         score -= 2.0
 

@@ -219,6 +219,9 @@ async function backfill(spec: EventSpec): Promise<void> {
   console.log(`Indexer: ${spec.key} caught up to block ${head}`);
 }
 
+/** Number of block confirmations to wait before treating an event as final. */
+const CONFIRMATIONS = Number(process.env.QTRUST_INDEXER_CONFIRMATIONS ?? 12);
+
 /** Subscribe to live events after the initial backfill. */
 function watchLive(spec: EventSpec): void {
   const address = spec.contract();
@@ -228,8 +231,17 @@ function watchLive(spec: EventSpec): void {
     event: parseAbiItem(spec.event) as AbiEvent,
     onLogs: async (logs) => {
       for (const log of logs) {
+        const blockNum = log.blockNumber ?? 0n;
+        // Wait for N confirmations before processing to handle re-orgs.
+        if (CONFIRMATIONS > 0) {
+          const head = await publicClient.getBlockNumber();
+          if (head - blockNum < BigInt(CONFIRMATIONS)) {
+            // Not enough confirmations yet — skip, backfill will catch it on next restart.
+            continue;
+          }
+        }
         await applyLog(spec, log as Log);
-        await setCursor(spec.key, (log.blockNumber ?? 0n) + 1n);
+        await setCursor(spec.key, blockNum + 1n);
       }
     },
   });

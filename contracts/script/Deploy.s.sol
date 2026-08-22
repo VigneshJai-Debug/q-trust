@@ -2,7 +2,7 @@
 pragma solidity 0.8.24;
 
 import "forge-std/Script.sol";
-import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 import "../src/AssetRegistry.sol";
 import "../src/VendorRegistry.sol";
@@ -60,26 +60,26 @@ contract Deploy is Script {
         AuditRegistry auditsImpl = new AuditRegistry();
 
         AssetRegistry assets = AssetRegistry(
-            address(new TransparentUpgradeableProxy(
-                address(assetsImpl), deployer,
+            address(new ERC1967Proxy(
+                address(assetsImpl),
                 abi.encodeCall(AssetRegistry.initialize, ())
             ))
         );
         VendorRegistry vendors = VendorRegistry(
-            address(new TransparentUpgradeableProxy(
-                address(vendorsImpl), deployer,
+            address(new ERC1967Proxy(
+                address(vendorsImpl),
                 abi.encodeCall(VendorRegistry.initialize, ())
             ))
         );
         MigrationRegistry migrations = MigrationRegistry(
-            address(new TransparentUpgradeableProxy(
-                address(migrationsImpl), deployer,
+            address(new ERC1967Proxy(
+                address(migrationsImpl),
                 abi.encodeCall(MigrationRegistry.initialize, (address(assets)))
             ))
         );
         AuditRegistry audits = AuditRegistry(
-            address(new TransparentUpgradeableProxy(
-                address(auditsImpl), deployer,
+            address(new ERC1967Proxy(
+                address(auditsImpl),
                 abi.encodeCall(AuditRegistry.initialize, (address(migrations)))
             ))
         );
@@ -100,8 +100,8 @@ contract Deploy is Script {
         // RevocationAnchor
         RevocationAnchor revocationImpl = new RevocationAnchor();
         RevocationAnchor revocation = RevocationAnchor(
-            address(new TransparentUpgradeableProxy(
-                address(revocationImpl), deployer,
+            address(new ERC1967Proxy(
+                address(revocationImpl),
                 abi.encodeCall(RevocationAnchor.initialize, ())
             ))
         );
@@ -112,8 +112,8 @@ contract Deploy is Script {
         // PolicyCommitment
         PolicyCommitment policyImpl = new PolicyCommitment();
         PolicyCommitment policy = PolicyCommitment(
-            address(new TransparentUpgradeableProxy(
-                address(policyImpl), deployer,
+            address(new ERC1967Proxy(
+                address(policyImpl),
                 abi.encodeCall(PolicyCommitment.initialize, ())
             ))
         );
@@ -123,8 +123,8 @@ contract Deploy is Script {
         // SchemaRegistry
         SchemaRegistry schemaImpl = new SchemaRegistry();
         SchemaRegistry schema = SchemaRegistry(
-            address(new TransparentUpgradeableProxy(
-                address(schemaImpl), deployer,
+            address(new ERC1967Proxy(
+                address(schemaImpl),
                 abi.encodeCall(SchemaRegistry.initialize, ())
             ))
         );
@@ -134,8 +134,8 @@ contract Deploy is Script {
         // TrustAnchorRegistry
         TrustAnchorRegistry trustAnchorImpl = new TrustAnchorRegistry();
         TrustAnchorRegistry trustAnchor = TrustAnchorRegistry(
-            address(new TransparentUpgradeableProxy(
-                address(trustAnchorImpl), deployer,
+            address(new ERC1967Proxy(
+                address(trustAnchorImpl),
                 abi.encodeCall(TrustAnchorRegistry.initialize, ())
             ))
         );

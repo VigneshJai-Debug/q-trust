@@ -26,7 +26,7 @@ services:
       - QTRUST_REDIS_URL=redis://redis:6379
       - QTRUST_PG_URL=postgres://qtrust:qtrust@postgres:5432/qtrust
       - QTRUST_PLANNER_URL=http://planner:8000
-      - QTRUST_BASE_SEPOLIA_RPC=http://host.docker.internal:8545
+      - QTRUST_BASE_SEPOLIA_RPC=${QTRUST_BASE_SEPOLIA_RPC:-http://host.docker.internal:8545}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -47,7 +47,7 @@ services:
     environment:
       - NODE_ENV=production
       - QTRUST_REDIS_URL=redis://redis:6379
-      - QTRUST_BASE_SEPOLIA_RPC=http://host.docker.internal:8545
+      - QTRUST_BASE_SEPOLIA_RPC=${QTRUST_BASE_SEPOLIA_RPC:-http://host.docker.internal:8545}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
