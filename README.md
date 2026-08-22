@@ -1,5 +1,7 @@
 # Q-Trust — PQC Migration Coordinator
 
+[![CI](https://github.com/humoge7502/q-trust/actions/workflows/ci.yml/badge.svg)](https://github.com/humoge7502/q-trust/actions/workflows/ci.yml)
+
 Cross-organizational protocol that coordinates the migration from classical cryptography
 (RSA, ECC) to post-quantum cryptography (PQC), on Base L2. Only hashes live on-chain;
 full CBOMs stay off-chain.

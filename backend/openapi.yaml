@@ -1,0 +1,1776 @@
+openapi: 3.0.3
+info:
+  title: Q-Trust API
+  version: "1.0.0"
+  description: |
+    Q-Trust is a post-quantum trust evaluation and attestation platform built on
+    Base (Sepolia / Mainnet). The API provides:
+
+    - **Assets**: register and verify on-chain CBOM (Cryptographic Bill of Materials) hashes.
+    - **Orgs**: query organization summaries, assets, migrations, and audits.
+    - **Attestations**: vendor product attestation via direct admin writes or
+      EIP-712 gasless relay (no wallet needed).
+    - **Migrations**: record and track post-quantum migration progress.
+    - **Trust Evaluation**: policy-based PQC readiness scoring.
+    - **Credentials**: placeholder VC issuance / verification (full Ed25519 VC stack in the Python SDK).
+    - **Revocation / Policy / Schema / Trust-Anchor**: on-chain contract queries.
+    - **Webhooks**: Redis-backed event subscriptions.
+    - **Legacy**: pre-v1 alias routes (deprecated, sunset 2026-12-31).
+
+    **Write routes** (`/v1/write/*`) require a valid `X-Api-Key` header in production.
+    **Gasless relay routes** (`/v1/relay/*`) let vendors sign EIP-712 typed data off-chain;
+    the relayer submits the transaction so vendors never need gas tokens.
+
+  contact:
+    name: Q-Trust Team
+  license:
+    name: Proprietary
+
+servers:
+  - url: http://localhost:3001
+    description: Local development server
+
+security:
+  - ApiKeyAuth: []
+
+tags:
+  - name: health
+    description: Server health and chain status
+  - name: assets
+    description: CBOM asset registration and verification
+  - name: orgs
+    description: Organisation summaries, assets, migrations, and audits
+  - name: vendors
+    description: Vendor attestation queries
+  - name: products
+    description: Product algorithm support checks
+  - name: plans
+    description: AI migration planning (proxied to planner microservice)
+  - name: write
+    description: Admin write operations (API-key gated)
+  - name: relay
+    description: EIP-712 gasless relay operations
+  - name: evaluate
+    description: Policy-based trust evaluation
+  - name: credentials
+    description: Verifiable credential issuance and verification
+  - name: revocation
+    description: On-chain revocation root queries
+  - name: policies
+    description: On-chain policy commitment queries
+  - name: schemas
+    description: On-chain schema registry queries
+  - name: trust-anchors
+    description: On-chain trust anchor (accreditation) queries
+  - name: webhooks
+    description: Redis-backed event webhook subscriptions
+  - name: legacy
+    description: Pre-v1 alias routes (deprecated)
+
+paths:
+  # ── Health ──────────────────────────────────────────────────────────
+  /health:
+    get:
+      operationId: getHealth
+      tags: [health]
+      summary: Server health check
+      description: Returns server status, current chain ID, and relayer address.
+      security: []
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  # ── Assets (read) ──────────────────────────────────────────────────
+  /v1/assets/{id}:
+    get:
+      operationId: getAsset
+      tags: [assets]
+      summary: Get asset by ID
+      description: Fetch a CBOM registration by its on-chain asset ID.
+      parameters:
+        - $ref: "#/components/parameters/AssetId"
+      responses:
+        "200":
+          description: Asset found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetInfo"
+        "404":
+          description: Asset not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/assets/{id}/verify:
+    get:
+      operationId: verifyAsset
+      tags: [assets]
+      summary: Verify asset on-chain
+      description: Returns on-chain verification result including existence, active status, and chain details.
+      parameters:
+        - $ref: "#/components/parameters/AssetId"
+      responses:
+        "200":
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetVerification"
+        "400":
+          description: Invalid asset ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Orgs ───────────────────────────────────────────────────────────
+  /v1/orgs/{did}/summary:
+    get:
+      operationId: getOrgSummary
+      tags: [orgs]
+      summary: Organisation summary
+      description: Indexer-backed summary including asset count, migration counts, and latest audit.
+      parameters:
+        - $ref: "#/components/parameters/OrgDid"
+      responses:
+        "200":
+          description: Organisation summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrgSummary"
+        "400":
+          description: Invalid DID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/orgs/{did}/assets:
+    get:
+      operationId: getOrgAssets
+      tags: [orgs]
+      summary: List assets for an organisation (paginated)
+      parameters:
+        - $ref: "#/components/parameters/OrgDid"
+        - $ref: "#/components/parameters/Offset"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Paginated asset list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - type: object
+                    properties:
+                      org:
+                        type: string
+                        description: Organisation DID
+                  - $ref: "#/components/schemas/Page"
+
+  /v1/orgs/{did}/migrations:
+    get:
+      operationId: getOrgMigrations
+      tags: [orgs]
+      summary: List migrations for an organisation (paginated)
+      description: Returns migration progress, paginated migration list, and latest audit.
+      parameters:
+        - $ref: "#/components/parameters/OrgDid"
+        - $ref: "#/components/parameters/Offset"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Paginated migration list with progress
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  org:
+                    type: string
+                  progress:
+                    $ref: "#/components/schemas/MigrationProgress"
+                  migrations:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MigrationInfo"
+                  latest_audit:
+                    $ref: "#/components/schemas/LatestAuditInfo"
+
+  /v1/orgs/{did}/audit:
+    get:
+      operationId: getOrgAudit
+      tags: [orgs]
+      summary: Latest audit for an organisation
+      parameters:
+        - $ref: "#/components/parameters/OrgDid"
+      responses:
+        "200":
+          description: Latest audit info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LatestAuditInfo"
+
+  # ── Migrations (single) ────────────────────────────────────────────
+  /v1/migrations/{id}:
+    get:
+      operationId: getMigration
+      tags: [orgs]
+      summary: Get a single migration by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 0x-prefixed migration ID
+      responses:
+        "200":
+          description: Migration found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MigrationInfo"
+        "404":
+          description: Migration not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Vendors ────────────────────────────────────────────────────────
+  /v1/vendors/{did}/attestations:
+    get:
+      operationId: getVendorAttestations
+      tags: [vendors]
+      summary: List attestations for a vendor (paginated)
+      parameters:
+        - name: did
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Vendor DID (0x-prefixed address)
+        - $ref: "#/components/parameters/Offset"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Paginated attestation list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - type: object
+                    properties:
+                      vendor:
+                        type: string
+                  - $ref: "#/components/schemas/Page"
+
+  # ── Products ───────────────────────────────────────────────────────
+  /v1/products/{id}/support:
+    get:
+      operationId: checkProductSupport
+      tags: [products]
+      summary: Check algorithm support for a product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Product ID
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Product version
+        - name: algorithm
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Algorithm to check
+      responses:
+        "200":
+          description: Support check result
+          content:
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: Missing required query params
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Plans ──────────────────────────────────────────────────────────
+  /v1/plans:
+    post:
+      operationId: createPlan
+      tags: [plans]
+      summary: Create an AI migration plan
+      description: |
+        Proxied to the planner microservice. Requires a non-empty `cbom.assets` array.
+        Returns 503 if the planner service is not running.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePlanRequest"
+      responses:
+        "200":
+          description: Migration plan created
+          content:
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Planner service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/plans/{did}:
+    get:
+      operationId: getPlan
+      tags: [plans]
+      summary: Get migration plan for an organisation
+      description: Proxied to the planner microservice. Returns 503 if unavailable.
+      parameters:
+        - name: did
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Organisation DID
+        - name: deadline
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional deadline filter (ISO 8601)
+      responses:
+        "200":
+          description: Migration plan
+          content:
+            application/json:
+              schema:
+                type: object
+        "503":
+          description: Planner service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Write (admin, API-key gated) ───────────────────────────────────
+  /v1/write/assets:
+    post:
+      operationId: writeRegisterCBOM
+      tags: [write]
+      summary: Register a CBOM (admin)
+      description: Admin-only. Registers a CBOM hash on-chain via the relayer.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterCBOMRequest"
+      responses:
+        "200":
+          description: CBOM registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TxResult"
+        "400":
+          description: Invalid cbomHash
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid or missing API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Registration failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/write/attestations:
+    post:
+      operationId: writeAttestProduct
+      tags: [write]
+      summary: Attest a product (admin)
+      description: Admin-only. Records a product attestation on-chain via the relayer.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttestProductRequest"
+      responses:
+        "200":
+          description: Attestation recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TxResult"
+        "400":
+          description: Missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid or missing API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Attestation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/write/migrations:
+    post:
+      operationId: writeRecordMigration
+      tags: [write]
+      summary: Record a migration (admin)
+      description: Admin-only. Records a post-quantum migration on-chain via the relayer.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordMigrationRequest"
+      responses:
+        "200":
+          description: Migration recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TxResult"
+        "400":
+          description: Missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid or missing API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Migration failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Relay (EIP-712 gasless) ────────────────────────────────────────
+  /v1/relay/attestation:
+    post:
+      operationId: relayAttestation
+      tags: [relay]
+      summary: Relay a gasless EIP-712 attestation
+      description: |
+        Verifies the vendor's EIP-712 signature, recovers the signer, checks
+        the nonce, and submits the attestation via the relayer. The vendor
+        never needs gas tokens.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignedAttestationPayload"
+      responses:
+        "200":
+          description: Attestation relayed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RelayResult"
+        "400":
+          description: Signature or nonce error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Relay failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/relay/cbom:
+    post:
+      operationId: relayCBOMRegistration
+      tags: [relay]
+      summary: Relay a gasless EIP-712 CBOM registration
+      description: |
+        Verifies the org's EIP-712 signature for CBOM registration and
+        submits via the relayer.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignedCBOMRegistrationPayload"
+      responses:
+        "200":
+          description: CBOM registration relayed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RelayCBOMResult"
+        "400":
+          description: Signature or nonce error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Relay failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/relay/migration:
+    post:
+      operationId: relayMigration
+      tags: [relay]
+      summary: Relay a gasless EIP-712 migration recording
+      description: |
+        Verifies the org's EIP-712 signature for migration recording and
+        submits via the relayer.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignedMigrationPayload"
+      responses:
+        "200":
+          description: Migration relayed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RelayMigrationResult"
+        "400":
+          description: Signature or nonce error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Relay failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/relay/nonce/{did}:
+    get:
+      operationId: getVendorNonce
+      tags: [relay]
+      summary: Get vendor EIP-712 nonce
+      description: Returns the current on-chain nonce for a vendor address (used for EIP-712 signing).
+      parameters:
+        - name: did
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Vendor DID (0x-prefixed address)
+      responses:
+        "200":
+          description: Vendor nonce
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NonceResponse"
+        "400":
+          description: Invalid address
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/relay/cbom-nonce/{did}:
+    get:
+      operationId: getOrgNonce
+      tags: [relay]
+      summary: Get org EIP-712 nonce for CBOM registration
+      description: Returns the current on-chain nonce for an org address (used for EIP-712 CBOM signing).
+      parameters:
+        - name: did
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Organisation DID (0x-prefixed address)
+      responses:
+        "200":
+          description: Org nonce
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NonceResponse"
+        "400":
+          description: Invalid address
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Trust Evaluation ───────────────────────────────────────────────
+  /v1/evaluate:
+    post:
+      operationId: evaluateTrust
+      tags: [evaluate]
+      summary: Evaluate PQC readiness against a policy
+      description: |
+        Scores an organisation's post-quantum cryptography readiness by
+        evaluating evidence against policy clauses with weighted satisfaction.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluateRequest"
+      responses:
+        "200":
+          description: Evaluation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationResult"
+        "400":
+          description: Missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Credentials ────────────────────────────────────────────────────
+  /v1/credentials/issue:
+    post:
+      operationId: issueCredential
+      tags: [credentials]
+      summary: Issue a verifiable credential (placeholder)
+      description: |
+        API-key gated. Returns a stub credential object. Full Ed25519 VC
+        issuance is available via the Python SDK (`qtrust.vc.VCIssuer`).
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IssueCredentialRequest"
+      responses:
+        "200":
+          description: Credential issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CredentialIssued"
+        "400":
+          description: Missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid or missing API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/credentials/verify:
+    post:
+      operationId: verifyCredential
+      tags: [credentials]
+      summary: Verify a verifiable credential presentation (structural only)
+      description: |
+        Structural validation only. Full DID resolution and signature
+        verification is available via the Python SDK (`qtrust.vc.VCVerifier`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyCredentialRequest"
+      responses:
+        "200":
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CredentialVerification"
+
+  # ── Revocation ─────────────────────────────────────────────────────
+  /v1/revocation/{issuer}:
+    get:
+      operationId: getRevocationRoot
+      tags: [revocation]
+      summary: Get revocation root for an issuer
+      description: Reads the current revocation Merkle root from the RevocationAnchor contract.
+      parameters:
+        - name: issuer
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^0x[0-9a-fA-F]{40}$"
+          description: Issuer address (0x-prefixed, 40 hex chars)
+      responses:
+        "200":
+          description: Revocation root
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevocationRoot"
+        "400":
+          description: Invalid issuer address
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Policies ───────────────────────────────────────────────────────
+  /v1/policies/{policyId}/versions/{version}:
+    get:
+      operationId: getPolicyVersion
+      tags: [policies]
+      summary: Get a policy version from the PolicyCommitment contract
+      parameters:
+        - name: policyId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Policy identifier
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Policy version number
+      responses:
+        "200":
+          description: Policy version info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicyVersion"
+
+  # ── Schemas ────────────────────────────────────────────────────────
+  /v1/schemas/{schemaId}:
+    get:
+      operationId: getSchema
+      tags: [schemas]
+      summary: Get a schema from the SchemaRegistry contract
+      parameters:
+        - name: schemaId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Schema identifier
+      responses:
+        "200":
+          description: Schema info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchemaInfo"
+
+  # ── Trust Anchors ──────────────────────────────────────────────────
+  /v1/trust-anchors/{issuer}:
+    get:
+      operationId: checkTrustAnchor
+      tags: [trust-anchors]
+      summary: Check issuer accreditation
+      description: Queries the TrustAnchorRegistry contract to check if an issuer is accredited.
+      parameters:
+        - name: issuer
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^0x[0-9a-fA-F]{40}$"
+          description: Issuer address (0x-prefixed, 40 hex chars)
+      responses:
+        "200":
+          description: Accreditation status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrustAnchorResult"
+        "400":
+          description: Invalid issuer address
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Webhooks ───────────────────────────────────────────────────────
+  /v1/webhooks/subscribe:
+    post:
+      operationId: subscribeWebhook
+      tags: [webhooks]
+      summary: Subscribe to events
+      description: |
+        Creates a webhook subscription in Redis. Subscribes to the given event
+        types (or `*` for all events).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookSubscribeRequest"
+      responses:
+        "200":
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookSubscribeResponse"
+        "400":
+          description: Missing address or url
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Redis unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/webhooks/unsubscribe:
+    post:
+      operationId: unsubscribeWebhook
+      tags: [webhooks]
+      summary: Unsubscribe from events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookUnsubscribeRequest"
+      responses:
+        "200":
+          description: Unsubscribed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookUnsubscribeResponse"
+        "503":
+          description: Redis unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/webhooks/subscribers:
+    get:
+      operationId: listSubscribers
+      tags: [webhooks]
+      summary: List webhook subscribers
+      description: Returns all active webhook subscriptions grouped by event type.
+      security: []
+      responses:
+        "200":
+          description: Subscriber list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookSubscribersResponse"
+
+  # ── Legacy (deprecated) ────────────────────────────────────────────
+  /assets/{id}:
+    get:
+      operationId: getAssetLegacy
+      tags: [legacy]
+      summary: Get asset by ID (legacy)
+      deprecated: true
+      description: |
+        **Deprecated** — use `GET /v1/assets/{id}` instead.
+        Sunset date: 2026-12-31.
+      parameters:
+        - $ref: "#/components/parameters/AssetId"
+      responses:
+        "200":
+          description: Asset found
+          headers:
+            Deprecation:
+              schema:
+                type: string
+                example: "true"
+            Sunset:
+              schema:
+                type: string
+                example: "2026-12-31"
+            Link:
+              schema:
+                type: string
+                example: '</v1/assets/{id}>; rel="successor-version"'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetInfo"
+        "404":
+          description: Asset not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /migration/progress/{org}:
+    get:
+      operationId: getMigrationProgressLegacy
+      tags: [legacy]
+      summary: Get migration progress for an org (legacy)
+      deprecated: true
+      description: |
+        **Deprecated** — use `GET /v1/orgs/{did}/migrations` instead.
+        Sunset date: 2026-12-31.
+      parameters:
+        - name: org
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Organisation address
+      responses:
+        "200":
+          description: Migration progress
+          headers:
+            Deprecation:
+              schema:
+                type: string
+                example: "true"
+            Sunset:
+              schema:
+                type: string
+                example: "2026-12-31"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MigrationProgress"
+
+# ══════════════════════════════════════════════════════════════════════
+# Components
+# ══════════════════════════════════════════════════════════════════════
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: |
+        Admin API key required for write and credential-issuance endpoints.
+        Configured via `QTRUST_API_KEYS` (comma-separated). Enforced only in
+        production when keys are configured.
+
+  parameters:
+    AssetId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^0x[0-9a-fA-F]{64}$"
+      description: 0x-prefixed 32-byte hex asset ID (66 characters)
+
+    OrgDid:
+      name: did
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^0x[0-9a-fA-F]{40}$"
+      description: Organisation DID (0x-prefixed address, 42 characters)
+
+    Offset:
+      name: offset
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+      description: Pagination offset
+
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+      description: Page size (max 200)
+
+  schemas:
+    # ── Common ─────────────────────────────────────────────────────
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        chain_id:
+          type: integer
+          description: Current chain ID (84532 for Base Sepolia, 8453 for Base Mainnet)
+        relayer:
+          type: string
+          description: Relayer's Ethereum address
+
+    # ── Assets ─────────────────────────────────────────────────────
+    AssetInfo:
+      type: object
+      properties:
+        asset_id:
+          type: string
+          description: 0x-prefixed 32-byte hex asset ID
+        org_did:
+          type: string
+          description: Organisation DID
+        cbom_hash:
+          type: string
+          description: CBOM hash (0x-prefixed)
+        metadata_uri:
+          type: string
+          description: IPFS/HTTP URI to CBOM metadata
+        timestamp:
+          type: integer
+          description: Registration timestamp (unix seconds)
+        last_updated:
+          type: integer
+          description: Last update timestamp (unix seconds)
+        active:
+          type: boolean
+
+    AssetVerification:
+      type: object
+      properties:
+        asset_id:
+          type: string
+        exists:
+          type: boolean
+        active:
+          type: boolean
+        org_did:
+          type: string
+        chain_id:
+          type: integer
+        chain_name:
+          type: string
+        verified_at:
+          type: integer
+          description: Verification timestamp (unix seconds)
+
+    # ── Orgs ───────────────────────────────────────────────────────
+    OrgSummary:
+      type: object
+      properties:
+        org:
+          type: string
+        asset_count:
+          type: integer
+        migration_counts:
+          type: object
+          properties:
+            total:
+              type: integer
+            verified:
+              type: integer
+            unverified:
+              type: integer
+        latest_audit:
+          oneOf:
+            - $ref: "#/components/schemas/LatestAuditInfo"
+            - type: "null"
+        source:
+          type: string
+          enum: [indexer, rpc]
+
+    LatestAuditInfo:
+      type: object
+      properties:
+        org_address:
+          type: string
+        exists:
+          type: boolean
+        result:
+          type: string
+        result_code:
+          type: integer
+        timestamp:
+          type: integer
+
+    MigrationProgress:
+      type: object
+      properties:
+        org_address:
+          type: string
+        total_migrations:
+          type: integer
+        verified_migrations:
+          type: integer
+        unverified_migrations:
+          type: integer
+        fetched_at:
+          type: integer
+
+    MigrationInfo:
+      type: object
+      properties:
+        migration_id:
+          type: string
+        asset_id:
+          type: string
+        org_did:
+          type: string
+        from_algorithm:
+          type: string
+        to_algorithm:
+          type: string
+        evidence_hash:
+          type: string
+        evidence_uri:
+          type: string
+        timestamp:
+          type: integer
+        verified:
+          type: boolean
+
+    Page:
+      type: object
+      properties:
+        items:
+          type: array
+          items: {}
+        total:
+          type: integer
+        offset:
+          type: integer
+        limit:
+          type: integer
+
+    # ── Vendors ────────────────────────────────────────────────────
+    VendorAttestationInfo:
+      type: object
+      properties:
+        attestation_id:
+          type: string
+        vendor_did:
+          type: string
+        product_id:
+          type: string
+        version:
+          type: string
+        algorithm:
+          type: string
+        supported:
+          type: boolean
+        evidence_uri:
+          type: string
+        timestamp:
+          type: integer
+        revoked:
+          type: boolean
+
+    # ── Plans ──────────────────────────────────────────────────────
+    CreatePlanRequest:
+      type: object
+      required: [cbom]
+      properties:
+        cbom:
+          type: object
+          required: [assets]
+          properties:
+            assets:
+              type: array
+              items:
+                type: object
+              minItems: 1
+              description: Non-empty array of CBOM assets
+        deadline:
+          type: string
+          description: Optional deadline (ISO 8601)
+
+    # ── Write ──────────────────────────────────────────────────────
+    RegisterCBOMRequest:
+      type: object
+      required: [cbomHash]
+      properties:
+        cbomHash:
+          type: string
+          pattern: "^0x[0-9a-fA-F]+$"
+          description: 0x-prefixed CBOM hash
+        metadataURI:
+          type: string
+          description: Optional metadata URI
+          default: ""
+
+    AttestProductRequest:
+      type: object
+      required: [productId, version, algorithm]
+      properties:
+        productId:
+          type: string
+        version:
+          type: string
+        algorithm:
+          type: string
+        supported:
+          type: boolean
+          default: false
+        evidenceURI:
+          type: string
+          description: Optional evidence URI
+          default: ""
+
+    RecordMigrationRequest:
+      type: object
+      required: [migrationId, assetId, fromAlgorithm, toAlgorithm]
+      properties:
+        migrationId:
+          type: string
+        assetId:
+          type: string
+        fromAlgorithm:
+          type: string
+        toAlgorithm:
+          type: string
+        evidenceHash:
+          type: string
+          description: 0x-prefixed evidence hash (defaults to zero bytes32)
+        evidenceURI:
+          type: string
+          description: Optional evidence URI
+          default: ""
+
+    TxResult:
+      type: object
+      properties:
+        txHash:
+          type: string
+          description: On-chain transaction hash
+        relayer:
+          type: string
+          description: Relayer address that submitted the transaction
+
+    # ── Relay ──────────────────────────────────────────────────────
+    SignedAttestationPayload:
+      type: object
+      required: [productId, version, algorithm, supported, signature]
+      properties:
+        productId:
+          type: string
+        version:
+          type: string
+        algorithm:
+          type: string
+        supported:
+          type: boolean
+        evidenceURI:
+          type: string
+          default: ""
+        nonce:
+          type: integer
+          description: Vendor's current on-chain nonce
+        signature:
+          type: string
+          description: EIP-712 typed-data signature (0x-prefixed hex)
+
+    SignedCBOMRegistrationPayload:
+      type: object
+      required: [cbomHash, signature]
+      properties:
+        cbomHash:
+          type: string
+          description: 0x-prefixed bytes32 CBOM hash
+        metadataURI:
+          type: string
+          default: ""
+        nonce:
+          type: integer
+          description: Org's current on-chain nonce
+        signature:
+          type: string
+          description: EIP-712 typed-data signature (0x-prefixed hex)
+
+    SignedMigrationPayload:
+      type: object
+      required: [migrationId, assetId, fromAlgorithm, toAlgorithm, signature]
+      properties:
+        migrationId:
+          type: string
+          description: 0x-prefixed bytes32 migration ID
+        assetId:
+          type: string
+          description: 0x-prefixed bytes32 asset ID
+        fromAlgorithm:
+          type: string
+        toAlgorithm:
+          type: string
+        evidenceHash:
+          type: string
+          description: 0x-prefixed evidence hash
+          default: "0x0000000000000000000000000000000000000000000000000000000000000000"
+        evidenceURI:
+          type: string
+          default: ""
+        nonce:
+          type: integer
+          description: Org's current on-chain nonce
+        signature:
+          type: string
+          description: EIP-712 typed-data signature (0x-prefixed hex)
+
+    RelayResult:
+      type: object
+      properties:
+        txHash:
+          type: string
+        vendorDid:
+          type: string
+          description: Recovered signer address
+        attestationId:
+          type: string
+        relayer:
+          type: string
+        chain_id:
+          type: integer
+
+    RelayCBOMResult:
+      type: object
+      properties:
+        txHash:
+          type: string
+        orgDid:
+          type: string
+          description: Recovered signer address
+        assetId:
+          type: string
+        relayer:
+          type: string
+        chain_id:
+          type: integer
+
+    RelayMigrationResult:
+      type: object
+      properties:
+        txHash:
+          type: string
+        orgDid:
+          type: string
+          description: Recovered signer address
+        migrationId:
+          type: string
+        relayer:
+          type: string
+        chain_id:
+          type: integer
+
+    NonceResponse:
+      type: object
+      properties:
+        did:
+          type: string
+        nonce:
+          type: string
+          description: Current nonce as a string (uint256)
+
+    # ── Trust Evaluation ───────────────────────────────────────────
+    EvaluateRequest:
+      type: object
+      required: [subject_did, policy_id, policy_version]
+      properties:
+        subject_did:
+          type: string
+          description: Organisation DID to evaluate
+        policy_id:
+          type: string
+          description: Policy identifier
+        policy_version:
+          type: string
+          description: Policy version
+        evidence:
+          type: array
+          description: Optional evidence array (defaults to empty)
+          items:
+            type: object
+            properties:
+              evidence_id:
+                type: string
+              evidence_type:
+                type: string
+              claims:
+                type: object
+                additionalProperties: true
+
+    EvaluationResult:
+      type: object
+      properties:
+        assessment_id:
+          type: string
+          description: URN:uuid assessment identifier
+        subject_did:
+          type: string
+        policy_id:
+          type: string
+        policy_version:
+          type: string
+        passed:
+          type: boolean
+          description: Whether all policy clauses are satisfied
+        confidence:
+          type: number
+          format: float
+          description: Weighted satisfaction score (0.0 - 1.0)
+        evidence_used:
+          type: array
+          items:
+            type: object
+            properties:
+              evidence_id:
+                type: string
+              evidence_type:
+                type: string
+              contribution:
+                type: number
+              matched_claims:
+                type: array
+                items:
+                  type: string
+        conflicts:
+          type: array
+          items: {}
+        explanation:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [satisfied, insufficient_evidence]
+              evidence:
+                type: string
+              explanation:
+                type: string
+        evaluated_at:
+          type: string
+          format: date-time
+        valid_until:
+          type: string
+          format: date-time
+
+    # ── Credentials ────────────────────────────────────────────────
+    IssueCredentialRequest:
+      type: object
+      required: [subject_did, issuer_did]
+      properties:
+        schema_id:
+          type: string
+          description: Optional schema ID
+        subject_did:
+          type: string
+          description: DID of the credential subject
+        issuer_did:
+          type: string
+          description: DID of the issuer
+        claims:
+          type: object
+          additionalProperties: true
+          description: Optional claims payload
+        expiration_date:
+          type: string
+          format: date
+          description: Optional expiration date
+
+    CredentialIssued:
+      type: object
+      properties:
+        credential_id:
+          type: string
+          description: URN:uuid credential identifier
+        issuer_did:
+          type: string
+        subject_did:
+          type: string
+        schema_id:
+          oneOf:
+            - type: string
+            - type: "null"
+        claims:
+          type: object
+        expiration_date:
+          oneOf:
+            - type: string
+            - type: "null"
+        issued_at:
+          type: string
+          format: date-time
+        note:
+          type: string
+
+    VerifyCredentialRequest:
+      type: object
+      required: [presentation]
+      properties:
+        presentation:
+          type: object
+          description: Verifiable Presentation object
+        verifier_did:
+          type: string
+          description: Optional verifier DID
+
+    CredentialVerification:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        issuer_did:
+          oneOf:
+            - type: string
+            - type: "null"
+        subject_did:
+          oneOf:
+            - type: string
+            - type: "null"
+        schema_id:
+          oneOf:
+            - type: string
+            - type: "null"
+        revoked:
+          type: boolean
+        verified_at:
+          type: string
+          format: date-time
+        note:
+          type: string
+        error:
+          type: string
+          description: Present when validation fails
+
+    # ── Revocation ─────────────────────────────────────────────────
+    RevocationRoot:
+      type: object
+      properties:
+        issuer:
+          type: string
+        current_root:
+          oneOf:
+            - type: string
+            - type: "null"
+          description: Current Merkle root (0x-prefixed) or null if not configured
+        configured:
+          type: boolean
+        note:
+          type: string
+
+    # ── Policies ───────────────────────────────────────────────────
+    PolicyVersion:
+      type: object
+      properties:
+        policy_id:
+          type: string
+        version:
+          type: integer
+        policy_hash:
+          type: string
+          description: Policy content hash (0x-prefixed)
+        policy_uri:
+          type: string
+        committed_by:
+          type: string
+          description: Address that committed the policy
+        timestamp:
+          type: integer
+        active:
+          type: boolean
+        configured:
+          type: boolean
+        note:
+          type: string
+
+    # ── Schemas ────────────────────────────────────────────────────
+    SchemaInfo:
+      type: object
+      properties:
+        schema_id:
+          type: string
+        version:
+          type: integer
+        schema_hash:
+          type: string
+          description: Schema content hash (0x-prefixed)
+        schema_uri:
+          type: string
+        schema_type:
+          type: string
+        registered_by:
+          type: string
+          description: Address that registered the schema
+        timestamp:
+          type: integer
+        active:
+          type: boolean
+        configured:
+          type: boolean
+        exists:
+          type: boolean
+          description: Whether the schema exists in the registry
+        note:
+          type: string
+
+    # ── Trust Anchors ──────────────────────────────────────────────
+    TrustAnchorResult:
+      type: object
+      properties:
+        issuer:
+          type: string
+        accredited:
+          type: boolean
+          description: Whether the issuer is accredited
+        configured:
+          type: boolean
+        note:
+          type: string
+
+    # ── Webhooks ───────────────────────────────────────────────────
+    WebhookSubscribeRequest:
+      type: object
+      required: [address, url]
+      properties:
+        address:
+          type: string
+          description: On-chain address to watch
+        url:
+          type: string
+          format: uri
+          description: Webhook delivery URL
+        secret:
+          type: string
+          description: Optional shared secret for HMAC verification
+        events:
+          type: array
+          items:
+            type: string
+          description: "Event types to subscribe to (default: [*] for all)"
+          default:
+            - "*"
+
+    WebhookSubscribeResponse:
+      type: object
+      properties:
+        subscribed:
+          type: boolean
+        subscriber:
+          type: object
+          properties:
+            address:
+              type: string
+            url:
+              type: string
+            events:
+              type: array
+              items:
+                type: string
+            secret:
+              type: string
+              description: Masked secret
+
+    WebhookUnsubscribeRequest:
+      type: object
+      required: [address, url]
+      properties:
+        address:
+          type: string
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+          description: "Event types to unsubscribe from (default: [*])"
+
+    WebhookUnsubscribeResponse:
+      type: object
+      properties:
+        unsubscribed:
+          type: boolean
+        removed:
+          type: integer
+          description: Number of subscriptions removed
+
+    WebhookSubscribersResponse:
+      type: object
+      properties:
+        subscribers:
+          type: array
+          items:
+            type: object
+            properties:
+              event:
+                type: string
+                description: Event type (or "*" for wildcard)
+              count:
+                type: integer
+                description: Number of subscribers for this event
