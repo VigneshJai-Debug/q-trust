@@ -1,33 +1,56 @@
-# Python
+# ─── Python ───────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
-.pytest_cache/
-.ruff_cache/
+*$py.class
 *.egg-info/
+.eggs/
+dist/
+build/
+*.whl
 .venv/
 venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
 
-# Node
+# ─── Node ─────────────────────────────────────────────────────────────────────
 node_modules/
 .next/
 dist/
 *.tsbuildinfo
 
-# Foundry
+# ─── Foundry ──────────────────────────────────────────────────────────────────
 contracts/out/
 contracts/cache/
 contracts/broadcast/
 
-# Env & secrets
+# ─── Env & secrets ────────────────────────────────────────────────────────────
 .env
 .env.*
 !.env.example
 
-# Planner models (large binaries; keep the JSON report)
-planner/results/*.pt
-planner/model.pt
+# ─── Generated code (regenerate via scripts/generate_abis.py) ────────────────
+backend/src/lib/abis.ts
+sdk/qtrust/contracts.py
 
-# Local tooling
-.claude/
+# ─── Planner models (large binaries) ─────────────────────────────────────────
+planner/model.pt
+planner/results/*.pt
+
+# ─── OS & IDE ─────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
 .vscode/
+.claude/
+*.swp
+*.swo
+*~
+
+# ─── Jupyter ──────────────────────────────────────────────────────────────────
 .ipynb_checkpoints/
+
+# ─── Logs & temp ──────────────────────────────────────────────────────────────
+*.log
+logs/
+tmp/

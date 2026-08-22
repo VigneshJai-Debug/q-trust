@@ -24,7 +24,7 @@
  * Hardening: CORS allowlist, API-key-gated write routes, request body
  * size caps, rate limiting, JSON schema validation.
  */
-import fastify, { type FastifyInstance } from "fastify";
+import fastify, { type FastifyInstance, type FastifyRequest, type FastifyReply } from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import * as dotenv from "dotenv";
@@ -56,6 +56,7 @@ import {
   type SignedMigrationPayload,
 } from "./services/attestation.js";
 import { startIndexer } from "./services/indexer.js";
+import { evaluate } from "./services/evaluate.js";
 import { CORS_ORIGINS, API_KEYS, API_KEY_REQUIRED, PLANNER_URL, CHAIN, CHAIN_ID, publicClient, CONTRACTS } from "./config.js";
 import {
   RevocationAnchorAbi,
@@ -100,18 +101,21 @@ server.register(rateLimit, {
 });
 
 /** Require a valid admin API key on write routes. Fail-closed in production. */
-function requireApiKey(request: any, reply: any, done: () => void): void {
+function requireApiKey(request: FastifyRequest, reply: FastifyReply, done: () => void): void {
   const key = request.headers["x-api-key"] as string | undefined;
   if (!API_KEY_REQUIRED) {
     // Dev mode (no keys configured and not production) — allow writes.
-    return done();
+    done();
+    return;
   }
   if (!API_KEYS.length) {
     // Production with no keys configured — refuse all writes.
-    return reply.status(401).send({ error: "API keys not configured — write routes disabled" });
+    reply.status(401).send({ error: "API keys not configured — write routes disabled" });
+    return;
   }
   if (!key || !API_KEYS.includes(key)) {
-    return reply.status(401).send({ error: "Invalid or missing API key" });
+    reply.status(401).send({ error: "Invalid or missing API key" });
+    return;
   }
   done();
 }
@@ -418,74 +422,18 @@ server.post("/v1/evaluate", async (request, reply) => {
     subject_did: string;
     policy_id: string;
     policy_version: string;
-    evidence?: Array<{ evidence_id: string; evidence_type: string; claims: Record<string, any> }>;
+    evidence?: Array<{ evidence_id: string; evidence_type: string; claims: Record<string, unknown> }>;
   };
   if (!subject_did || !policy_id || !policy_version) {
     return reply.status(400).send({ error: "subject_did, policy_id, and policy_version are required" });
   }
-
-  // Default PQC readiness evaluation
-  const defaultEvidence = evidence ?? [];
-  const policyClauses: Record<string, { required_claims: string[]; weight: number }> = {
-    no_rsa_1024: { required_claims: ["no_rsa_1024"], weight: 0.3 },
-    tls_min_2048: { required_claims: ["tls_min_key_bits"], weight: 0.25 },
-    pqc_plan_exists: { required_claims: ["migration_plan_date"], weight: 0.2 },
-    no_weak_hash: { required_claims: ["no_md5_sha1_signing"], weight: 0.15 },
-    vendor_attestations: { required_claims: ["vendor_pqc_ready_count"], weight: 0.1 },
-  };
-
-  let totalWeight = 0;
-  let satisfiedWeight = 0;
-  const evidenceUsed: any[] = [];
-  const explanation: Record<string, any> = {};
-
-  for (const [clauseId, clause] of Object.entries(policyClauses)) {
-    totalWeight += clause.weight;
-    const matchingEvidence = defaultEvidence.find((ev) =>
-      clause.required_claims.every((rc) => ev.claims[rc] !== undefined)
-    );
-
-    if (matchingEvidence) {
-      satisfiedWeight += clause.weight;
-      explanation[clauseId] = { status: "satisfied", evidence: matchingEvidence.evidence_id };
-      evidenceUsed.push({
-        evidence_id: matchingEvidence.evidence_id,
-        evidence_type: matchingEvidence.evidence_type,
-        contribution: clause.weight,
-        matched_clauses: [clauseId],
-      });
-    } else {
-      explanation[clauseId] = {
-        status: "insufficient_evidence",
-        explanation: `No evidence for: ${clause.required_claims.join(", ")}`,
-      };
-    }
-  }
-
-  const confidence = totalWeight > 0 ? satisfiedWeight / totalWeight : 0;
-  const allSatisfied = Object.values(explanation).every((e: any) => e.status === "satisfied");
-
-  const assessmentId = `urn:uuid:${crypto.randomUUID()}`;
-
-  return {
-    assessment_id: assessmentId,
-    subject_did,
-    policy_id,
-    policy_version,
-    passed: allSatisfied,
-    confidence,
-    evidence_used: evidenceUsed,
-    conflicts: [],
-    explanation,
-    evaluated_at: new Date().toISOString(),
-    valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-  };
+  return evaluate({ subject_did, policy_id, policy_version, evidence });
 });
 
 // ------------------------------------------------------------------
 // v1 Credential Operations (placeholder — full VC stack in SDK)
 // ------------------------------------------------------------------
-server.post("/v1/credentials/issue", { preHandler: requireApiKey as any }, async (request, reply) => {
+server.post("/v1/credentials/issue", { preHandler: requireApiKey }, async (request, reply) => {
   const { schema_id, subject_did, issuer_did, claims, expiration_date } = request.body as {
     schema_id?: string;
     subject_did: string;
