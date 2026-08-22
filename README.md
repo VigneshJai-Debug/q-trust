@@ -7,15 +7,17 @@ full CBOMs stay off-chain.
 ## Architecture
 
 ```
-contracts/   Solidity registries (Foundry) — AssetRegistry, VendorRegistry, MigrationRegistry, AuditRegistry
-sdk/         Python SDK (web3.py) — QTrustClient, Pydantic models, Pinata IPFS, generated ABIs
-inspector/   cryptography-inspector CLI — scans TLS/SSH/code-signing assets → CBOM JSON
-notebooks/   Quantum threat demo (Shor) + Phase 8 bank pilot notebook
-planner/     GNN migration planner (PyTorch Geometric) — ranks CBOM assets by priority/risk
-backend/     Fastify + viem API (TS ESM), attestation relayer, BullMQ webhook delivery, docker-compose
-frontend/    Next.js 16 app — public verification, org dashboard, vendor portal
-pilot/       End-to-end bank PQC migration demo script
-docs/        Phase docs (0–8)
+contracts/        Solidity registries (Foundry) — 9 contracts, 127 tests
+sdk/              Python SDK (web3.py) — QTrustClient, Pydantic models, IPFS, ABIs
+inspector/        cryptography-inspector CLI — TLS/SSH scanner → CBOM JSON
+planner/          GNN migration planner (PyTorch Geometric) — priority/risk ranking
+backend/          Fastify + viem API (TS ESM), attestation relayer, BullMQ webhooks
+frontend/         Next.js 16 app — public verification, org dashboard, vendor portal
+pilot/            End-to-end bank PQC migration demo
+notebooks/        Quantum threat demo (Shor) + Phase 8 bank pilot notebook
+scripts/          ABI generation, full-stack verification
+docs/             Phase docs (0–8), patent materials, assessments
+data/             Sample CBOM data
 ```
 
 ## Quick start
@@ -35,7 +37,7 @@ cd sdk && python tests/e2e_anvil.py        # ALL E2E CHECKS PASSED
 
 ### 3. Inspector (Phase 3)
 ```bash
-pip install -e .                          # installs `crypto-inspector`
+pip install -e ./inspector                   # installs `crypto-inspector`
 crypto-inspector host example.com
 crypto-inspector directory /path/to/dir
 ```
@@ -112,6 +114,17 @@ All phases 0–8 complete and verified against local anvil (chain-id 84532):
 ```bash
 ./scripts/verify_all.sh          # one-command full-stack verification
 cd planner && python -m qtrust_planner.benchmark --seeds 42 43 44   # honest multi-seed benchmark
+```
+
+## Regenerating ABIs
+
+After any contract change, rebuild and regenerate bindings:
+
+```bash
+cd contracts && forge build
+python3 scripts/generate_abis.py              # both TS (backend) + Python (SDK)
+python3 scripts/generate_abis.py --target ts  # TypeScript only
+python3 scripts/generate_abis.py --target py  # Python only
 ```
 
 ## Known limitations (honest)

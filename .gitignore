@@ -4,7 +4,6 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 *.egg-info/
-.ipynb_checkpoints/
 .venv/
 venv/
 
@@ -24,9 +23,11 @@ contracts/broadcast/
 .env.*
 !.env.example
 
-# Planner benchmark artifacts (models are large; keep the JSON report)
+# Planner models (large binaries; keep the JSON report)
 planner/results/*.pt
+planner/model.pt
 
 # Local tooling
 .claude/
 .vscode/
+.ipynb_checkpoints/

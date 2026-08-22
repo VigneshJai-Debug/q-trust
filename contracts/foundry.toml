@@ -1,4 +1,3 @@
-# /home/z/qtrust/contracts/foundry.toml
 [profile.default]
 src = "src"
 out = "out"
