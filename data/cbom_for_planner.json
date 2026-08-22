@@ -1,7 +1,7 @@
 {
   "schema_version": "cbom.v1",
   "org_did": "did:ethr:0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-  "generated_at": 1787382233,
+  "generated_at": 1787387121,
   "scanner_version": "qtrust-inspector 0.1.0",
   "assets": [
     {
