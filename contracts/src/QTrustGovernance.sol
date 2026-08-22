@@ -9,6 +9,15 @@ import {MigrationRegistry} from "./MigrationRegistry.sol";
 import {AuditRegistry} from "./AuditRegistry.sol";
 
 /**
+ * @title IPausable
+ * @notice Minimal interface for pausable contracts used by governance.
+ */
+interface IPausable {
+    function pause() external;
+    function unpause() external;
+}
+
+/**
  * @title QTrustGovernance
  * @notice Time-locked admin operations for the Q-Trust registries.
  *
@@ -74,14 +83,14 @@ contract QTrustGovernance {
     /** @notice Schedule pausing a registry. */
     function schedulePause(uint256 registryIndex, bytes32 salt) external {
         address target = _getRegistry(registryIndex);
-        bytes memory data = abi.encodeCall(AssetRegistry.pause, ());
+        bytes memory data = abi.encodeCall(IPausable.pause, ());
         _schedule(target, data, salt);
     }
 
     /** @notice Schedule unpausing a registry. */
     function scheduleUnpause(uint256 registryIndex, bytes32 salt) external {
         address target = _getRegistry(registryIndex);
-        bytes memory data = abi.encodeCall(AssetRegistry.unpause, ());
+        bytes memory data = abi.encodeCall(IPausable.unpause, ());
         _schedule(target, data, salt);
     }
 

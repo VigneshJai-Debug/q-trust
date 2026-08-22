@@ -240,8 +240,31 @@ function watchLive(spec: EventSpec): void {
             continue;
           }
         }
-        await applyLog(spec, log as Log);
-        await setCursor(spec.key, blockNum + 1n);
+        try {
+          await applyLog(spec, log as Log);
+          await setCursor(spec.key, blockNum + 1n);
+
+          // Fan out webhook delivery for this event.
+          try {
+            const { fanOut } = await import("./webhook.js");
+            const orgDid = (log.args as Record<string, unknown>)?.orgDid
+              ?? (log.args as Record<string, unknown>)?.vendorDid
+              ?? "";
+            if (orgDid) {
+              await fanOut(orgDid as string, spec.key, {
+                event: spec.key,
+                blockNumber: Number(blockNum),
+                txHash: log.transactionHash,
+                args: log.args,
+              });
+            }
+          } catch {
+            // Webhook delivery is best-effort — do not block indexing.
+          }
+        } catch (err) {
+          console.error(`Indexer applyLog failed for ${spec.key} at block ${blockNum}:`, err);
+          // Do not advance the cursor — backfill will retry on next restart.
+        }
       }
     },
   });

@@ -54,7 +54,7 @@ def step1_scan(target: str = "example.com") -> dict:
         print(f"  - [{f.asset_type}] {f.algorithm} at {f.location} (vendor: {f.vendor or 'unknown'})")
     if result.finding_count == 0:
         print("No findings from network scan — using synthetic bank CBOM for the demo.")
-        result = CBOM(
+        cbom = CBOM(
             org_did=f"did:ethr:{QTrustClient().account.address}",
             generated_at=int(time.time()),
             scanner_version="qtrust-inspector 0.1.0 (synthetic)",

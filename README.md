@@ -27,7 +27,7 @@ data/             Sample CBOM data
 ### 1. Contracts (Phase 1)
 ```bash
 cd contracts
-forge test                                # 49/49 pass (5 suites)
+forge test                                # 127/127 pass (10 suites)
 forge script script/Deploy.s.sol --rpc-url <RPC> --broadcast
 ```
 
@@ -102,7 +102,7 @@ All phases 0–8 complete and verified against local anvil (chain-id 84532):
 | Phase | Deliverable | Verification |
 |---|---|---|
 | 0 | Environment + structure | forge/node/python, anvil chain |
-| 1 | 5 contracts (4 registries + QTrustGovernance timelock) | `forge test` 49/49, deployment with governance OK |
+| 1 | 5 contracts (4 registries + QTrustGovernance timelock) | `forge test` 127/127, deployment with governance OK |
 | 2 | Python SDK | pytest 5/5, E2E all checks passed |
 | 3 | Crypto scanner + CBOM | pytest 5 pass (1 skip), live scans work |
 | 4 | Shor quantum notebook | executes with 0 errors |

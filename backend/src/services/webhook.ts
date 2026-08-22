@@ -34,8 +34,19 @@ function isPublicHttpsUrl(url: string): boolean {
       /^10\./.test(host) ||
       /^192\.168\./.test(host) ||
       /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host) ||
+      /^169\.254\./.test(host) ||
       host === "::1" ||
-      host.startsWith("fe80:")
+      host.startsWith("fe80:") ||
+      host.startsWith("fc") ||
+      host.startsWith("fd") ||
+      /^::ffff:/.test(host) ||
+      /^fec0:/.test(host) ||
+      /^\[::ffff:/.test(host) ||
+      /^\[fc/.test(host) ||
+      /^\[fd/.test(host) ||
+      /^\[fe80:/.test(host) ||
+      /^\[fec0:/.test(host) ||
+      /^\[::1\]/.test(host)
     ) {
       return false;
     }

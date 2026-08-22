@@ -21,12 +21,21 @@ from typing import Any
 
 import time
 from collections import defaultdict
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-app = FastAPI(title="Q-Trust Planner", version="0.3.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Load model at startup, cleanup on shutdown."""
+    _load_model()
+    yield
+
+
+app = FastAPI(title="Q-Trust Planner", version="0.3.0", lifespan=lifespan)
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -168,11 +177,6 @@ def _estimate_migrate_days(algorithm: str, key_size: int) -> float:
     if family in ("RSA", "ECC", "DSA", "DH", "ECDH", "ECDSA"):
         return 1.5
     return 0.5
-
-
-@app.on_event("startup")
-def _startup() -> None:
-    _load_model()
 
 
 @app.get("/health")

@@ -276,7 +276,7 @@ class CryptoScanner:
             if len(key_bytes) >= 11:
                 # ssh-rsa + e + n; n is the modulus
                 try:
-                    offset = 7  # length of "ssh-ss" string
+                    offset = 7  # length of "ssh-rsa" string
                     e_len = int.from_bytes(key_bytes[offset:offset + 4], "big")
                     offset += 4 + e_len
                     n_len = int.from_bytes(key_bytes[offset:offset + 4], "big")
@@ -463,7 +463,7 @@ class CryptoScanner:
             "algorithm": algorithm,
             "key_type": key_type,
             "key_size": key_size,
-            "vendor": "opensssh",
+            "vendor": "openssh",
             "criticality": criticality,
             "pqc_ready": pqc_ready,
             "fingerprint_sha256": ssh.get("fingerprint_sha256", ""),

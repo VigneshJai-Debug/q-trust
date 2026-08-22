@@ -28,7 +28,7 @@ export const publicClient = createPublicClient({
 
 /** Contract addresses, sourced from environment. */
 export const CONTRACTS = {
-  assetRegistry: (process.env.QTRUST_REGISTRY_ADDRESS ?? "0x0") as Address,
+  assetRegistry: (process.env.QTRUST_ASSET_REGISTRY_ADDRESS ?? process.env.QTRUST_REGISTRY_ADDRESS ?? "0x0") as Address,
   vendorRegistry: (process.env.QTRUST_VENDOR_REGISTRY_ADDRESS ?? "0x0") as Address,
   migrationRegistry: (process.env.QTRUST_MIGRATION_REGISTRY_ADDRESS ?? "0x0") as Address,
   auditRegistry: (process.env.QTRUST_AUDIT_REGISTRY_ADDRESS ?? "0x0") as Address,

@@ -319,6 +319,7 @@ class VCVerifier:
     async def verify_credential(self, vc: VerifiableCredential) -> VCVerificationResult:
         """Verify a VC's signature, expiration, and revocation status."""
         explanation_parts = []
+        revoked = False
 
         # 1. Resolve issuer DID
         try:
@@ -348,10 +349,44 @@ class VCVerifier:
             signature = bytes.fromhex(vc.proof["proofValue"])
 
             auth_key = self.resolver.get_authentication_key(issuer_doc)
-            public_key = auth_key.get("publicKeyMultibase") or auth_key.get("publicKeyJwk", {})
+            public_key_bytes: bytes | None = None
 
-            # For now, just check signature format
-            explanation_parts.append("Signature verification delegated to holder")
+            # Extract raw public key bytes from the DID document
+            if isinstance(auth_key, dict):
+                # Try publicKeyMultibase (base58btc-encoded, starts with 'z')
+                mb = auth_key.get("publicKeyMultibase", "")
+                if mb and mb.startswith("z"):
+                    import base58
+                    # Strip the 'z' prefix and decode
+                    raw = base58.b58decode(mb[1:])
+                    # Ed25519 public keys are 32 bytes; strip the multicodec prefix (0xed 0x01 = 32 bytes)
+                    if len(raw) >= 33 and raw[0] == 0xed and raw[1] == 0x01:
+                        public_key_bytes = raw[2:34]
+                    elif len(raw) == 32:
+                        public_key_bytes = raw
+                # Try publicKeyJwk
+                jwk = auth_key.get("publicKeyJwk", {})
+                if not public_key_bytes and jwk.get("kty") == "OKP" and jwk.get("crv") == "Ed25519":
+                    import base64
+                    public_key_bytes = base64.urlsafe_b64decode(jwk["x"] + "==")
+
+            if public_key_bytes and len(signature) == 64:
+                sig_valid = _ed25519_verify(message, signature, public_key_bytes)
+                if sig_valid:
+                    explanation_parts.append("Ed25519 signature verified")
+                else:
+                    explanation_parts.append("Ed25519 signature verification FAILED")
+                    return VCVerificationResult(
+                        valid=False,
+                        issuer_did=vc.issuer,
+                        subject_did=vc.credentialSubject.get("id"),
+                        schema_id=vc.credentialSchema.get("id") if vc.credentialSchema else None,
+                        revoked=revoked,
+                        expired=False,
+                        explanation="; ".join(explanation_parts),
+                    )
+            else:
+                explanation_parts.append("Could not extract Ed25519 public key from DID document")
         else:
             explanation_parts.append("No proof attached")
 
@@ -402,6 +437,51 @@ class VCVerifier:
                 explanation=f"DID resolution failed: {e}; expiration check still performed",
             )
 
+        # Verify signature
+        if vc.proof and vc.proof.get("proofValue"):
+            vc_data = vc.model_dump(by_alias=True, exclude_none=True)
+            vc_data.pop("proof", None)
+            message = json.dumps(vc_data, sort_keys=True, separators=(",", ":")).encode()
+            signature = bytes.fromhex(vc.proof["proofValue"])
+
+            auth_key = self.resolver.get_authentication_key(issuer_doc)
+            public_key_bytes: bytes | None = None
+
+            if isinstance(auth_key, dict):
+                mb = auth_key.get("publicKeyMultibase", "")
+                if mb and mb.startswith("z"):
+                    import base58
+                    raw = base58.b58decode(mb[1:])
+                    if len(raw) >= 33 and raw[0] == 0xed and raw[1] == 0x01:
+                        public_key_bytes = raw[2:34]
+                    elif len(raw) == 32:
+                        public_key_bytes = raw
+                jwk = auth_key.get("publicKeyJwk", {})
+                if not public_key_bytes and jwk.get("kty") == "OKP" and jwk.get("crv") == "Ed25519":
+                    import base64
+                    public_key_bytes = base64.urlsafe_b64decode(jwk["x"] + "==")
+
+            if public_key_bytes and len(signature) == 64:
+                sig_valid = _ed25519_verify(message, signature, public_key_bytes)
+                if sig_valid:
+                    explanation_parts.append("Ed25519 signature verified")
+                else:
+                    explanation_parts.append("Ed25519 signature verification FAILED")
+                    return VCVerificationResult(
+                        valid=False,
+                        issuer_did=vc.issuer,
+                        subject_did=vc.credentialSubject.get("id"),
+                        schema_id=vc.credentialSchema.get("id") if vc.credentialSchema else None,
+                        revoked=revoked,
+                        expired=False,
+                        explanation="; ".join(explanation_parts),
+                    )
+            else:
+                explanation_parts.append("Could not extract Ed25519 public key from DID document")
+        else:
+            explanation_parts.append("No proof attached")
+
+        # Check expiration
         expired = False
         if vc.expirationDate:
             exp_time = datetime.fromisoformat(vc.expirationDate)
@@ -409,7 +489,7 @@ class VCVerifier:
             if expired:
                 explanation_parts.append(f"Expired at {vc.expirationDate}")
 
-        revoked = False
+        # Check revocation (if status is present)
         if vc.credentialStatus:
             explanation_parts.append("Revocation check requires on-chain root verification")
 

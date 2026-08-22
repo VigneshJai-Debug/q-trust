@@ -99,12 +99,16 @@ server.register(rateLimit, {
   // Allow generous bursts for paginated reads; strict per-IP by default.
 });
 
-/** Require a valid admin API key on write routes. */
+/** Require a valid admin API key on write routes. Fail-closed in production. */
 function requireApiKey(request: any, reply: any, done: () => void): void {
   const key = request.headers["x-api-key"] as string | undefined;
   if (!API_KEY_REQUIRED) {
-    // Dev mode (no keys configured or not production) — allow writes.
+    // Dev mode (no keys configured and not production) — allow writes.
     return done();
+  }
+  if (!API_KEYS.length) {
+    // Production with no keys configured — refuse all writes.
+    return reply.status(401).send({ error: "API keys not configured — write routes disabled" });
   }
   if (!key || !API_KEYS.includes(key)) {
     return reply.status(401).send({ error: "Invalid or missing API key" });
@@ -515,7 +519,7 @@ server.post("/v1/credentials/verify", async (request, reply) => {
     return reply.status(400).send({ error: "presentation is required" });
   }
 
-  // Structural validation — reject obviously malformed presentations
+  // Structural validation
   if (!presentation.issuer || !presentation.credentialSubject) {
     return {
       valid: false,
@@ -524,14 +528,30 @@ server.post("/v1/credentials/verify", async (request, reply) => {
     };
   }
 
+  // Check expiration if expirationDate is present
+  let expired = false;
+  if (presentation.expirationDate) {
+    try {
+      const expTime = new Date(presentation.expirationDate);
+      expired = expTime < new Date();
+    } catch {
+      return reply.status(400).send({ error: "Invalid expirationDate format" });
+    }
+  }
+
+  // Check proof presence
+  const hasProof = !!presentation.proof?.proofValue;
+
   return {
-    valid: true,
+    valid: !expired,
     issuer_did: presentation.issuer ?? null,
     subject_did: presentation.credentialSubject?.id ?? null,
     schema_id: presentation.credentialSchema?.id ?? null,
+    expired,
+    has_proof: hasProof,
     revoked: false,
     verified_at: new Date().toISOString(),
-    note: "Full VC verification with DID resolution and signature verification is available via the Python SDK (qtrust.vc.VCVerifier)",
+    note: "Structural validation only. For full Ed25519 signature verification with DID resolution, use the Python SDK (qtrust.vc.VCVerifier)",
   };
 });
 

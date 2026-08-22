@@ -63,8 +63,8 @@ export const API_KEYS: string[] = optionalEnv("QTRUST_API_KEYS", "")
   .map((s) => s.trim())
   .filter(Boolean);
 
-/** Whether API key gating is enforced (true in production if keys configured). */
-export const API_KEY_REQUIRED = IS_PRODUCTION && API_KEYS.length > 0;
+/** Whether API key gating is enforced. Fail-closed in production. */
+export const API_KEY_REQUIRED = IS_PRODUCTION || API_KEYS.length > 0;
 
 /** Postgres connection string (optional — indexer degrades to direct RPC). */
 export const PG_URL = process.env.QTRUST_PG_URL ?? process.env.DATABASE_URL ?? "";
