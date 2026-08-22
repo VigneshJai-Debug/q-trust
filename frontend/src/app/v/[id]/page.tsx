@@ -135,7 +135,7 @@ crypto-inspector verify ${asset.asset_id}`}</code>
             Verified at {new Date(verification.verified_at * 1000).toISOString()}
           </span>
           <a
-            href={`https://sepolia.basescan.org/address/${verification.org_did}`}
+            href={`${verification.chain_id === 8453 ? "https://basescan.org" : "https://sepolia.basescan.org"}/address/${verification.org_did}`}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-slate-600 hover:text-slate-900"

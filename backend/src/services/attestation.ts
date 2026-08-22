@@ -204,11 +204,13 @@ export async function relaySignedAttestation(
     ],
   });
 
-  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
-  const productAttestedLog = (receipt.logs as any[]).find(
-    (log: any) => log.eventName === "ProductAttested",
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
+  const productAttestedLog = receipt.logs.find(
+    (log) => (log as any).eventName === "ProductAttested",
   );
-  const attestationId = productAttestedLog?.args?.attestationId as string | undefined;
+  const attestationId = productAttestedLog && "args" in productAttestedLog
+    ? (productAttestedLog.args as Record<string, unknown>)?.attestationId as string | undefined
+    : undefined;
 
   return { txHash, vendorDid: signer, attestationId: attestationId ?? "" };
 }
@@ -305,11 +307,13 @@ export async function relaySignedCBOMRegistration(
     ],
   });
 
-  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
-  const cbomRegisteredLog = (receipt.logs as any[]).find(
-    (log: any) => log.eventName === "CBOMRegistered",
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
+  const cbomRegisteredLog = receipt.logs.find(
+    (log) => (log as any).eventName === "CBOMRegistered",
   );
-  const assetId = cbomRegisteredLog?.args?.assetId as string | undefined;
+  const assetId = cbomRegisteredLog && "args" in cbomRegisteredLog
+    ? (cbomRegisteredLog.args as Record<string, unknown>)?.assetId as string | undefined
+    : undefined;
 
   return { txHash, orgDid: signer, assetId: assetId ?? "" };
 }
@@ -422,11 +426,11 @@ export async function relaySignedMigration(
     ],
   });
 
-  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
-  const migrationRecordedLog = (receipt.logs as any[]).find(
-    (log: any) => log.eventName === "MigrationRecorded",
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
+  const migrationRecordedLog = receipt.logs.find(
+    (log) => (log as any).eventName === "MigrationRecorded",
   );
-  const migrationId = migrationRecordedLog?.args?.migrationId as string | undefined;
+  const migrationId = migrationRecordedLog && "args" in migrationRecordedLog ? (migrationRecordedLog.args as Record<string, unknown>)?.migrationId as string | undefined : undefined;
 
   return { txHash, orgDid: signer, migrationId: migrationId ?? "" };
 }

@@ -52,10 +52,24 @@ export function allContractsConfigured(): boolean {
 export const CORS_ORIGINS: string[] = (() => {
   const raw = process.env.QTRUST_CORS_ORIGINS ?? "*";
   if (IS_PRODUCTION && raw === "*") {
-    console.warn("WARNING: CORS defaults to * in production — set QTRUST_CORS_ORIGINS explicitly");
+    if (process.env.NODE_ENV === "production") {
+      console.error("FATAL: CORS_ORIGINS must be set explicitly in production — * is not allowed");
+    } else {
+      console.warn("WARNING: CORS defaults to * — set QTRUST_CORS_ORIGINS for production");
+    }
   }
   return raw.split(",").map((s) => s.trim()).filter(Boolean);
 })();
+
+/** Validate address format (0x-prefixed, 40 hex chars). */
+export function isValidAddress(addr: string): boolean {
+  return /^0x[0-9a-fA-F]{40}$/.test(addr);
+}
+
+/** Validate bytes32 format (0x-prefixed, 66 hex chars). */
+export function isValidBytes32(id: string): boolean {
+  return /^0x[0-9a-fA-F]{64}$/.test(id);
+}
 
 /** Admin API keys (comma-separated) for the write API. */
 export const API_KEYS: string[] = optionalEnv("QTRUST_API_KEYS", "")

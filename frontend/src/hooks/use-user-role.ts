@@ -46,8 +46,10 @@ export function useUserRole(): UserRoleInfo {
       return { role: "none", isOrg: false, isVendor: false, isAuditor: false, isLoading: walletLoading };
     }
 
-    const isOrg = Boolean(orgAssets.data && orgAssets.data.length > 0);
-    const isVendor = Boolean(vendorAttestations.data && vendorAttestations.data.count > 0);
+    const orgData = orgAssets.data;
+    const vendorData = vendorAttestations.data;
+    const isOrg = Boolean(orgData && "total" in orgData && orgData.total > 0);
+    const isVendor = Boolean(vendorData && "attestations" in vendorData && vendorData.attestations.length > 0);
 
     let role: UserRole = "none";
     if (isOrg) role = "org";

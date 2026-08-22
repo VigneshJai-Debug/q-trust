@@ -48,7 +48,11 @@ def host(
     register: bool = typer.Option(False, "--register"),
 ):
     """Scan a single host."""
-    port_list = [int(p.strip()) for p in ports.split(",")]
+    try:
+        port_list = [int(p.strip()) for p in ports.split(",")]
+    except ValueError as e:
+        console.print(f"[red]Invalid port format: {e}[/red]")
+        raise typer.Exit(1)
     with Progress(
         SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True
     ) as progress:
@@ -87,12 +91,19 @@ def network(
     ports: str = typer.Option("443,22", "--ports", "-p"),
 ):
     """Scan multiple hosts from a file."""
+    if not hosts_file.exists():
+        console.print(f"[red]File not found: {hosts_file}[/red]")
+        raise typer.Exit(1)
     hosts = [
         host.strip()
         for host in hosts_file.read_text().splitlines()
         if host.strip() and not host.startswith("#")
     ]
-    port_list = [int(p.strip()) for p in ports.split(",")]
+    try:
+        port_list = [int(p.strip()) for p in ports.split(",")]
+    except ValueError as e:
+        console.print(f"[red]Invalid port format: {e}[/red]")
+        raise typer.Exit(1)
 
     with Progress(
         SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True
@@ -119,7 +130,11 @@ def register_cbom(
         console.print(f"[red]File not found: {cbom_path}[/red]")
         raise typer.Exit(1)
 
-    cbom_dict = json.loads(cbom_path.read_text())
+    try:
+        cbom_dict = json.loads(cbom_path.read_text())
+    except json.JSONDecodeError as e:
+        console.print(f"[red]Invalid JSON in CBOM file: {e}[/red]")
+        raise typer.Exit(1)
     if SDK_AVAILABLE:
         try:
             cbom = CBOM.model_validate(cbom_dict)

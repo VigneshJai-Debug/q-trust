@@ -5,7 +5,7 @@
  *  - Bounded retries with exponential backoff + jitter
  *  - Fan-out to all registered webhooks for an org
  */
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHmac, timingSafeEqual } from "node:crypto";
 
 const MAX_ATTEMPTS = 3;
 const BASE_BACKOFF_MS = 500;
@@ -35,6 +35,9 @@ function isPublicHttpsUrl(url: string): boolean {
       /^192\.168\./.test(host) ||
       /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host) ||
       /^169\.254\./.test(host) ||
+      /^100\.64\./.test(host) ||
+      /^198\.18\./.test(host) ||
+      /^192\.0\.0\./.test(host) ||
       host === "::1" ||
       host.startsWith("fe80:") ||
       host.startsWith("fc") ||
@@ -56,14 +59,33 @@ function isPublicHttpsUrl(url: string): boolean {
   }
 }
 
-async function deliverOnce(url: string, event: WebhookEvent): Promise<boolean> {
+function signPayload(body: string, secret: string): string {
+  return createHmac("sha256", secret).update(body).digest("hex");
+}
+
+function verifySignature(body: string, secret: string, signature: string): boolean {
+  if (!secret || !signature) return false;
+  const expected = signPayload(body, secret);
+  try {
+    return timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(signature, "hex"));
+  } catch {
+    return false;
+  }
+}
+
+async function deliverOnce(url: string, event: WebhookEvent, secret?: string): Promise<boolean> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const body = JSON.stringify({ id: randomUUID(), ...event });
   try {
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (secret) {
+      headers["x-webhook-signature"] = signPayload(body, secret);
+    }
     const res = await fetch(url, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id: randomUUID(), ...event }),
+      headers,
+      body,
       signal: controller.signal,
     });
     if (!res.ok) return false;
@@ -78,7 +100,7 @@ async function deliverOnce(url: string, event: WebhookEvent): Promise<boolean> {
   }
 }
 
-export async function deliverWebhook(url: string, event: WebhookEvent): Promise<boolean> {
+export async function deliverWebhook(url: string, event: WebhookEvent, secret?: string): Promise<boolean> {
   if (!isPublicHttpsUrl(url)) {
     console.warn(`Webhook delivery blocked: non-HTTPS or private URL (${url})`);
     return false;

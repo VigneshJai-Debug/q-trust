@@ -149,7 +149,7 @@ def predict_migration_order(cbom_path: str, model_path: str = DEFAULT_MODEL_PATH
             f"Model not found at {model_path}. Run `python gnn/train.py` first."
         )
 
-    checkpoint = torch.load(model_path, map_location="cpu", weights_only=False)
+    checkpoint = torch.load(model_path, map_location="cpu", weights_only=True)
     config = checkpoint.get(
         "model_config", {"input_features": 6, "hidden_dim": 64, "embedding_dim": 32}
     )
@@ -196,7 +196,7 @@ def predict_detailed(
             f"Model not found at {model_path}. Run `python gnn/train.py` first."
         )
 
-    checkpoint = torch.load(model_path, map_location="cpu", weights_only=False)
+    checkpoint = torch.load(model_path, map_location="cpu", weights_only=True)
     config = checkpoint.get(
         "model_config", {"input_features": 6, "hidden_dim": 64, "embedding_dim": 32}
     )

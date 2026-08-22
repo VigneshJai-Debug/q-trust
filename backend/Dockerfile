@@ -27,8 +27,8 @@ RUN bun install --frozen-lockfile --production=false 2>/dev/null || bun install
 FROM deps AS build
 COPY tsconfig.json ./
 COPY src/ ./src/
-# Type-check + emit JS to dist/
-RUN bun run build || (echo "tsc build failed; running tsx as fallback at runtime" && true)
+# Type-check + emit JS to dist/ — fail hard on build errors
+RUN bun run build
 
 # ---- runtime ----
 FROM base AS runtime
@@ -36,11 +36,16 @@ ENV NODE_ENV=production
 ENV PORT=3001
 EXPOSE 3001
 
-# Copy node_modules and built JS
+# Run as non-root for security
+RUN groupadd -r qtrust && useradd -r -g qtrust -m qtrust
+
+# Copy node_modules and built JS only (no source code in runtime image)
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./package.json
-COPY --from=build /app/src ./src
+
+RUN chown -R qtrust:qtrust /app
+USER qtrust
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -fsS http://localhost:3001/health || exit 1

@@ -212,13 +212,13 @@ export async function getAssetsByOrg(
   const indexed = await queryAssets(orgAddress.toLowerCase(), offset, limit);
   if (indexed) {
     const items = indexed.rows.map((r: any) => ({
-      asset_id: r.asset_id,
-      org_did: r.org_did,
-      cbom_hash: r.cbom_hash,
-      metadata_uri: r.metadata_uri,
+      asset_id: r.asset_id as string,
+      org_did: r.org_did as string,
+      cbom_hash: r.cbom_hash as string,
+      metadata_uri: r.metadata_uri as string,
       timestamp: Number(r.timestamp),
       last_updated: Number(r.last_updated),
-      active: r.active,
+      active: r.active as boolean,
     }));
     return { items, total: indexed.total, offset, limit };
   }
@@ -248,15 +248,15 @@ export async function getVendorAttestations(
   const indexed = await queryAttestations(vendorAddress.toLowerCase(), offset, limit);
   if (indexed) {
     const items = indexed.rows.map((r: any) => ({
-      attestation_id: r.attestation_id,
-      vendor_did: r.vendor_did,
-      product_id: r.product_id,
-      version: r.version,
-      algorithm: r.algorithm,
-      supported: r.supported,
-      evidence_uri: r.evidence_uri,
+      attestation_id: r.attestation_id as string,
+      vendor_did: r.vendor_did as string,
+      product_id: r.product_id as string,
+      version: r.version as string,
+      algorithm: r.algorithm as string,
+      supported: r.supported as boolean,
+      evidence_uri: r.evidence_uri as string,
       timestamp: Number(r.timestamp),
-      revoked: r.revoked,
+      revoked: r.revoked as boolean,
     }));
     return { items, total: indexed.total, offset, limit };
   }
@@ -351,15 +351,15 @@ export async function getMigrationsByOrg(
   const indexed = await queryMigrations(orgAddress.toLowerCase(), offset, limit);
   if (indexed) {
     const items = indexed.rows.map((r: any) => ({
-      migration_id: r.migration_id,
-      asset_id: r.asset_id,
-      org_did: r.org_did,
-      from_algorithm: r.from_algorithm,
-      to_algorithm: r.to_algorithm,
-      evidence_hash: r.evidence_hash,
-      evidence_uri: r.evidence_uri,
+      migration_id: r.migration_id as string,
+      asset_id: r.asset_id as string,
+      org_did: r.org_did as string,
+      from_algorithm: r.from_algorithm as string,
+      to_algorithm: r.to_algorithm as string,
+      evidence_hash: r.evidence_hash as string,
+      evidence_uri: r.evidence_uri as string,
       timestamp: Number(r.timestamp),
-      verified: r.verified,
+      verified: r.verified as boolean,
     }));
     return { items, total: indexed.total, offset, limit };
   }

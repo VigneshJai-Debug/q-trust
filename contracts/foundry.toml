@@ -6,11 +6,15 @@ solc = "0.8.24"
 optimizer = true
 optimizer_runs = 200
 via_ir = false
+test = "test"
+# Exclude OpenZeppelin's own test files from compilation
+deny_warnings = false
+ignored_warnings_from = ["lib/openzeppelin-contracts"]
 
 # Remap OpenZeppelin imports
 remappings = [
-    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
-    "@forge-std/=lib/forge-std/src/"
+    "forge-std/=lib/forge-std/src/",
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/"
 ]
 
 [rpc_endpoints]

@@ -2,6 +2,7 @@
  * Root layout for the Q-Trust frontend.
  */
 import type { Metadata } from "next";
+import { ErrorBoundary } from "@/components/error-boundary";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -18,8 +19,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <meta httpEquiv="X-Content-Type-Options" content="nosniff" />
+        <meta httpEquiv="X-Frame-Options" content="DENY" />
+        <meta name="referrer" content="strict-origin-when-cross-origin" />
+      </head>
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
-        {children}
+        <ErrorBoundary>{children}</ErrorBoundary>
       </body>
     </html>
   );

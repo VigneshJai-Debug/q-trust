@@ -93,7 +93,7 @@ def _load_model() -> None:
         return
 
     try:
-        checkpoint = torch.load(MODEL_PATH, map_location="cpu", weights_only=False)
+        checkpoint = torch.load(MODEL_PATH, map_location="cpu", weights_only=True)
         config = checkpoint.get("model_config", {"input_features": 6, "hidden_dim": 64, "embedding_dim": 32})
         _model = MigrationGNN(**config)
         _model.load_state_dict(checkpoint["model_state_dict"])

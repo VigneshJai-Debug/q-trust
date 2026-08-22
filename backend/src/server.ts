@@ -64,6 +64,7 @@ import {
   SchemaRegistryAbi,
   TrustAnchorRegistryAbi,
 } from "./lib/abis.js";
+import { isValidAddress, isValidBytes32 } from "./config.js";
 
 dotenv.config();
 
@@ -133,7 +134,11 @@ server.get("/health", async () => ({
 // v1 read API
 // ------------------------------------------------------------------
 server.get("/v1/assets/:id", async (request, reply) => {
-  const asset = await getAsset((request.params as { id: string }).id);
+  const id = (request.params as { id: string }).id;
+  if (!isValidBytes32(id)) {
+    return reply.status(400).send({ error: "Invalid asset ID format (expected 0x-prefixed 66-char hex)" });
+  }
+  const asset = await getAsset(id);
   if (!asset) return reply.status(404).send({ error: "Asset not found" });
   return asset;
 });
@@ -147,9 +152,19 @@ server.get("/v1/assets/:id/verify", async (request, reply) => {
   }
 });
 
+function validateDid(did: string, reply: FastifyReply): string | undefined {
+  if (!isValidAddress(did)) {
+    reply.status(400).send({ error: "Invalid DID format (expected 0x-prefixed 42-char hex address)" });
+    return undefined;
+  }
+  return did;
+}
+
 server.get("/v1/orgs/:did/summary", async (request, reply) => {
+  const did = validateDid((request.params as { did: string }).did, reply);
+  if (!did) return;
   try {
-    return await getOrgSummary((request.params as { did: string }).did as `0x${string}`);
+    return await getOrgSummary(did as `0x${string}`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return reply.status(400).send({ error: msg });
@@ -157,30 +172,33 @@ server.get("/v1/orgs/:did/summary", async (request, reply) => {
 });
 
 server.get("/v1/orgs/:did/assets", async (request, reply) => {
-  const did = (request.params as { did: string }).did as `0x${string}`;
+  const did = validateDid((request.params as { did: string }).did, reply);
+  if (!did) return;
   const q = request.query as { offset?: string; limit?: string };
   const offset = Math.max(0, Number(q.offset ?? 0));
   const limit = Math.min(200, Math.max(1, Number(q.limit ?? 50)));
-  const page = await getAssetsByOrg(did, offset, limit);
+  const page = await getAssetsByOrg(did as `0x${string}`, offset, limit);
   return { org: did, ...page };
 });
 
 server.get("/v1/orgs/:did/migrations", async (request, reply) => {
-  const did = (request.params as { did: string }).did as `0x${string}`;
+  const did = validateDid((request.params as { did: string }).did, reply);
+  if (!did) return;
   const q = request.query as { offset?: string; limit?: string };
   const offset = Math.max(0, Number(q.offset ?? 0));
   const limit = Math.min(200, Math.max(1, Number(q.limit ?? 50)));
   const [progress, migrations, latestAudit] = await Promise.all([
-    getMigrationProgress(did),
-    getMigrationsByOrg(did, offset, limit),
-    getLatestAudit(did),
+    getMigrationProgress(did as `0x${string}`),
+    getMigrationsByOrg(did as `0x${string}`, offset, limit),
+    getLatestAudit(did as `0x${string}`),
   ]);
   return { org: did, progress, migrations, latest_audit: latestAudit };
 });
 
 server.get("/v1/orgs/:did/audit", async (request, reply) => {
-  const did = (request.params as { did: string }).did as `0x${string}`;
-  return getLatestAudit(did);
+  const did = validateDid((request.params as { did: string }).did, reply);
+  if (!did) return;
+  return getLatestAudit(did as `0x${string}`);
 });
 
 server.get("/v1/migrations/:id", async (request, reply) => {
@@ -195,11 +213,12 @@ server.get("/v1/migrations/:id", async (request, reply) => {
 });
 
 server.get("/v1/vendors/:did/attestations", async (request, reply) => {
-  const did = (request.params as { did: string }).did as `0x${string}`;
+  const did = validateDid((request.params as { did: string }).did, reply);
+  if (!did) return;
   const q = request.query as { offset?: string; limit?: string };
   const offset = Math.max(0, Number(q.offset ?? 0));
   const limit = Math.min(200, Math.max(1, Number(q.limit ?? 50)));
-  const page = await getVendorAttestations(did, offset, limit);
+  const page = await getVendorAttestations(did as `0x${string}`, offset, limit);
   return { vendor: did, ...page };
 });
 
@@ -334,10 +353,12 @@ server.post("/v1/write/migrations", { preHandler: requireApiKey }, async (reques
   }
 });
 
-// ------------------------------------------------------------------
-// EIP-712 gasless relay
-// ------------------------------------------------------------------
-server.post("/v1/relay/attestation", async (request, reply) => {
+  // ------------------------------------------------------------------
+  // EIP-712 gasless relay — rate limited to prevent gas abuse
+  // ------------------------------------------------------------------
+  server.post("/v1/relay/attestation", {
+    config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+  }, async (request, reply) => {
   const body = request.body as SignedAttestationPayload;
   if (!body.productId || !body.version || !body.algorithm || !body.signature) {
     return reply.status(400).send({
@@ -367,8 +388,10 @@ server.get("/v1/relay/nonce/:did", async (request, reply) => {
   }
 });
 
-// EIP-712 gasless CBOM registration
-server.post("/v1/relay/cbom", async (request, reply) => {
+  // EIP-712 gasless CBOM registration
+  server.post("/v1/relay/cbom", {
+    config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+  }, async (request, reply) => {
   const body = request.body as SignedCBOMRegistrationPayload;
   if (!body.cbomHash || !body.signature) {
     return reply.status(400).send({
@@ -385,8 +408,10 @@ server.post("/v1/relay/cbom", async (request, reply) => {
   }
 });
 
-// EIP-712 gasless migration recording
-server.post("/v1/relay/migration", async (request, reply) => {
+  // EIP-712 gasless migration recording
+  server.post("/v1/relay/migration", {
+    config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+  }, async (request, reply) => {
   const body = request.body as SignedMigrationPayload;
   if (!body.migrationId || !body.assetId || !body.signature) {
     return reply.status(400).send({
@@ -417,7 +442,9 @@ server.get("/v1/relay/cbom-nonce/:did", async (request, reply) => {
 // ------------------------------------------------------------------
 // v1 Trust Evaluation
 // ------------------------------------------------------------------
-server.post("/v1/evaluate", async (request, reply) => {
+  server.post("/v1/evaluate", {
+    config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+  }, async (request, reply) => {
   const { subject_did, policy_id, policy_version, evidence } = request.body as {
     subject_did: string;
     policy_id: string;
@@ -438,7 +465,7 @@ server.post("/v1/credentials/issue", { preHandler: requireApiKey }, async (reque
     schema_id?: string;
     subject_did: string;
     issuer_did: string;
-    claims?: Record<string, any>;
+    claims?: Record<string, Record<string, unknown>>;
     expiration_date?: string;
   };
   if (!subject_did || !issuer_did) {
@@ -460,7 +487,7 @@ server.post("/v1/credentials/issue", { preHandler: requireApiKey }, async (reque
 
 server.post("/v1/credentials/verify", async (request, reply) => {
   const { presentation, verifier_did } = request.body as {
-    presentation: any;
+    presentation: Record<string, unknown>;
     verifier_did?: string;
   };
   if (!presentation) {
@@ -478,7 +505,7 @@ server.post("/v1/credentials/verify", async (request, reply) => {
 
   // Check expiration if expirationDate is present
   let expired = false;
-  if (presentation.expirationDate) {
+  if (typeof presentation.expirationDate === "string") {
     try {
       const expTime = new Date(presentation.expirationDate);
       expired = expTime < new Date();
@@ -488,13 +515,19 @@ server.post("/v1/credentials/verify", async (request, reply) => {
   }
 
   // Check proof presence
-  const hasProof = !!presentation.proof?.proofValue;
+  const hasProof = Boolean(
+    presentation.proof && typeof presentation.proof === "object" && "proofValue" in presentation.proof,
+  );
 
   return {
     valid: !expired,
-    issuer_did: presentation.issuer ?? null,
-    subject_did: presentation.credentialSubject?.id ?? null,
-    schema_id: presentation.credentialSchema?.id ?? null,
+    issuer_did: typeof presentation.issuer === "string" ? presentation.issuer : null,
+    subject_did: presentation.credentialSubject && typeof presentation.credentialSubject === "object" && "id" in presentation.credentialSubject
+      ? (presentation.credentialSubject as Record<string, unknown>).id as string
+      : null,
+    schema_id: presentation.credentialSchema && typeof presentation.credentialSchema === "object" && "id" in presentation.credentialSchema
+      ? (presentation.credentialSchema as Record<string, unknown>).id as string
+      : null,
     expired,
     has_proof: hasProof,
     revoked: false,
@@ -622,9 +655,9 @@ server.get("/v1/trust-anchors/:issuer", async (request, reply) => {
 });
 
 // ------------------------------------------------------------------
-// Webhooks (Redis-backed subscriptions)
+// Webhooks (Redis-backed subscriptions) — requires API key for subscribe/unsubscribe
 // ------------------------------------------------------------------
-server.post("/v1/webhooks/subscribe", async (request, reply) => {
+server.post("/v1/webhooks/subscribe", { preHandler: requireApiKey }, async (request, reply) => {
   const { address, url, secret, events } = request.body as {
     address: string;
     url: string;
@@ -633,6 +666,14 @@ server.post("/v1/webhooks/subscribe", async (request, reply) => {
   };
   if (!address || !url) {
     return reply.status(400).send({ error: "address and url are required" });
+  }
+  if (!isValidAddress(address)) {
+    return reply.status(400).send({ error: "Invalid address format" });
+  }
+  try {
+    new URL(url);
+  } catch {
+    return reply.status(400).send({ error: "Invalid url format" });
   }
   if (!redis) {
     return reply.status(503).send({ error: "Redis unavailable — webhook service not running" });
@@ -646,7 +687,7 @@ server.post("/v1/webhooks/subscribe", async (request, reply) => {
   return { subscribed: true, subscriber: { address, url, events: eventList, secret: secret ? "•••" : "" } };
 });
 
-server.post("/v1/webhooks/unsubscribe", async (request, reply) => {
+server.post("/v1/webhooks/unsubscribe", { preHandler: requireApiKey }, async (request, reply) => {
   const { address, url, events } = request.body as {
     address: string;
     url: string;
@@ -665,14 +706,12 @@ server.post("/v1/webhooks/unsubscribe", async (request, reply) => {
   return { unsubscribed: true, removed };
 });
 
-server.get("/v1/webhooks/subscribers", async () => {
+server.get("/v1/webhooks/subscribers", { preHandler: requireApiKey }, async () => {
   if (!redis) return { subscribers: [] };
-  const keys = await redis.keys("subscribers:*");
-  const subscribers = [];
-  for (const key of keys) {
-    const members = await redis.smembers(key);
-    subscribers.push({ event: key.replace("subscribers:", ""), count: members.length });
-  }
+  const keys = await redis.smembers("subscribers:*");
+  const subscribers = keys.map((key) => ({
+    event: key.replace("subscribers:", ""),
+  }));
   return { subscribers };
 });
 

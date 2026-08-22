@@ -113,12 +113,12 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
 /** Fetch an asset by ID (read-only, cacheable). */
 export function fetchAsset(assetId: string): Promise<AssetInfo> {
-  return apiFetch<AssetInfo>(`/v1/assets/${assetId}`);
+  return apiFetch<AssetInfo>(`/v1/assets/${encodeURIComponent(assetId)}`);
 }
 
 /** Verify an asset's status (read-only). */
 export function fetchAssetVerification(assetId: string): Promise<AssetVerification> {
-  return apiFetch<AssetVerification>(`/v1/assets/${assetId}/verify`);
+  return apiFetch<AssetVerification>(`/v1/assets/${encodeURIComponent(assetId)}/verify`);
 }
 
 /** Fetch all attestations posted by a vendor. */
@@ -126,18 +126,18 @@ export function fetchVendorAttestations(
   vendorAddress: string,
 ): Promise<VendorAttestationsResponse> {
   return apiFetch<VendorAttestationsResponse>(
-    `/v1/vendors/${vendorAddress}/attestations`,
+    `/v1/vendors/${encodeURIComponent(vendorAddress)}/attestations`,
   );
 }
 
 /** Fetch an org's migration progress. */
 export function fetchOrgMigrations(orgAddress: string): Promise<OrgMigrationsResponse> {
-  return apiFetch<OrgMigrationsResponse>(`/v1/orgs/${orgAddress}/migrations`);
+  return apiFetch<OrgMigrationsResponse>(`/v1/orgs/${encodeURIComponent(orgAddress)}/migrations`);
 }
 
 /** Fetch the assets registered by an org (full records). */
 export function fetchOrgAssets(orgAddress: string): Promise<AssetInfo[]> {
-  return apiFetch<AssetInfo[]>(`/v1/orgs/${orgAddress}/assets`);
+  return apiFetch<AssetInfo[]>(`/v1/orgs/${encodeURIComponent(orgAddress)}/assets`);
 }
 
 /** Check whether a product+version supports a PQC algorithm on-chain. */

@@ -144,7 +144,7 @@ def main() -> None:
                 seed=seed,
                 loss=loss,
             )
-            ckpt = torch.load(model_path, map_location="cpu", weights_only=False)
+            ckpt = torch.load(model_path, map_location="cpu", weights_only=True)
             model = MigrationGNN(**ckpt["model_config"])
             model.load_state_dict(ckpt["model_state_dict"])
             model.to(device)
