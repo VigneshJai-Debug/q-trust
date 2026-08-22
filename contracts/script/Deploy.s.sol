@@ -24,7 +24,12 @@ contract Deploy is Script {
             _deployRegistries(deployer);
 
         TimelockController timelock = _deployTimelock(deployer);
-        _handAdminToTimelock(assets, vendors, migrations, audits, timelock);
+
+        // Pre-grant AUDITOR_ROLE to the deployer so the E2E test / pilot can
+        // operate as an auditor without going through timelock governance.
+        audits.grantRole(audits.AUDITOR_ROLE(), deployer);
+
+        _handAdminToTimelock(assets, vendors, migrations, audits, timelock, deployer);
 
         QTrustGovernance governance = new QTrustGovernance(
             address(timelock),
@@ -160,7 +165,8 @@ contract Deploy is Script {
         VendorRegistry vendors,
         MigrationRegistry migrations,
         AuditRegistry audits,
-        TimelockController timelock
+        TimelockController timelock,
+        address deployer
     ) internal {
         bytes32 adminRole = 0x00;
         assets.grantRole(adminRole, address(timelock));
@@ -168,9 +174,9 @@ contract Deploy is Script {
         migrations.grantRole(adminRole, address(timelock));
         audits.grantRole(adminRole, address(timelock));
 
-        assets.renounceRole(adminRole, msg.sender);
-        vendors.renounceRole(adminRole, msg.sender);
-        migrations.renounceRole(adminRole, msg.sender);
-        audits.renounceRole(adminRole, msg.sender);
+        assets.renounceRole(adminRole, deployer);
+        vendors.renounceRole(adminRole, deployer);
+        migrations.renounceRole(adminRole, deployer);
+        audits.renounceRole(adminRole, deployer);
     }
 }

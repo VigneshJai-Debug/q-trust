@@ -43,8 +43,14 @@ echo "==> [9/9] Pilot + bank-pilot notebook (fresh anvil + deploy)"
 setsid anvil --host 127.0.0.1 --port 8545 --chain-id 84532 > /tmp/qtrust-anvil-pilot.log 2>&1 < /dev/null &
 ANVIL_PID=$!
 sleep 3
+DEPLOY_LOG=$(mktemp)
 (cd "$ROOT/contracts" && QTRUST_DEPLOYER_PRIVATE_KEY="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" \
-  forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 --broadcast > /dev/null 2>&1)
+  forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 --broadcast 2>&1 | tee "$DEPLOY_LOG")
+export QTRUST_ASSET_REGISTRY_ADDRESS="$(grep 'AssetRegistry proxy:' "$DEPLOY_LOG" | awk '{print $NF}')"
+export QTRUST_VENDOR_REGISTRY_ADDRESS="$(grep 'VendorRegistry proxy:' "$DEPLOY_LOG" | awk '{print $NF}')"
+export QTRUST_MIGRATION_REGISTRY_ADDRESS="$(grep 'MigrationRegistry proxy:' "$DEPLOY_LOG" | awk '{print $NF}')"
+export QTRUST_AUDIT_REGISTRY_ADDRESS="$(grep 'AuditRegistry proxy:' "$DEPLOY_LOG" | awk '{print $NF}')"
+rm -f "$DEPLOY_LOG"
 (cd "$ROOT/pilot" && python run_pilot.py 2>&1 | grep -q "PILOT COMPLETE") \
   && pass "pilot" || fail "pilot"
 jupyter nbconvert --to notebook --execute "$ROOT/notebooks/08_bank_pilot.ipynb" --output /tmp/qtrust_nb8.ipynb > /dev/null 2>&1 \

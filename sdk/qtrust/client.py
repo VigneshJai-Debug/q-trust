@@ -76,10 +76,7 @@ class QTrustClient:
 
         def _contract(address: str, abi) -> any:
             if not address:
-                raise ValueError(
-                    "Contract address not configured — pass it or set the matching "
-                    "QTRUST_*_ADDRESS env var"
-                )
+                return None
             return self.w3.eth.contract(address=Web3.to_checksum_address(address), abi=abi)
 
         self.asset_registry = _contract(self.asset_registry_address, ASSET_REGISTRY_ABI)

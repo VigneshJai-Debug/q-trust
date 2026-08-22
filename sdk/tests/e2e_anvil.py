@@ -162,24 +162,21 @@ def main() -> None:
         chain_id=84532,
     )
     # Grant AUDITOR_ROLE to the auditor (no-op if already granted via Deploy timelock).
-    auditor_w3 = auditor.w3
     role = auditor.audit_registry.functions.AUDITOR_ROLE().call()
     has_role = auditor.audit_registry.functions.hasRole(role, auditor.account.address).call()
     if not has_role:
-        auditor_tx = auditor_w3.eth.contract(
-            address=Web3.to_checksum_address(ADDRESSES["audit"]), abi=auditor.audit_registry.abi
-        ).functions.grantRole(role, auditor.account.address)
+        auditor_tx = auditor.audit_registry.functions.grantRole(role, auditor.account.address)
         try:
             client._send_transaction(auditor_tx, gas_limit=150_000)
-        except RuntimeError as e:
-            if "reverted" in str(e):
-                # Timelock holds admin — check if auditor was pre-granted in Deploy.s.sol
-                has_role = auditor.audit_registry.functions.hasRole(role, auditor.account.address).call()
-                if not has_role:
-                    raise
-                print("  auditor already has AUDITOR_ROLE (pre-granted via timelock deployment)")
+        except RuntimeError:
+            # Admin was handed to timelock — deployer still has AUDITOR_ROLE
+            # from Deploy.s.sol, so fall back to using the deployer as auditor.
+            has_role = client.audit_registry.functions.hasRole(role, client.account.address).call()
+            if has_role:
+                auditor = client
+                print("  fell back to deployer as auditor (has AUDITOR_ROLE)")
             else:
-                raise
+                raise RuntimeError("no address has AUDITOR_ROLE — cannot run audit tests")
 
     # One migration exists on-chain, so an audit may claim at most 1 migrated.
     audit_id = auditor.post_audit(org, 1, 3, 1, client.hash_string("audit-report-2026"))

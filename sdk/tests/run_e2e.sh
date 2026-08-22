@@ -20,28 +20,21 @@ sleep 2
 trap 'kill "$ANVIL_PID" 2>/dev/null || true' EXIT
 
 echo "==> Deploying contracts"
+DEPLOY_LOG=$(mktemp)
 (cd "$ROOT/../contracts" && QTRUST_DEPLOYER_PRIVATE_KEY="$DEPLOYER_KEY" \
-  forge script script/Deploy.s.sol --rpc-url "http://127.0.0.1:${ANVIL_PORT}" --broadcast > /dev/null)
+  forge script script/Deploy.s.sol --rpc-url "http://127.0.0.1:${ANVIL_PORT}" --broadcast 2>&1 | tee "$DEPLOY_LOG")
 
-echo "==> Extracting deployed addresses from broadcast"
-ADDRS="$(python3 - "$ROOT/../contracts" <<'EOF'
-import json, sys
-from pathlib import Path
-root = Path(sys.argv[1])
-latest = root / "broadcast/Deploy.s.sol/84532/run-latest.json"
-data = json.loads(latest.read_text())
-for tx in data["transactions"]:
-    name = tx.get("contractName", "")
-    if name and tx.get("transactionType") == "CREATE":
-        print(f"{name}={tx['contractAddress']}")
-EOF
-)"
+echo "==> Extracting proxy addresses from deploy output"
+export QTRUST_ASSET_REGISTRY_ADDRESS="$(grep 'AssetRegistry proxy:' "$DEPLOY_LOG" | awk '{print $NF}')"
+export QTRUST_VENDOR_REGISTRY_ADDRESS="$(grep 'VendorRegistry proxy:' "$DEPLOY_LOG" | awk '{print $NF}')"
+export QTRUST_MIGRATION_REGISTRY_ADDRESS="$(grep 'MigrationRegistry proxy:' "$DEPLOY_LOG" | awk '{print $NF}')"
+export QTRUST_AUDIT_REGISTRY_ADDRESS="$(grep 'AuditRegistry proxy:' "$DEPLOY_LOG" | awk '{print $NF}')"
+rm -f "$DEPLOY_LOG"
 
-echo "$ADDRS"
-export QTRUST_ASSET_REGISTRY_ADDRESS="$(echo "$ADDRS" | awk -F= '/^AssetRegistry=/{print $2}')"
-export QTRUST_VENDOR_REGISTRY_ADDRESS="$(echo "$ADDRS" | awk -F= '/^VendorRegistry=/{print $2}')"
-export QTRUST_MIGRATION_REGISTRY_ADDRESS="$(echo "$ADDRS" | awk -F= '/^MigrationRegistry=/{print $2}')"
-export QTRUST_AUDIT_REGISTRY_ADDRESS="$(echo "$ADDRS" | awk -F= '/^AuditRegistry=/{print $2}')"
+echo "  AssetRegistry:       $QTRUST_ASSET_REGISTRY_ADDRESS"
+echo "  VendorRegistry:      $QTRUST_VENDOR_REGISTRY_ADDRESS"
+echo "  MigrationRegistry:   $QTRUST_MIGRATION_REGISTRY_ADDRESS"
+echo "  AuditRegistry:       $QTRUST_AUDIT_REGISTRY_ADDRESS"
 
 echo "==> Running SDK E2E test"
 python3 "$ROOT/tests/e2e_anvil.py"
