@@ -43,4 +43,11 @@ __all__ = [
     "scan_source_file",
     "scan_ssh_directory",
     "trust_findings_to_dict",
+    "run_conformance_tests",
+    "generate_kyverno_policies",
+    "generate_gatekeeper_policies",
+    "probe_tls_endpoint",
+    "REMEDIATION_DB",
+    "scan_with_ast",
+    "analyze_pcap",
 ]

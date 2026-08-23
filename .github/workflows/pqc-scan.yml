@@ -1,0 +1,163 @@
+name: PQC Quantum Readiness Scan
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly Monday 6am UTC
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
+jobs:
+  pqc-scan:
+    name: Post-Quantum Cryptography Scan
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        language: [python, javascript, go, java, rust, csharp]
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Q-Trust Inspector
+        run: pip install -e ./inspector
+
+      - name: Run PQC Source Scan
+        run: |
+          crypto-inspector scan-source . \
+            --language ${{ matrix.language }} \
+            --format sarif \
+            --output scan-${{ matrix.language }}.sarif \
+            --cyclonedx cbom-${{ matrix.language }}.json \
+            --risk \
+            --compliance all \
+            || true
+
+      - name: Upload SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: scan-${{ matrix.language }}.sarif
+          category: pqc-${{ matrix.language }}
+
+      - name: Upload CBOM Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbom-${{ matrix.language }}
+          path: cbom-${{ matrix.language }}.json
+          retention-days: 30
+
+      - name: Check Compliance Gate
+        run: |
+          crypto-inspector scan-source . \
+            --language ${{ matrix.language }} \
+            --format json \
+            --output results.json \
+            --risk \
+            --compliance cnsa-2.0 \
+            --ci-gate high \
+            || echo "::warning::PQC compliance gate found findings"
+
+  network-scan:
+    name: TLS/SSH Endpoint Scan
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'push'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Q-Trust Inspector
+        run: pip install -e ./inspector
+
+      - name: Scan TLS Endpoints
+        run: |
+          # Add your domain(s) here
+          for target in "${{ vars.PQC_SCAN_TARGETS || 'example.com' }}" ; do
+            crypto-inspector scan "$target" \
+              --format sarif \
+              --output tls-scan.sarif \
+              --cyclonedx tls-cbom.json \
+              --deep-probe \
+              --risk || true
+          done
+
+      - name: Upload TLS SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: tls-scan.sarif
+          category: pqc-tls
+
+  report:
+    name: Generate PQC Report
+    runs-on: ubuntu-22.04
+    needs: [pqc-scan, network-scan]
+    if: always()
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Q-Trust Inspector
+        run: pip install -e ./inspector
+
+      - name: Download all CBOMs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: cbom-*
+          merge-multiple: true
+
+      - name: Generate Executive Report
+        run: |
+          python -c "
+          import json, glob
+          findings = []
+          for f in glob.glob('cbom-*.json'):
+              try:
+                  data = json.load(f)
+                  findings.extend(data.get('components', []))
+              except: pass
+          
+          total = len(findings)
+          pqc_ready = sum(1 for c in findings if c.get('quantumSafe', False))
+          score = max(0, 100 - (total * 2) + (pqc_ready * 5)) if total > 0 else 100
+          
+          report = {
+              'quantum_readiness_score': score,
+              'total_assets': total,
+              'pqc_ready': pqc_ready,
+              'vulnerable': total - pqc_ready,
+          }
+          print(json.dumps(report, indent=2))
+          with open('pqc-report.json', 'w') as f:
+              json.dump(report, f, indent=2)
+          "
+
+      - name: Upload Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: pqc-report
+          path: pqc-report.json

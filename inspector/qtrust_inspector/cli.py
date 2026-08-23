@@ -22,6 +22,10 @@ app = typer.Typer(
 )
 console = Console()
 
+# Create sub-command groups
+mcp_app = typer.Typer(help="MCP server for AI coding agents")
+app.add_typer(mcp_app, name="mcp")
+
 try:
     from qtrust import QTrustClient
     from qtrust.schema import CBOM
@@ -196,6 +200,10 @@ def compliance_check(
         "fisma": ComplianceFramework.FISMA,
         "fedramp": ComplianceFramework.FEDRAMP,
         "cmmc": ComplianceFramework.CMMC,
+        "pci": ComplianceFramework.PCI_DSS_4_0,
+        "bsi": ComplianceFramework.BSI_TR_02102,
+        "ncsc": ComplianceFramework.NCSC_UK,
+        "asd": ComplianceFramework.ASD_ISM,
     }
     frameworks = [fw_map[f.strip()] for f in framework.split(",") if f.strip() in fw_map]
     data = json.loads(scan_file.read_text())
@@ -323,6 +331,147 @@ def retire(asset_id: str = typer.Argument(...)):
     client = _get_client()
     tx_hash = client.retire_asset(asset_id)
     console.print(f"[bold green]Asset retired[/bold green] tx={tx_hash}")
+
+
+@app.command()
+def pcap_scan(
+    path: Path = typer.Argument(..., help="Path to PCAP file"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o"),
+    deep: bool = typer.Option(False, "--deep", help="Deep analysis with ML-KEM/SLH-DSA detection"),
+    top_n: int = typer.Option(10, "--top", help="Top N flows to display"),
+):
+    """Analyze PCAP capture for Harvest-Now-Decrypt-Later exposure scoring."""
+    from .pcap_scanner import analyze_pcap
+    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as progress:
+        progress.add_task(description=f"Analyzing {path}...", total=None)
+        result = analyze_pcap(str(path), deep_scan=deep, top_n=top_n)
+    console.print(f"\n[bold cyan]PCAP Analysis: {result['summary']['total_flows']} flows[/bold cyan]")
+    console.print(f"  High-risk: {result['summary']['high_risk_flows']}")
+    console.print(f"  HNDL Score: {result['summary']['average_hndl_score']:.1f}/100")
+    if output:
+        output.write_text(json.dumps(result, indent=2))
+        console.print(f"[green]Saved to {output}[/green]")
+
+
+@app.command()
+def auto_remediate(
+    algorithm: str = typer.Argument(..., help="Vulnerable algorithm to remediate"),
+    language: str = typer.Option("python", "--language", "-l"),
+    file_path: Optional[Path] = typer.Option(None, "--file", "-f"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o"),
+    patch: bool = typer.Option(False, "--patch", help="Apply patches directly to files"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+    backup: bool = typer.Option(True, "--backup/--no-backup"),
+):
+    """Generate PQC migration code snippets for vulnerable algorithms."""
+    from .remediation import generate_remediations
+    ext_map = {"python": ".py", "javascript": ".js", "go": ".go", "java": ".java", "rust": ".rs", "c": ".c", "csharp": ".cs", "php": ".php", "swift": ".swift", "ruby": ".rb", "kotlin": ".kt"}
+    ext = ext_map.get(language, ".py")
+    findings = [{"algorithm": algorithm, "file_path": f"crypto_ref{ext}", "language": language}]
+    results = generate_remediations(findings)
+    console.print(f"\n[bold cyan]Remediation Results ({len(results)} matches):[/bold cyan]")
+    for r in results:
+        console.print(f"  Algorithm: {r.algorithm}")
+        console.print(f"  Replacement: {r.replacement_algorithm}")
+        console.print(f"  NIST: {r.nist_standard}")
+        console.print(f"  Explanation: {r.explanation}")
+        if r.original_code:
+            console.print(f"\n[bold yellow]Before:[/bold yellow]")
+            console.print(r.original_code)
+            console.print(f"\n[bold green]After:[/bold green]")
+            console.print(r.remediated_code)
+    if not results:
+        console.print(f"  No remediation patterns found for '{algorithm}'")
+    if output:
+        import json as _json
+        output_data = [{"algorithm": r.algorithm, "replacement": r.replacement_algorithm, "nist": r.nist_standard, "explanation": r.explanation, "diff": r.diff} for r in results]
+        output.write_text(_json.dumps(output_data, indent=2))
+        console.print(f"\n[green]Saved to {output}[/green]")
+
+
+@app.command()
+def conformance(
+    algorithm: str = typer.Argument(..., help="PQC algorithm: ML-KEM, ML-DSA, SLH-DSA"),
+    level: Optional[str] = typer.Option(None, "--level", help="Security level (512/768/1024 for ML-KEM)"),
+    test_vectors: Optional[Path] = typer.Option(None, "--test-vectors", help="Path to NIST test vectors"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o"),
+):
+    """Run FIPS 203/204/205 conformance tests for PQC implementations."""
+    from .conformance import run_conformance_tests
+    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as progress:
+        progress.add_task(description=f"Running conformance tests for {algorithm}...", total=None)
+        result = run_conformance_tests(algorithm, level, str(test_vectors) if test_vectors else None)
+    console.print(f"\n[bold cyan]Conformance: {result.algorithm.value}[/bold cyan]")
+    console.print(f"  Score: {result.conformance_score:.0f}%")
+    console.print(f"  Tests: {result.passed} passed, {result.failed} failed, {result.skipped} skipped")
+    console.print(f"  FIPS Compliant: {'YES' if result.fips_compliant else 'NO'}")
+    for test in result.tests:
+        status_color = "green" if test.status.value == "PASS" else "red" if test.status.value == "FAIL" else "yellow"
+        console.print(f"  [{status_color}]{test.status.value}[/{status_color}] {test.name}")
+    if output:
+        output.write_text(json.dumps(result.to_dict(), indent=2))
+        console.print(f"[green]Saved to {output}[/green]")
+
+
+@app.command()
+def k8s_policy(
+    engine: str = typer.Option("kyverno", "--engine", "-e", help="Policy engine: kyverno, gatekeeper, all"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o"),
+):
+    """Generate Kubernetes PQC enforcement policies."""
+    from .k8s_policy import generate_kyverno_policies, generate_gatekeeper_policies, generate_policy_summary, format_policies_yaml
+    if engine == "all":
+        policies = generate_kyverno_policies() + generate_gatekeeper_policies()
+    elif engine == "kyverno":
+        policies = generate_kyverno_policies()
+    else:
+        policies = generate_gatekeeper_policies()
+    summary = generate_policy_summary(policies)
+    console.print(f"\n[bold cyan]Generated {summary['total_policies']} PQC policies[/bold cyan]")
+    for eng, stats in summary["engines"].items():
+        console.print(f"  {eng}: {stats['count']} policies (enforce={stats.get('enforce', 0)}, audit={stats.get('audit', 0)}, warn={stats.get('warn', 0)})")
+    console.print(f"  Protected resources: {', '.join(summary['protected_resources'])}")
+    if output:
+        yaml_content = format_policies_yaml(policies, engine if engine != "all" else None)
+        output.write_text(yaml_content)
+        console.print(f"[green]Saved to {output}[/green]")
+
+
+@app.command()
+def deep_probe(
+    host: str = typer.Argument(..., help="Target hostname"),
+    port: int = typer.Option(443, "--port", "-p"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o"),
+    groups: bool = typer.Option(True, "--groups/--no-groups", help="Enumerate TLS groups"),
+    sigalgs: bool = typer.Option(True, "--sigalgs/--no-sigalgs", help="Enumerate signature algorithms"),
+    preference: bool = typer.Option(True, "--preference/--no-preference", help="Detect server cipher preference"),
+):
+    """Deep TLS endpoint probing with PQC codepoint detection."""
+    from .tls_probe import probe_tls_endpoint
+    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as progress:
+        progress.add_task(description=f"Probing {host}:{port}...", total=None)
+        result = probe_tls_endpoint(host, port, enumerate_groups=groups, enumerate_sigalgs=sigalgs, detect_server_preference=preference)
+    console.print(f"\n[bold cyan]TLS Probe: {host}:{port}[/bold cyan]")
+    console.print(f"  TLS Version: {result.get('tls_version', 'unknown')}")
+    console.print(f"  Cipher Suite: {result.get('cipher_suite', 'unknown')}")
+    console.print(f"  Risk Level: {result.get('risk_level', 'unknown')}")
+    console.print(f"  PQC KEM Detected: {result.get('pqc_kem_detected', False)}")
+    console.print(f"  PQC Hybrid Detected: {result.get('pqc_hybrid_detected', False)}")
+    if result.get("recommendations"):
+        console.print("\n[bold yellow]Recommendations:[/bold yellow]")
+        for rec in result["recommendations"]:
+            console.print(f"  - {rec}")
+    if output:
+        output.write_text(json.dumps(result, indent=2))
+        console.print(f"[green]Saved to {output}[/green]")
+
+
+@mcp_app.command("start")
+def mcp_start():
+    """Start the MCP server for AI coding agents (Claude, Copilot, Cursor)."""
+    from .mcp_server import run_mcp_server
+    console.print("[bold cyan]Starting Q-Trust MCP Server...[/bold cyan]")
+    run_mcp_server()
 
 
 def _is_cidr(target: str) -> bool:

@@ -18,6 +18,10 @@ class ComplianceFramework(str, Enum):
     FISMA = "FISMA"
     FEDRAMP = "FEDRAMP"
     CMMC = "CMMC"
+    PCI_DSS_4_0 = "PCI_DSS_4_0"
+    BSI_TR_02102 = "BSI_TR_02102"
+    NCSC_UK = "NCSC_UK"
+    ASD_ISM = "ASD_ISM"
 
 
 class ComplianceStatus(str, Enum):
@@ -620,6 +624,342 @@ def _cmmc_rules(finding: AssetFinding) -> list[ComplianceRule]:
     return rules
 
 
+def _pci_dss_4_0_rules(finding: AssetFinding) -> list[ComplianceRule]:
+    rules: list[ComplianceRule] = []
+    alg = _normalise_alg(finding.algorithm)
+    ksize = _extract_key_size(finding)
+
+    # Req 12.3.3: Cryptographic inventory mandatory
+    rules.append(ComplianceRule(
+        framework=ComplianceFramework.PCI_DSS_4_0,
+        rule_id="PCI-DSS-12.3.3",
+        rule_name="Cryptographic inventory mandatory",
+        description="PCI DSS 4.0 Req 12.3.3 requires maintaining an inventory of all cryptographic algorithms and keys (effective 2025-03).",
+        severity=Severity.HIGH,
+        status=ComplianceStatus.PARTIAL,
+        evidence=f"Algorithm detected: {finding.algorithm}",
+        recommendation="Maintain a documented cryptographic inventory covering all algorithms, keys, and their locations.",
+    ))
+
+    # RSA >= 2048 for encryption
+    if "rsa" in alg or _normalise_alg(finding.key_type) == "rsa":
+        if ksize is not None:
+            ok = ksize >= 2048
+            rules.append(ComplianceRule(
+                framework=ComplianceFramework.PCI_DSS_4_0,
+                rule_id="PCI-DSS-RSA-ENCRYPT",
+                rule_name="RSA encryption key size >= 2048 bits",
+                description="PCI DSS 4.0 requires RSA keys for encryption to be at least 2048 bits.",
+                severity=Severity.HIGH,
+                status=ComplianceStatus.COMPLIANT if ok else ComplianceStatus.NON_COMPLIANT,
+                evidence=f"RSA key size {ksize} bits",
+                recommendation="Upgrade to RSA-2048 or larger." if not ok else "",
+            ))
+
+    # No MD5, SHA-1 for digital signatures
+    if _is_hash(finding):
+        forbidden = {"md5", "sha1"}
+        is_forbidden = any(f in alg for f in forbidden)
+        rules.append(ComplianceRule(
+            framework=ComplianceFramework.PCI_DSS_4_0,
+            rule_id="PCI-DSS-SIG-HASH",
+            rule_name="No MD5 or SHA-1 for digital signatures",
+            description="PCI DSS 4.0 prohibits MD5 and SHA-1 for digital signatures.",
+            severity=Severity.CRITICAL,
+            status=ComplianceStatus.NON_COMPLIANT if is_forbidden else ComplianceStatus.COMPLIANT,
+            evidence=f"Hash algorithm: {finding.algorithm}",
+            recommendation="Replace MD5/SHA-1 with SHA-256 or stronger for signatures." if is_forbidden else "",
+        ))
+
+    # AES-128+ or 3DES minimum for symmetric
+    if _is_symmetric(finding):
+        is_aes_ok = "aes_128" in alg or "aes_192" in alg or "aes_256" in alg
+        is_3des = "3des" in alg or "triple_des" in alg
+        is_forbidden = any(f in alg for f in ("des", "rc4"))
+        ok = is_aes_ok or (is_3des and not is_forbidden)
+        rules.append(ComplianceRule(
+            framework=ComplianceFramework.PCI_DSS_4_0,
+            rule_id="PCI-DSS-SYMM",
+            rule_name="AES-128+ or 3DES minimum for symmetric encryption",
+            description="PCI DSS 4.0 requires AES-128 or stronger, or 3DES as a minimum for symmetric encryption.",
+            severity=Severity.HIGH,
+            status=ComplianceStatus.COMPLIANT if ok else ComplianceStatus.NON_COMPLIANT,
+            evidence=f"Symmetric algorithm: {finding.algorithm}, key size: {ksize}",
+            recommendation="Migrate to AES-128 or AES-256." if not ok else "",
+        ))
+
+    # TLS 1.2+ required
+    if _is_tls(finding):
+        tls_ok = any(t in alg for t in ("tls_1_3", "tls_1_2", "tlsv13", "tlsv12"))
+        rules.append(ComplianceRule(
+            framework=ComplianceFramework.PCI_DSS_4_0,
+            rule_id="PCI-DSS-TLS",
+            rule_name="TLS 1.2 or higher required",
+            description="PCI DSS 4.0 requires TLS 1.2 or higher for all cardholder data transmissions.",
+            severity=Severity.CRITICAL,
+            status=ComplianceStatus.COMPLIANT if tls_ok else ComplianceStatus.NON_COMPLIANT,
+            evidence=f"TLS protocol: {finding.algorithm}",
+            recommendation="Upgrade to TLS 1.2 or 1.3." if not tls_ok else "",
+        ))
+
+    return rules
+
+
+def _bsi_tr_02102_rules(finding: AssetFinding) -> list[ComplianceRule]:
+    rules: list[ComplianceRule] = []
+    alg = _normalise_alg(finding.algorithm)
+    ksize = _extract_key_size(finding)
+
+    # RSA >= 2048 or ECDSA >= P-256
+    if "rsa" in alg or _normalise_alg(finding.key_type) == "rsa":
+        if ksize is not None:
+            ok = ksize >= 2048
+            rules.append(ComplianceRule(
+                framework=ComplianceFramework.BSI_TR_02102,
+                rule_id="BSI-RSA-SIZE",
+                rule_name="RSA key size >= 2048 bits",
+                description="BSI TR-02102-1 requires RSA keys of at least 2048 bits.",
+                severity=Severity.HIGH,
+                status=ComplianceStatus.COMPLIANT if ok else ComplianceStatus.NON_COMPLIANT,
+                evidence=f"RSA key size {ksize} bits",
+                recommendation="Upgrade to RSA-2048 or larger." if not ok else "",
+            ))
+
+    if "ecdsa" in alg or "ec" in _normalise_alg(finding.key_type or ""):
+        weak_curves = {"p_192", "p192", "secp192r1", "sect163"}
+        is_weak = any(w in alg for w in weak_curves)
+        rules.append(ComplianceRule(
+            framework=ComplianceFramework.BSI_TR_02102,
+            rule_id="BSI-ECDSA-SIZE",
+            rule_name="ECDSA key size >= P-256",
+            description="BSI TR-02102-1 requires ECDSA keys to be at least P-256.",
+            severity=Severity.HIGH,
+            status=ComplianceStatus.NON_COMPLIANT if is_weak else ComplianceStatus.COMPLIANT,
+            evidence=f"ECDSA curve: {finding.algorithm}",
+            recommendation="Upgrade to P-256 or stronger curve." if is_weak else "",
+        ))
+
+    # SHA-256+ for signatures
+    if _is_hash(finding):
+        ok = any(s in alg for s in ("sha256", "sha_256", "sha384", "sha_384", "sha512", "sha_512", "sha3_256", "sha3_512"))
+        weak = any(f in alg for f in ("md5", "sha1"))
+        rules.append(ComplianceRule(
+            framework=ComplianceFramework.BSI_TR_02102,
+            rule_id="BSI-HASH",
+            rule_name="SHA-256 or stronger for signatures",
+            description="BSI TR-02102-1 requires SHA-256 or stronger for hashing and digital signatures.",
+            severity=Severity.HIGH,
+            status=ComplianceStatus.COMPLIANT if ok else (ComplianceStatus.NON_COMPLIANT if weak else ComplianceStatus.PARTIAL),
+            evidence=f"Hash algorithm: {finding.algorithm}",
+            recommendation="Migrate to SHA-256 or stronger." if not ok else "",
+        ))
+
+    # AES-128+ or ChaCha20-Poly1305
+    if _is_symmetric(finding):
+        is_aes_ok = "aes_128" in alg or "aes_192" in alg or "aes_256" in alg
+        is_chacha = "chacha20" in alg or "chacha" in alg
+        is_forbidden = any(f in alg for f in ("des", "3des", "rc4"))
+        ok = is_aes_ok or is_chacha
+        rules.append(ComplianceRule(
+            framework=ComplianceFramework.BSI_TR_02102,
+            rule_id="BSI-SYMM",
+            rule_name="AES-128+ or ChaCha20-Poly1305 for symmetric encryption",
+            description="BSI TR-02102-1 requires AES-128 or stronger, or ChaCha20-Poly1305.",
+            severity=Severity.HIGH,
+            status=ComplianceStatus.COMPLIANT if ok else ComplianceStatus.NON_COMPLIANT,
+            evidence=f"Symmetric algorithm: {finding.algorithm}, key size: {ksize}",
+            recommendation="Migrate to AES-128/256 or ChaCha20-Poly1305." if not ok else "",
+        ))
+
+    # Post-quantum alternatives (FrodoKEM, Classic McEliece, HQC)
+    if _is_key_exchange(finding):
+        pq_approved = {"frodo", "classic_mceliece", "mceliece", "hqc"}
+        is_pq_approved = any(p in alg for p in pq_approved)
+        rules.append(ComplianceRule(
+            framework=ComplianceFramework.BSI_TR_02102,
+            rule_id="BSI-PQ-ALTS",
+            rule_name="Post-quantum key exchange alternatives",
+            description="BSI TR-02102-1 approves FrodoKEM, Classic McEliece, and HQC as post-quantum key exchange alternatives.",
+            severity=Severity.MEDIUM,
+            status=ComplianceStatus.COMPLIANT if is_pq_approved else ComplianceStatus.PARTIAL,
+            evidence=f"Key exchange algorithm: {finding.algorithm}",
+            recommendation="Consider FrodoKEM, Classic McEliece, or HQC for post-quantum key exchange." if not is_pq_approved else "",
+        ))
+
+    # TLS 1.2+ required
+    if _is_tls(finding):
+        tls_ok = any(t in alg for t in ("tls_1_3", "tls_1_2", "tlsv13", "tlsv12"))
+        rules.append(ComplianceRule(
+            framework=ComplianceFramework.BSI_TR_02102,
+            rule_id="BSI-TLS",
+            rule_name="TLS 1.2 or higher required",
+            description="BSI TR-02102-1 requires TLS 1.2 or higher.",
+            severity=Severity.CRITICAL,
+            status=ComplianceStatus.COMPLIANT if tls_ok else ComplianceStatus.NON_COMPLIANT,
+            evidence=f"TLS protocol: {finding.algorithm}",
+            recommendation="Upgrade to TLS 1.2 or 1.3." if not tls_ok else "",
+        ))
+
+    return rules
+
+
+def _ncsc_uk_rules(finding: AssetFinding) -> list[ComplianceRule]:
+    rules: list[ComplianceRule] = []
+    alg = _normalise_alg(finding.algorithm)
+    ksize = _extract_key_size(finding)
+
+    # All NIST PQC approved (ML-KEM, ML-DSA, SLH-DSA)
+    if _is_key_exchange(finding) or _is_asymmetric(finding):
+        pq_approved = {"ml_kem", "ml_dsa", "slh_dsa"}
+        is_pq_approved = any(p in alg for p in pq_approved)
+        rules.append(ComplianceRule(
+            framework=ComplianceFramework.NCSC_UK,
+            rule_id="NCSC-PQ-ALG",
+            rule_name="NIST PQC algorithms approved (ML-KEM, ML-DSA, SLH-DSA)",
+            description="NCSC UK approves NIST PQC algorithms: ML-KEM, ML-DSA, and SLH-DSA.",
+            severity=Severity.HIGH,
+            status=ComplianceStatus.COMPLIANT if is_pq_approved else ComplianceStatus.PARTIAL,
+            evidence=f"Algorithm: {finding.algorithm}",
+            recommendation="Plan migration to ML-KEM, ML-DSA, or SLH-DSA per NCSC guidance." if not is_pq_approved else "",
+        ))
+
+    # Phased deadlines: 2028/2031/2035
+    rules.append(ComplianceRule(
+        framework=ComplianceFramework.NCSC_UK,
+        rule_id="NCSC-PHASED-DEADLINE",
+        rule_name="PQC migration phased deadlines (2028/2031/2035)",
+        description="NCSC UK mandates PQC migration in phases: TLS/web by 2028, critical infrastructure by 2031, all systems by 2035.",
+        severity=Severity.MEDIUM,
+        status=ComplianceStatus.PARTIAL,
+        evidence="Timeline compliance requires organisational planning assessment.",
+        recommendation="Develop a phased PQC migration plan aligned with NCSC UK deadlines.",
+    ))
+
+    # RSA >= 3072 or ECDSA >= P-384 for signatures
+    if "rsa" in alg or _normalise_alg(finding.key_type) == "rsa":
+        if ksize is not None:
+            ok = ksize >= 3072
+            rules.append(ComplianceRule(
+                framework=ComplianceFramework.NCSC_UK,
+                rule_id="NCSC-RSA-SIGN",
+                rule_name="RSA signature key size >= 3072 bits",
+                description="NCSC UK requires RSA keys for signatures to be at least 3072 bits.",
+                severity=Severity.HIGH,
+                status=ComplianceStatus.COMPLIANT if ok else ComplianceStatus.NON_COMPLIANT,
+                evidence=f"RSA key size {ksize} bits",
+                recommendation="Upgrade to RSA-3072 or larger for digital signatures." if not ok else "",
+            ))
+
+    if "ecdsa" in alg or "ec" in _normalise_alg(finding.key_type or ""):
+        weak_curves = {"p_192", "p192", "secp192r1", "p_256", "p256"}
+        is_weak = any(w in alg for w in weak_curves)
+        rules.append(ComplianceRule(
+            framework=ComplianceFramework.NCSC_UK,
+            rule_id="NCSC-ECDSA-SIGN",
+            rule_name="ECDSA signature key size >= P-384",
+            description="NCSC UK requires ECDSA keys for signatures to be at least P-384.",
+            severity=Severity.HIGH,
+            status=ComplianceStatus.NON_COMPLIANT if is_weak else ComplianceStatus.COMPLIANT,
+            evidence=f"ECDSA curve: {finding.algorithm}",
+            recommendation="Upgrade to P-384 or stronger curve for digital signatures." if is_weak else "",
+        ))
+
+    # No MD5, SHA-1
+    if _is_hash(finding):
+        weak = {"md5", "sha1"}
+        is_weak = any(w in alg for w in weak)
+        rules.append(ComplianceRule(
+            framework=ComplianceFramework.NCSC_UK,
+            rule_id="NCSC-NO-WEAK-HASH",
+            rule_name="No MD5 or SHA-1 allowed",
+            description="NCSC UK prohibits MD5 and SHA-1 for all cryptographic uses.",
+            severity=Severity.CRITICAL,
+            status=ComplianceStatus.NON_COMPLIANT if is_weak else ComplianceStatus.COMPLIANT,
+            evidence=f"Hash algorithm: {finding.algorithm}",
+            recommendation="Replace MD5/SHA-1 with SHA-256 or stronger." if is_weak else "",
+        ))
+
+    return rules
+
+
+def _asd_ism_rules(finding: AssetFinding) -> list[ComplianceRule]:
+    rules: list[ComplianceRule] = []
+    alg = _normalise_alg(finding.algorithm)
+    ksize = _extract_key_size(finding)
+
+    # ML-KEM-1024 + ML-DSA-87 only (strictest)
+    if _is_key_exchange(finding) or _is_asymmetric(finding):
+        ok_kem = "ml_kem_1024" in alg or "mlkem1024" in alg
+        rules.append(ComplianceRule(
+            framework=ComplianceFramework.ASD_ISM,
+            rule_id="ASD-KEM",
+            rule_name="ML-KEM-1024 required for key exchange",
+            description="ASD ISM requires ML-KEM-1024 as the sole post-quantum key encapsulation mechanism.",
+            severity=Severity.CRITICAL,
+            status=ComplianceStatus.COMPLIANT if ok_kem else ComplianceStatus.NON_COMPLIANT,
+            evidence=f"Key exchange algorithm: {finding.algorithm}",
+            recommendation="Migrate to ML-KEM-1024 for key encapsulation." if not ok_kem else "",
+        ))
+
+        ok_sig = "ml_dsa_87" in alg or "mldsa87" in alg
+        rules.append(ComplianceRule(
+            framework=ComplianceFramework.ASD_ISM,
+            rule_id="ASD-SIG",
+            rule_name="ML-DSA-87 required for digital signatures",
+            description="ASD ISM requires ML-DSA-87 as the sole post-quantum digital signature algorithm.",
+            severity=Severity.CRITICAL,
+            status=ComplianceStatus.COMPLIANT if ok_sig else ComplianceStatus.NON_COMPLIANT,
+            evidence=f"Signature algorithm: {finding.algorithm}",
+            recommendation="Migrate to ML-DSA-87 for digital signatures." if not ok_sig else "",
+        ))
+
+    # Classical asymmetric cease 2030
+    classical_asymmetric = {"rsa", "ecdsa", "dsa", "ed25519", "ed448"}
+    is_classical = any(c in alg for c in classical_asymmetric)
+    if is_classical:
+        rules.append(ComplianceRule(
+            framework=ComplianceFramework.ASD_ISM,
+            rule_id="ASD-CLASSICAL-CEASE",
+            rule_name="Classical asymmetric algorithms cease 2030",
+            description="ASD ISM mandates ceasing use of classical asymmetric algorithms (RSA, ECDSA, etc.) by 2030.",
+            severity=Severity.HIGH,
+            status=ComplianceStatus.PARTIAL,
+            evidence=f"Classical algorithm detected: {finding.algorithm}",
+            recommendation="Plan migration to ML-KEM-1024 and ML-DSA-87 before 2030 deadline.",
+        ))
+
+    # AES-256 only
+    if _is_symmetric(finding):
+        ok = "aes_256" in alg
+        rules.append(ComplianceRule(
+            framework=ComplianceFramework.ASD_ISM,
+            rule_id="ASD-SYMM",
+            rule_name="AES-256 only for symmetric encryption",
+            description="ASD ISM requires AES-256 exclusively for symmetric encryption.",
+            severity=Severity.CRITICAL,
+            status=ComplianceStatus.COMPLIANT if ok else ComplianceStatus.NON_COMPLIANT,
+            evidence=f"Symmetric algorithm: {finding.algorithm}",
+            recommendation="Migrate to AES-256 for all symmetric encryption." if not ok else "",
+        ))
+
+    # SHA-256+ only
+    if _is_hash(finding):
+        ok = any(s in alg for s in ("sha256", "sha_256", "sha384", "sha_384", "sha512", "sha_512", "sha3_256", "sha3_512"))
+        weak = any(f in alg for f in ("md5", "sha1"))
+        rules.append(ComplianceRule(
+            framework=ComplianceFramework.ASD_ISM,
+            rule_id="ASD-HASH",
+            rule_name="SHA-256 or stronger only",
+            description="ASD ISM requires SHA-256 or stronger hashing algorithms.",
+            severity=Severity.HIGH,
+            status=ComplianceStatus.COMPLIANT if ok else (ComplianceStatus.NON_COMPLIANT if weak else ComplianceStatus.PARTIAL),
+            evidence=f"Hash algorithm: {finding.algorithm}",
+            recommendation="Migrate to SHA-256 or stronger." if not ok else "",
+        ))
+
+    return rules
+
+
 _FRAMEWORK_RULE_MAP: dict[
     ComplianceFramework,
     tuple[ComplianceFramework, ...],
@@ -651,6 +991,10 @@ class ComplianceEngine:
         ComplianceFramework.FISMA: _fisma_rules,
         ComplianceFramework.FEDRAMP: _fedramp_rules,
         ComplianceFramework.CMMC: _cmmc_rules,
+        ComplianceFramework.PCI_DSS_4_0: _pci_dss_4_0_rules,
+        ComplianceFramework.BSI_TR_02102: _bsi_tr_02102_rules,
+        ComplianceFramework.NCSC_UK: _ncsc_uk_rules,
+        ComplianceFramework.ASD_ISM: _asd_ism_rules,
     }
 
     def __init__(self, frameworks: list[ComplianceFramework] | None = None):

@@ -1,0 +1,56 @@
+name: 'Q-Trust PQC Scanner'
+description: 'Scan codebases for quantum-vulnerable cryptography with risk scoring and compliance checking'
+author: 'humoge7502'
+branding:
+  icon: 'shield'
+  color: 'blue'
+inputs:
+  path:
+    description: 'Path to scan'
+    required: true
+    default: '.'
+  format:
+    description: 'Output format: sarif, json, cbom'
+    required: false
+    default: 'sarif'
+  compliance:
+    description: 'Compliance frameworks to check'
+    required: false
+    default: 'cnsa-2.0'
+  ci-mode:
+    description: 'CI mode: advisory or blocking'
+    required: false
+    default: 'advisory'
+  threshold:
+    description: 'Severity threshold for CI gate'
+    required: false
+    default: 'high'
+  upload-sarif:
+    description: 'Upload SARIF to GitHub Security'
+    required: false
+    default: 'true'
+runs:
+  using: 'composite'
+  steps:
+    - name: Install Q-Trust Inspector
+      shell: bash
+      run: pip install -e ./inspector
+
+    - name: Run PQC Scan
+      shell: bash
+      run: |
+        crypto-inspector scan-source ${{ inputs.path }} \
+          --format ${{ inputs.format }} \
+          --output scan-results.${{ inputs.format }} \
+          --cyclonedx cbom.json \
+          --risk \
+          --compliance ${{ inputs.compliance }} \
+          --ci-gate ${{ inputs.threshold }} \
+          || { if [ "${{ inputs.ci-mode }}" = "blocking" ]; then exit 1; fi; }
+
+    - name: Upload SARIF
+      if: inputs.upload-sarif == 'true'
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: scan-results.sarif
+        category: pqc-scan

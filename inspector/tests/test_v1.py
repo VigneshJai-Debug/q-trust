@@ -620,3 +620,190 @@ class TestManifestScanner:
         manifest = "[project]\ndependencies = [\n  'cryptography>=3.0',\n  'requests>=2.0',\n]\n"
         findings = scan_manifest(manifest, manifest_type="requirements.txt")
         assert len(findings) >= 1
+
+
+# ---------------------------------------------------------------------------
+# 10. PCAP scanner
+# ---------------------------------------------------------------------------
+
+class TestPCAPScanner:
+    def test_analyze_pcap_nonexistent_file(self):
+        from qtrust_inspector.pcap_scanner import analyze_pcap
+        result = analyze_pcap("/nonexistent/file.pcap")
+        assert "error" in result or result.get("flows") == []
+
+    def test_analyze_pcap_structure(self):
+        from qtrust_inspector.pcap_scanner import analyze_pcap
+        result = analyze_pcap("/nonexistent/file.pcap")
+        assert "flows" in result
+        assert isinstance(result["flows"], list)
+
+    def test_analyze_pcap_returns_dict(self):
+        from qtrust_inspector.pcap_scanner import analyze_pcap
+        result = analyze_pcap("/nonexistent/file.pcap")
+        assert isinstance(result, dict)
+
+
+# ---------------------------------------------------------------------------
+# 11. Remediation module
+# ---------------------------------------------------------------------------
+
+class TestRemediation:
+    def test_remediation_db_has_languages(self):
+        from qtrust_inspector.remediation import REMEDIATION_DB
+        assert "python" in REMEDIATION_DB
+        assert "javascript" in REMEDIATION_DB
+        assert "go" in REMEDIATION_DB
+        assert "rust" in REMEDIATION_DB
+
+    def test_remediation_has_required_fields(self):
+        from qtrust_inspector.remediation import REMEDIATION_DB
+        for lang, algos in REMEDIATION_DB.items():
+            for algo_key, remed in algos.items():
+                assert "pattern" in remed, f"{lang}/{algo_key} missing 'pattern'"
+                assert "replacement" in remed, f"{lang}/{algo_key} missing 'replacement'"
+                assert "explanation" in remed, f"{lang}/{algo_key} missing 'explanation'"
+                assert "nist" in remed, f"{lang}/{algo_key} missing 'nist'"
+
+    def test_remediation_covers_key_algorithms(self):
+        from qtrust_inspector.remediation import REMEDIATION_DB
+        assert "RSA" in REMEDIATION_DB["python"]
+        assert "ECDSA" in REMEDIATION_DB["python"]
+
+    def test_remediation_has_all_languages(self):
+        from qtrust_inspector.remediation import REMEDIATION_DB
+        expected = {"python", "javascript", "go", "java", "rust", "c", "csharp", "php", "swift", "ruby", "kotlin"}
+        assert expected.issubset(set(REMEDIATION_DB.keys()))
+
+
+# ---------------------------------------------------------------------------
+# 12. Conformance testing
+# ---------------------------------------------------------------------------
+
+class TestConformance:
+    def test_ml_kem_768_parameter_sizes(self):
+        from qtrust_inspector.conformance import run_conformance_tests, ML_KEM_PARAMS
+        result = run_conformance_tests("ML-KEM-768")
+        assert result.algorithm.value == "ML-KEM-768"
+        assert result.level == 768
+        assert result.total_tests > 0
+        # All tests should pass or skip (no actual implementation to test against)
+        assert result.failed == 0
+
+    def test_ml_dsa_65_parameter_sizes(self):
+        from qtrust_inspector.conformance import run_conformance_tests
+        result = run_conformance_tests("ML-DSA-65")
+        assert result.algorithm.value == "ML-DSA-65"
+        assert result.level == 65
+        assert result.total_tests > 0
+        assert result.failed == 0
+
+    def test_slh_dsa_128s(self):
+        from qtrust_inspector.conformance import run_conformance_tests
+        result = run_conformance_tests("SLH-DSA-128s")
+        assert result.algorithm.value == "SLH-DSA-128s"
+        assert result.total_tests > 0
+        assert result.failed == 0
+
+    def test_conformance_result_to_dict(self):
+        from qtrust_inspector.conformance import run_conformance_tests
+        result = run_conformance_tests("ML-KEM-512")
+        d = result.to_dict()
+        assert "algorithm" in d
+        assert "tests" in d
+        assert isinstance(d["tests"], list)
+        assert "conformance_score" in d
+        assert "fips_compliant" in d
+
+    def test_ml_kem_512_vs_1024_different_levels(self):
+        from qtrust_inspector.conformance import run_conformance_tests
+        r512 = run_conformance_tests("ML-KEM", "512")
+        r1024 = run_conformance_tests("ML-KEM", "1024")
+        assert r512.level == 512
+        assert r1024.level == 1024
+        assert r512.algorithm != r1024.algorithm
+
+    def test_generic_ml_kem_defaults_to_768(self):
+        from qtrust_inspector.conformance import run_conformance_tests
+        result = run_conformance_tests("ML-KEM")
+        assert result.level == 768
+
+
+# ---------------------------------------------------------------------------
+# 13. K8s policy generation
+# ---------------------------------------------------------------------------
+
+class TestK8sPolicy:
+    def test_kyverno_policies_generated(self):
+        from qtrust_inspector.k8s_policy import generate_kyverno_policies
+        policies = generate_kyverno_policies()
+        assert len(policies) >= 4
+        assert all(p.engine == "kyverno" for p in policies)
+
+    def test_gatekeeper_policies_generated(self):
+        from qtrust_inspector.k8s_policy import generate_gatekeeper_policies
+        policies = generate_gatekeeper_policies()
+        assert len(policies) >= 2
+        assert all(p.engine == "gatekeeper" for p in policies)
+
+    def test_policy_summary(self):
+        from qtrust_inspector.k8s_policy import generate_all_policies, generate_policy_summary
+        policies = generate_all_policies()
+        summary = generate_policy_summary(policies)
+        assert summary["total_policies"] >= 6
+        assert "kyverno" in summary["engines"]
+        assert "gatekeeper" in summary["engines"]
+        assert len(summary["protected_resources"]) >= 3
+
+    def test_format_policies_yaml(self):
+        from qtrust_inspector.k8s_policy import generate_kyverno_policies, format_policies_yaml
+        policies = generate_kyverno_policies()
+        yaml_str = format_policies_yaml(policies, "kyverno")
+        assert "apiVersion" in yaml_str
+        assert "ClusterPolicy" in yaml_str
+
+    def test_admission_webhook(self):
+        from qtrust_inspector.k8s_policy import generate_admission_webhook
+        webhook = generate_admission_webhook()
+        assert webhook["kind"] == "ValidatingWebhookConfiguration"
+        assert len(webhook["webhooks"]) == 1
+        assert webhook["webhooks"][0]["name"] == "pqc.qtrust.dev"
+
+
+# ---------------------------------------------------------------------------
+# 14. TLS deep probe
+# ---------------------------------------------------------------------------
+
+class TestTLSProbe:
+    def test_client_hello_building(self):
+        from qtrust_inspector.tls_probe import _build_client_hello
+        hello = _build_client_hello("example.com")
+        assert isinstance(hello, bytes)
+        assert len(hello) > 0
+        assert hello[0] == 0x16  # TLS record
+
+    def test_client_hello_with_pqc(self):
+        from qtrust_inspector.tls_probe import _build_client_hello
+        hello = _build_client_hello("example.com", include_pqc=True)
+        assert isinstance(hello, bytes)
+        assert len(hello) > 0
+
+    def test_tls_group_codepoints(self):
+        from qtrust_inspector.tls_probe import TLS_GROUP_CODEPOINTS
+        assert 0x11EC in TLS_GROUP_CODEPOINTS  # X25519MLKEM768
+        assert 0x639A in TLS_GROUP_CODEPOINTS  # MLKEM768
+        assert 0x0012 in TLS_GROUP_CODEPOINTS  # x25519
+
+    def test_tls_sigalg_codepoints(self):
+        from qtrust_inspector.tls_probe import TLS_SIGALG_CODEPOINTS
+        assert 0x0905 in TLS_SIGALG_CODEPOINTS  # MLDSA65
+        assert 0x0807 in TLS_SIGALG_CODEPOINTS  # Ed25519
+
+    def test_tls_probe_result_structure(self):
+        from qtrust_inspector.tls_probe import probe_tls_endpoint
+        # This will fail to connect but should return a result dict
+        result = probe_tls_endpoint("192.0.2.1", timeout=1.0)  # TEST-NET, should timeout
+        assert "host" in result
+        assert "risk_level" in result
+        assert "pqc_kem_detected" in result
+        assert "recommendations" in result
