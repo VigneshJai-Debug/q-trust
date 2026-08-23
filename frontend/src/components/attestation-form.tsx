@@ -3,15 +3,17 @@
 /**
  * Gasless attestation form.
  *
- * Vendors sign an EIP-712 typed message with their injected wallet
- * (MetaMask) — no funds needed. The backend relayer verifies the signature
+ * Vendors sign an EIP-712 typed message with their connected wallet via wagmi
+ * (RainbowKit) — no funds needed. The backend relayer verifies the signature
  * and submits it on-chain; the contract records the SIGNER as the vendor.
- * If no wallet is connected, the form offers the mock/dev path instead.
+ * If no wallet is connected, the RainbowKit ConnectButton is offered instead.
  */
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAccount, useSignTypedData, useSwitchChain } from "wagmi";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { fetchVendorNonce, relayAttestation, PQC_ALGORITHMS } from "@/lib/api";
-import { signAttestationTypedData, useWallet } from "@/components/dynamic-provider";
+import { CHAIN, CONTRACTS } from "@/lib/config";
 
 const STATUS = {
   idle: "Attest product (gasless — wallet signs, relayer pays)",
@@ -21,8 +23,13 @@ const STATUS = {
   error: "",
 } as const;
 
+/** The chain this deployment's contracts live on — signing must match it. */
+const EXPECTED_CHAIN_ID = CHAIN.id;
+
 export function AttestationForm({ vendor }: { vendor: string }) {
-  const { user } = useWallet();
+  const { address, isConnected, chainId } = useAccount();
+  const { switchChainAsync } = useSwitchChain();
+  const { signTypedDataAsync } = useSignTypedData();
   const queryClient = useQueryClient();
 
   const [productId, setProductId] = useState("QTrust-PQC-Lib");
@@ -34,27 +41,58 @@ export function AttestationForm({ vendor }: { vendor: string }) {
   const [error, setError] = useState("");
   const [txHash, setTxHash] = useState("");
 
-  const walletConnected = Boolean(user?.isAuthenticated && !user.mock);
-
   async function submit() {
     setError("");
     setStatus("signing");
     try {
-      if (!walletConnected) {
+      if (!isConnected || !address) {
+        throw new Error("Connect a wallet (RainbowKit) to sign gasless attestations.");
+      }
+      // Security: the verifyingContract ALWAYS comes from the locally
+      // configured environment (QTRUST_VENDOR_REGISTRY_ADDRESS via
+      // lib/config) — never from any backend/API payload.
+      const verifyingContract = CONTRACTS.vendorRegistry;
+      if (!/^0x[0-9a-fA-F]{40}$/.test(verifyingContract)) {
         throw new Error(
-          "Connect a real wallet (MetaMask) to sign gasless attestations. The mock wallet cannot sign.",
+          "Vendor registry contract address is not configured locally (QTRUST_VENDOR_REGISTRY_ADDRESS) — refusing to sign against an unknown contract.",
         );
       }
+
+      // Ensure the wallet is on the chain the contracts are deployed to
+      // before any signing (switches automatically when possible).
+      if (chainId !== EXPECTED_CHAIN_ID) {
+        await switchChainAsync({ chainId: EXPECTED_CHAIN_ID });
+      }
+
       const nonce = await fetchVendorNonce(vendor);
-      setStatus("relaying");
-      const signature = await signAttestationTypedData({
-        productId,
-        version,
-        algorithm,
-        supported,
-        evidenceURI,
-        nonce,
+      const signature = await signTypedDataAsync({
+        domain: {
+          name: "QTrustVendorRegistry",
+          version: "1",
+          chainId: EXPECTED_CHAIN_ID,
+          verifyingContract,
+        },
+        types: {
+          ProductAttestation: [
+            { name: "productId", type: "string" },
+            { name: "version", type: "string" },
+            { name: "algorithm", type: "string" },
+            { name: "supported", type: "bool" },
+            { name: "evidenceURI", type: "string" },
+            { name: "nonce", type: "uint256" },
+          ],
+        },
+        primaryType: "ProductAttestation",
+        message: {
+          productId,
+          version,
+          algorithm,
+          supported,
+          evidenceURI,
+          nonce: BigInt(nonce),
+        },
       });
+      setStatus("relaying");
       const result = await relayAttestation({
         productId,
         version,
@@ -142,11 +180,13 @@ export function AttestationForm({ vendor }: { vendor: string }) {
         </button>
       </div>
 
-      {!walletConnected ? (
-        <p className="mt-3 text-xs text-amber-600">
-          No real wallet connected — gasless signing requires MetaMask. (The mock wallet can&apos;t
-          sign; use the CLI to attest in dev.)
-        </p>
+      {!isConnected ? (
+        <div className="mt-3 flex flex-col items-start gap-2">
+          <ConnectButton />
+          <p className="text-xs text-amber-600">
+            Connect a wallet to sign the attestation — the relayer submits it on-chain.
+          </p>
+        </div>
       ) : null}
 
       {status === "done" && txHash ? (

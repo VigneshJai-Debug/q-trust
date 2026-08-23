@@ -11,7 +11,9 @@
  * Panels marked "(client-side)" are computed locally from fetched data.
  */
 import { useState } from "react";
+import * as Tabs from "@radix-ui/react-tabs";
 import { API_BASE_URL } from "@/lib/api";
+import { Button } from "@/components/ui/button";
 import { ShieldCheckIcon, XCircleIcon, ClockIcon } from "@/app/icons";
 
 /* -------------------------------------------------------------------------- */
@@ -324,8 +326,6 @@ function buildSarif(result: ScanResult): Record<string, unknown> {
 /* -------------------------------------------------------------------------- */
 
 export function ScannerDashboard() {
-  const [activeTab, setActiveTab] = useState<TabId>("scan");
-
   /* ---- Scan state ---- */
   const [target, setTarget] = useState("");
   const [scanSource, setScanSource] = useState(true);
@@ -540,26 +540,22 @@ export function ScannerDashboard() {
   /* ---- Render ---- */
 
   return (
-    <div className="space-y-6">
+    <Tabs.Root defaultValue="scan" className="space-y-6">
       {/* Tab bar */}
-      <div className="flex gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+      <Tabs.List className="flex gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
         {TABS.map((tab) => (
-          <button
+          <Tabs.Trigger
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`rounded-md px-4 py-2 text-sm font-medium transition ${
-              activeTab === tab.id
-                ? "bg-indigo-600 text-white shadow"
-                : "text-slate-600 hover:bg-slate-100"
-            }`}
+            value={tab.id}
+            className="rounded-md px-4 py-2 text-sm font-medium transition data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow data-[state=inactive]:text-slate-600 hover:data-[state=inactive]:bg-slate-100"
           >
             {tab.label}
-          </button>
+          </Tabs.Trigger>
         ))}
-      </div>
+      </Tabs.List>
 
       {/* ==================== SCAN TAB ==================== */}
-      {activeTab === "scan" && (
+      <Tabs.Content value="scan">
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
             Cryptographic Asset Scan
@@ -601,14 +597,10 @@ export function ScannerDashboard() {
               />
               Dependency manifests
             </label>
-            <button
-              onClick={() => void runScan()}
-              disabled={scanLoading || !target.trim()}
-              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50"
-            >
+            <Button onClick={() => void runScan()} disabled={scanLoading || !target.trim()}>
               {scanLoading && <Spinner />}
               {scanLoading ? "Scanning…" : "Run scan"}
-            </button>
+            </Button>
           </div>
 
           {scanError && <p className="mt-3 text-xs text-rose-600">{scanError}</p>}
@@ -699,30 +691,33 @@ export function ScannerDashboard() {
 
               {/* Export buttons */}
               <div className="mt-4 flex flex-wrap items-center gap-2">
-                <button
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => void exportCbom()}
                   disabled={exportLoading === "cbom"}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-indigo-400 hover:text-indigo-700 disabled:opacity-50"
                 >
                   {exportLoading === "cbom" ? <Spinner /> : null}
                   CycloneDX CBOM
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => void exportSarif()}
                   disabled={exportLoading === "sarif"}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-indigo-400 hover:text-indigo-700 disabled:opacity-50"
                 >
                   {exportLoading === "sarif" ? <Spinner /> : null}
                   SARIF 2.1
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => exportJson()}
                   disabled={exportLoading === "json"}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-indigo-400 hover:text-indigo-700 disabled:opacity-50"
                 >
                   {exportLoading === "json" ? <Spinner /> : null}
                   Raw JSON
-                </button>
+                </Button>
                 <span className="text-[11px] text-slate-400">
                   CBOM &amp; SARIF are generated client-side from the returned findings.
                 </span>
@@ -730,10 +725,10 @@ export function ScannerDashboard() {
             </div>
           )}
         </div>
-      )}
+      </Tabs.Content>
 
       {/* ==================== RISK SCORES TAB ==================== */}
-      {activeTab === "risk" && (
+      <Tabs.Content value="risk">
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
             Quantum Risk Scores
@@ -815,10 +810,10 @@ export function ScannerDashboard() {
             </>
           )}
         </div>
-      )}
+      </Tabs.Content>
 
       {/* ==================== COMPLIANCE TAB ==================== */}
-      {activeTab === "compliance" && (
+      <Tabs.Content value="compliance">
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
             Compliance Assessment
@@ -949,10 +944,10 @@ export function ScannerDashboard() {
             </>
           )}
         </div>
-      )}
+      </Tabs.Content>
 
       {/* ==================== ROADMAP TAB ==================== */}
-      {activeTab === "roadmap" && (
+      <Tabs.Content value="roadmap">
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
             Migration Roadmap
@@ -1068,10 +1063,10 @@ export function ScannerDashboard() {
             </>
           )}
         </div>
-      )}
+      </Tabs.Content>
 
       {/* ==================== EVIDENCE TAB ==================== */}
-      {activeTab === "evidence" && (
+      <Tabs.Content value="evidence">
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
             Evidence Record
@@ -1154,7 +1149,7 @@ export function ScannerDashboard() {
             </p>
           )}
         </div>
-      )}
-    </div>
+      </Tabs.Content>
+    </Tabs.Root>
   );
 }

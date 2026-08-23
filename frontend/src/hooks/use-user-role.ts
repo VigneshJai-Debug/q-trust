@@ -10,7 +10,7 @@
  */
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useWallet } from "@/components/dynamic-provider";
+import { useAccount } from "wagmi";
 import { fetchOrgAssets, fetchVendorAttestations } from "@/lib/api";
 
 export type UserRole = "org" | "vendor" | "auditor" | "admin" | "none";
@@ -25,8 +25,8 @@ export interface UserRoleInfo {
 }
 
 export function useUserRole(): UserRoleInfo {
-  const { user, loading: walletLoading } = useWallet();
-  const address = user?.isAuthenticated ? user.address : null;
+  const { address, isConnecting, isReconnecting } = useAccount();
+  const walletLoading = isConnecting || isReconnecting;
 
   const orgAssets = useQuery({
     queryKey: ["org-assets", address],

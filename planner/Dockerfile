@@ -17,4 +17,10 @@ COPY data/ data/
 
 EXPOSE 8000
 
+# Run as non-root for security (mirrors backend/Dockerfile)
+RUN groupadd -r planner && useradd -r -g planner -m planner
+
+RUN chown -R planner:planner /app
+USER planner
+
 CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]

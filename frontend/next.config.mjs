@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  poweredBy: false,
+  poweredByHeader: false,
   // Allow the API to live on a different origin in development.
   experimental: {
     // React 19 / Next 16 may flag missing server actions config — opt in here.
@@ -22,7 +22,7 @@ const nextConfig = {
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
           {
             key: "Content-Security-Policy",
-            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://ipfs.io; connect-src 'self' https://sepolia.base.org https://mainnet.base.org http://localhost:3001",
+            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https://ipfs.io https://explorer.walletconnect.com; connect-src 'self' https://sepolia.base.org https://mainnet.base.org http://localhost:3001 wss://relay.walletconnect.com https://relay.walletconnect.com https://explorer.walletconnect.com",
           },
         ],
       },

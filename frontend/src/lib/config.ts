@@ -2,11 +2,9 @@
  * viem client configuration for Base / Base Sepolia.
  *
  * Read-only: publicClient (view calls only).
- * Signing: browser EIP-1193 injected wallet (MetaMask) — no private keys ever
- * touch the server or the browser bundle. A mock wallet is provided for dev
- * when no injected provider exists (QTRUST_MOCK_WALLET=true).
+ * Signing/connection: wagmi + RainbowKit (see components/providers.tsx).
  */
-import { createPublicClient, createWalletClient, custom, http, type Address, type Chain } from "viem";
+import { createPublicClient, http, type Address, type Chain } from "viem";
 import { baseSepolia } from "viem/chains";
 
 const RPC_URL = process.env.QTRUST_BASE_SEPOLIA_RPC ?? "https://sepolia.base.org";
@@ -33,74 +31,6 @@ export const CONTRACTS = {
   migrationRegistry: (process.env.QTRUST_MIGRATION_REGISTRY_ADDRESS ?? "0x0") as Address,
   auditRegistry: (process.env.QTRUST_AUDIT_REGISTRY_ADDRESS ?? "0x0") as Address,
 } as const;
-
-declare global {
-  interface Window {
-    ethereum?: {
-      request(args: { method: string; params?: unknown[] }): Promise<unknown>;
-      isMetaMask?: boolean;
-      on?(event: string, listener: (...args: unknown[]) => void): void;
-      removeListener?(event: string, listener: (...args: unknown[]) => void): void;
-    };
-  }
-}
-
-export interface WalletHandle {
-  address: Address | null;
-  connected: boolean;
-  mock: boolean;
-}
-
-/**
- * Detect an EIP-1193 injected provider (MetaMask, Coinbase Wallet, ...).
- * Returns null in SSR contexts or when no provider is present.
- */
-export function getInjectedProvider(): Window["ethereum"] | null {
-  if (typeof window === "undefined") return null;
-  return window.ethereum ?? null;
-}
-
-/** Request accounts from the injected wallet (prompts the user). */
-export async function connectWallet(): Promise<WalletHandle> {
-  const provider = getInjectedProvider();
-  if (provider) {
-    const accounts = (await provider.request({
-      method: "eth_requestAccounts",
-    })) as string[];
-    return {
-      address: accounts[0] as Address,
-      connected: true,
-      mock: false,
-    };
-  }
-  if (
-    process.env.NODE_ENV !== "production" &&
-    process.env.QTRUST_MOCK_WALLET === "true"
-  ) {
-    // Dev/test fallback: a fixed anvil test account (never used in production).
-    return {
-      address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" as Address,
-      connected: true,
-      mock: true,
-    };
-  }
-  return { address: null, connected: false, mock: false };
-}
-
-/**
- * Create a wallet client bound to the injected provider.
- * Call after connectWallet() succeeded.
- */
-export function createBrowserWalletClient() {
-  const provider = getInjectedProvider();
-  if (!provider) {
-    throw new Error("No injected wallet detected — install MetaMask and connect.");
-  }
-  return createWalletClient({
-    chain: CHAIN,
-    transport: custom(provider),
-  });
-}
 
 /** Resolve a 0x-prefixed hex asset ID into a bytes32 for ABI calls. */
 export function parseAssetId(id: string): `0x${string}` {

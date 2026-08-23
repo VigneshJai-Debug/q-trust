@@ -73,6 +73,39 @@ Security-hardening fixes shipped in the current hardening pass:
   accurate description; SDK version drift resolved (0.2.0/1.0.0 → 1.1.0);
   python-nmap moved to optional extra.
 
+### Changed — Stack Migration (2026-08)
+
+- **Frontend wallet stack** — replaced custom `dynamic-provider.tsx` with
+  wagmi 2 + RainbowKit 2 (30+ wallets, chain-switching, mobile support);
+  EIP-712 verifyingContract still pinned to local env config, never API.
+- **Backend API surface** — @fastify/helmet security headers (HSTS,
+  nosniff, frameguard); @fastify/swagger + swagger-ui serving OpenAPI at
+  `/docs` (44 paths); TypeBox JSON-Schema validation on scan/evidence/
+  risk/compliance/credential routes replacing manual field checks.
+- **SDK** — web3.py 7.x (audited: already v7-clean API usage);
+  cryptography pinned `>=43,<45`.
+- **Planner** — torch pinned `>=2.5,<3.0`; non-root Dockerfile USER;
+  Redis sliding-window rate limiter (ZSET pipeline) with graceful
+  in-memory fallback across uvicorn workers.
+- **RPC reliability** — multi-endpoint failover pool (`QTRUST_RPC_URLS`)
+  with round-robin rotation and 60s health cooldown for attestation +
+  indexer viem clients.
+- **Component primitives** — Radix UI tabs/dialog/select + cva-based
+  Button/Card/Badge primitives; scanner dashboard refactored as proof.
+- **Observability** — prom-client `/metrics` endpoint with HTTP request
+  duration histogram; Prometheus + Grafana (provisioned datasource) added
+  to compose on loopback ports; Sentry (backend, DSN-gated no-op).
+- **CI completeness** — Dependabot (6 ecosystems, grouped); gitleaks
+  secret scanning; `forge verify-contract` job (guarded, push-to-main);
+  coverage reporting (pytest-cov + forge coverage → Codecov).
+
+### Deferred (documented, not forgotten)
+
+- Arweave/Walrus storage migration, full 11→EAS contract consolidation
+  (schema kit + registration script shipped), ERC-4337 paymaster,
+  WebAuthn/passkey auth, Drizzle migrations, Postgres HA — tracked as
+  P2 strategic items in the stack-migration checklist.
+
 ## [1.1.0] - 2026-06-30
 
 ### Added

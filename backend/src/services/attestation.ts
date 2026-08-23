@@ -8,7 +8,7 @@
  * signature, recovers the signer, and submits it — vendors never need to
  * hold funds or run a node. The contract records the SIGNER as the vendor.
  */
-import { createPublicClient, createWalletClient, http, recoverTypedDataAddress, type Address } from "viem";
+import { recoverTypedDataAddress, type Address } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import * as dotenv from "dotenv";
 import {
@@ -16,12 +16,12 @@ import {
   VendorRegistryAbi,
   MigrationRegistryAbi,
 } from "../lib/abis.js";
-import { CHAIN, CHAIN_ID } from "../config.js";
+import { CHAIN_ID } from "../config.js";
+import { getPublicClient, getWalletClient as getPooledWalletClient } from "./rpc-pool.js";
 
 dotenv.config();
 
 const RELAYER_KEY = process.env.QTRUST_RELAYER_PRIVATE_KEY;
-const RPC_URL = process.env.QTRUST_BASE_SEPOLIA_RPC ?? "http://127.0.0.1:8545";
 const ASSET_REGISTRY = process.env.QTRUST_ASSET_REGISTRY_ADDRESS as Address;
 const VENDOR_REGISTRY = process.env.QTRUST_VENDOR_REGISTRY_ADDRESS as Address;
 const MIGRATION_REGISTRY = process.env.QTRUST_MIGRATION_REGISTRY_ADDRESS as Address;
@@ -45,17 +45,10 @@ function getRelayerAccount(): PrivateKeyAccount {
 }
 
 function getWalletClient() {
-  return createWalletClient({
-    account: getRelayerAccount(),
-    chain: CHAIN,
-    transport: http(RPC_URL),
-  });
+  return getPooledWalletClient(getRelayerAccount());
 }
 
-const publicClient = createPublicClient({
-  chain: CHAIN,
-  transport: http(RPC_URL),
-});
+const publicClient = getPublicClient();
 
 export function relayerAddress(): Address {
   return getRelayerAccount().address;

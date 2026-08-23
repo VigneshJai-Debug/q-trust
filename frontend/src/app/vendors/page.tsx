@@ -7,8 +7,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { QueryProvider } from "@/components/query-provider";
-import { useWallet } from "@/components/dynamic-provider";
+import { useAccount } from "wagmi";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useUserRole } from "@/hooks/use-user-role";
 import { AttestationForm } from "@/components/attestation-form";
 import { ShieldCheckIcon, XCircleIcon } from "@/app/icons";
@@ -49,8 +49,9 @@ function AttestationRow({ att }: { att: VendorAttestationInfo }) {
 }
 
 function VendorsInner() {
-  const { user, loading, connect } = useWallet();
-  const vendor = user?.isAuthenticated ? user.address : null;
+  const { address, isConnecting, isReconnecting } = useAccount();
+  const vendor = address ?? null;
+  const loading = isConnecting || isReconnecting;
   const { isVendor, isLoading: roleLoading } = useUserRole();
 
   const [productId, setProductId] = useState("DigiCert-TLS");
@@ -108,12 +109,9 @@ function VendorsInner() {
       </p>
 
       {!loading && !vendor ? (
-        <button
-          onClick={() => void connect()}
-          className="mt-6 rounded-lg bg-qtrust-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-qtrust-700"
-        >
-          Connect wallet (MetaMask or dev mock)
-        </button>
+        <div className="mt-6 [&>div]:w-auto">
+          <ConnectButton />
+        </div>
       ) : null}
 
       {vendor ? (
@@ -189,9 +187,7 @@ function VendorsInner() {
 export default function VendorsPage() {
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
-      <QueryProvider>
-        <VendorsInner />
-      </QueryProvider>
+      <VendorsInner />
     </main>
   );
 }

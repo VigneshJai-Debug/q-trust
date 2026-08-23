@@ -16,13 +16,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
+import uuid
+from collections import defaultdict
+from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import time
-from collections import defaultdict
-from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -38,27 +39,142 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Q-Trust Planner", version="0.3.0", lifespan=lifespan)
 
+logger = logging.getLogger("qtrust_planner.server")
+
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """Simple in-memory rate limiter: 60 requests per minute per IP."""
+    """Sliding-window rate limiter backed by Redis, with in-memory fallback.
 
-    def __init__(self, app, max_requests: int = 60, window_seconds: int = 60):
+    Each client IP gets a ZSET key ``rl:{ip}`` of request timestamps, so the
+    limit is enforced across all uvicorn workers. When ``QTRUST_REDIS_URL``
+    is unset or Redis cannot be reached, falls back to the original
+    per-worker in-memory limiter (logged warning, requests never fail).
+    Expired entries are trimmed on every call, so no background cleanup is
+    needed.
+    """
+
+    REDIS_RETRY_SECONDS = 30.0
+
+    def __init__(
+        self, app, max_requests: int | None = None, window_seconds: int | None = None,
+    ):
         super().__init__(app)
-        self.max_requests = max_requests
-        self.window_seconds = window_seconds
+        if max_requests is None:
+            max_requests = int(os.environ.get("QTRUST_RATE_LIMIT_MAX", "30"))
+        if window_seconds is None:
+            window_seconds = int(os.environ.get("QTRUST_RATE_LIMIT_WINDOW", "60"))
+        self.max_requests = int(max_requests)
+        self.window_seconds = int(window_seconds)
         self._requests: dict[str, list[float]] = defaultdict(list)
+        self._redis_url = os.environ.get("QTRUST_REDIS_URL")
+        self._redis: Any = None
+        self._last_redis_failure = 0.0
+
+    def _warn_fallback(self, reason: str) -> None:
+        logger.warning(
+            json.dumps({
+                "event": "rate_limiter_fallback",
+                "level": "WARNING",
+                "message": "Redis rate limiter unavailable — using in-memory fallback",
+                "reason": reason,
+            })
+        )
+
+    def _get_redis(self):
+        """Return a live Redis client, or None when unavailable.
+
+        Connects lazily on first use; retries at most once per
+        REDIS_RETRY_SECONDS after a failure so an outage doesn't spam logs
+        or add latency to every request.
+        """
+        if not self._redis_url:
+            return None
+        if self._redis is not None:
+            return self._redis
+        now = time.time()
+        if now - self._last_redis_failure < self.REDIS_RETRY_SECONDS:
+            return None
+        try:
+            import redis as redis_lib
+
+            client = redis_lib.Redis.from_url(
+                self._redis_url,
+                socket_connect_timeout=0.5,
+                socket_timeout=0.5,
+            )
+            client.ping()
+            self._redis = client
+            logger.info(
+                json.dumps({
+                    "event": "rate_limiter_redis",
+                    "level": "INFO",
+                    "message": "Rate limiter using Redis sliding window",
+                })
+            )
+            return client
+        except Exception as exc:
+            self._last_redis_failure = now
+            self._warn_fallback(f"{type(exc).__name__}: {exc}")
+            return None
+
+    def _redis_check(self, key: str, now: float) -> tuple[bool, int] | None:
+        """Sliding-window check via Redis pipeline. Returns (allowed, retry_after).
+
+        Returns None if Redis should be skipped for this request.
+        """
+        client = self._get_redis()
+        if client is None:
+            return None
+        try:
+            cutoff = now - self.window_seconds
+            pipe = client.pipeline(transaction=False)
+            pipe.zremrangebyscore(key, "-inf", cutoff)  # trim expired entries each call
+            pipe.zcard(key)
+            count = pipe.execute()[1]
+            if count < self.max_requests:
+                member = f"{now:.6f}:{uuid.uuid4().hex}"
+                pipe = client.pipeline(transaction=False)
+                pipe.zadd(key, {member: now})
+                pipe.expire(key, self.window_seconds * 2)  # bound growth of idle keys
+                pipe.execute()
+                return True, 0
+            oldest = client.zrange(key, 0, 0, withscores=True)
+            if oldest:
+                retry_after = max(1, int(oldest[0][1] + self.window_seconds - now))
+            else:
+                retry_after = self.window_seconds
+            return False, retry_after
+        except Exception as exc:
+            # Degrade gracefully: serve this request through the fallback and
+            # let _get_redis retry the connection later.
+            self._redis = None
+            self._last_redis_failure = time.time()
+            self._warn_fallback(f"{type(exc).__name__}: {exc}")
+            return None
+
+    def _memory_check(self, client_ip: str, now: float) -> tuple[bool, int]:
+        """Original in-memory sliding window (per-worker fallback)."""
+        cutoff = now - self.window_seconds
+        self._requests[client_ip] = [t for t in self._requests[client_ip] if t > cutoff]
+        if len(self._requests[client_ip]) >= self.max_requests:
+            oldest = min(self._requests[client_ip])
+            return False, max(1, int(oldest + self.window_seconds - now))
+        self._requests[client_ip].append(now)
+        return True, 0
 
     async def dispatch(self, request: Request, call_next):
         client_ip = request.client.host if request.client else "unknown"
         now = time.time()
-        cutoff = now - self.window_seconds
-        self._requests[client_ip] = [t for t in self._requests[client_ip] if t > cutoff]
-        if len(self._requests[client_ip]) >= self.max_requests:
+        outcome = self._redis_check(f"rl:{client_ip}", now)
+        if outcome is None:
+            outcome = self._memory_check(client_ip, now)
+        allowed, retry_after = outcome
+        if not allowed:
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Rate limit exceeded. Try again later."},
+                headers={"Retry-After": str(retry_after)},
             )
-        self._requests[client_ip].append(now)
         return await call_next(request)
 
 
@@ -68,8 +184,6 @@ MODEL_PATH = os.environ.get("QTRUST_MODEL_PATH", str(Path(__file__).resolve().pa
 DEADLINES_PATH = os.environ.get(
     "QTRUST_DEADLINES_PATH", str(Path(__file__).resolve().parents[1] / "data" / "algorithms.json")
 )
-
-logger = logging.getLogger("qtrust_planner.server")
 
 _model = None
 _model_info: dict[str, Any] = {}

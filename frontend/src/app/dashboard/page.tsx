@@ -1,18 +1,18 @@
 /**
  * Org dashboard — migration progress, latest audit result, asset list.
- * Uses the mock wallet (or Dynamic SDK) for the org address.
+ * Uses the connected wallet (wagmi/RainbowKit) for the org address.
  * Role-aware: shows onboarding wizard for new orgs, dashboard for existing ones.
  */
 "use client";
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { useWallet } from "@/components/dynamic-provider";
+import { useAccount } from "wagmi";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useUserRole } from "@/hooks/use-user-role";
-import { QueryProvider } from "@/components/query-provider";
 import { PlanningPanel } from "@/components/planning-panel";
 import { ShieldCheckIcon, XCircleIcon, ClockIcon } from "@/app/icons";
-import { fetchAsset, fetchOrgMigrations, fetchOrgAssets, fetchAssetVerification } from "@/lib/api";
+import { fetchOrgMigrations, fetchOrgAssets, fetchAssetVerification } from "@/lib/api";
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -47,8 +47,9 @@ function AuditBadge({ code, exists }: { code: number | null; exists: boolean }) 
 }
 
 function DashboardInner() {
-  const { user, loading, connect } = useWallet();
-  const org = user?.isAuthenticated ? user.address : null;
+  const { address, isConnecting, isReconnecting } = useAccount();
+  const org = address ?? null;
+  const loading = isConnecting || isReconnecting;
   const { role, isOrg, isLoading: roleLoading } = useUserRole();
 
   const orgQuery = useQuery({
@@ -75,12 +76,9 @@ function DashboardInner() {
         <p className="mt-3 text-sm text-slate-600">
           Connect a wallet to view your migration progress and audit status.
         </p>
-        <button
-          onClick={() => void connect()}
-          className="mt-6 rounded-lg bg-qtrust-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-qtrust-700"
-        >
-          Connect wallet (MetaMask or dev mock)
-        </button>
+        <div className="mt-6 flex justify-center [&>div]:w-auto">
+          <ConnectButton />
+        </div>
       </div>
     );
   }
@@ -208,9 +206,7 @@ function VerifyButton({ assetId }: { assetId: string }) {
 export default function DashboardPage() {
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
-      <QueryProvider>
-        <DashboardInner />
-      </QueryProvider>
+      <DashboardInner />
     </main>
   );
 }

@@ -1,0 +1,91 @@
+# Dependabot dependency updates.
+#
+# Grouped minor/patch updates per ecosystem to reduce PR noise;
+# major bumps still arrive as individual PRs. Weekly cadence.
+
+version: 2
+
+updates:
+  # ── Backend (npm) ─────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /backend
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    reviewers:
+      - humoge7502
+    open-pull-requests-limit: 10
+
+  # ── Frontend (npm) ────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    reviewers:
+      - humoge7502
+    open-pull-requests-limit: 10
+
+  # ── Inspector (pip) ───────────────────────────────────────────
+  - package-ecosystem: pip
+    directory: /inspector
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    reviewers:
+      - humoge7502
+    open-pull-requests-limit: 10
+
+  # ── SDK (pip) ─────────────────────────────────────────────────
+  - package-ecosystem: pip
+    directory: /sdk
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    reviewers:
+      - humoge7502
+    open-pull-requests-limit: 10
+
+  # ── Dockerfiles / compose base images ─────────────────────────
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    reviewers:
+      - humoge7502
+    open-pull-requests-limit: 10
+
+  # ── GitHub Actions versions ───────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    reviewers:
+      - humoge7502
+    open-pull-requests-limit: 10

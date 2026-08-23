@@ -1,0 +1,20 @@
+# Q-Trust Prometheus scrape configuration.
+# Mounted read-only into the prometheus container (see docker-compose.yml).
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Q-Trust backend API — exposes /metrics via prom-client (src/plugins/metrics.ts)
+  - job_name: qtrust-api
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - "api:3001"
+
+  # Prometheus self-monitoring
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - "localhost:9090"

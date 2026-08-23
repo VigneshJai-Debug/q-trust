@@ -12,7 +12,8 @@
  */
 import pg from "pg";
 import { getContract, parseAbiItem, type AbiEvent, type Address, type Log } from "viem";
-import { publicClient, CONTRACTS, PG_URL } from "../config.js";
+import { CONTRACTS, PG_URL } from "../config.js";
+import { getPublicClient } from "./rpc-pool.js";
 import {
   AssetRegistryAbi,
   VendorRegistryAbi,
@@ -224,7 +225,7 @@ async function detectAndHandleReorg(spec: EventSpec): Promise<bigint | null> {
     const storedNumber = BigInt(row.block_number);
     let canonical;
     try {
-      canonical = await publicClient.getBlock({ blockNumber: storedNumber });
+      canonical = await getPublicClient().getBlock({ blockNumber: storedNumber });
     } catch {
       continue; // transient RPC error — retry on next poll
     }
@@ -268,7 +269,7 @@ async function backfill(spec: EventSpec): Promise<void> {
   // detectAndHandleReorg already rewrote the cursor to the fork point on a
   // reorg, so a plain read resumes indexing from there.
   if (from === 0n) from = BigInt(process.env.QTRUST_INDEXER_FROM_BLOCK ?? 0);
-  const head = await publicClient.getBlockNumber();
+  const head = await getPublicClient().getBlockNumber();
 
   if (from >= head) return;
 
@@ -276,7 +277,7 @@ async function backfill(spec: EventSpec): Promise<void> {
   const step = 2000n;
   for (let start = from; start < head; start += step) {
     const end = start + step > head ? head : start + step;
-    const logs = await publicClient.getLogs({
+    const logs = await getPublicClient().getLogs({
       address,
       event: eventItem,
       fromBlock: start,
@@ -304,7 +305,7 @@ let lastReorgCheckAt = 0;
 function watchLive(spec: EventSpec): void {
   const address = spec.contract();
   if (address === "0x0") return;
-  publicClient.watchEvent({
+  getPublicClient().watchEvent({
     address,
     event: parseAbiItem(spec.event) as AbiEvent,
     onLogs: async (logs) => {
@@ -323,7 +324,7 @@ function watchLive(spec: EventSpec): void {
         const blockNum = log.blockNumber ?? 0n;
         // Wait for N confirmations before processing to handle re-orgs.
         if (CONFIRMATIONS > 0) {
-          const head = await publicClient.getBlockNumber();
+          const head = await getPublicClient().getBlockNumber();
           if (head - blockNum < BigInt(CONFIRMATIONS)) {
             // Not enough confirmations yet — skip, backfill will catch it on next restart.
             continue;

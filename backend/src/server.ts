@@ -21,13 +21,21 @@
  *   POST /v1/webhooks/unsubscribe
  *   GET  /v1/webhooks/subscribers
  *
+ * Docs: OpenAPI JSON at /docs/json, Swagger UI at /docs
+ *
  * Hardening: CORS allowlist, API-key-gated write routes, request body
  * size caps, rate limiting, JSON schema validation.
  */
-import fastify, { type FastifyInstance, type FastifyRequest, type FastifyReply } from "fastify";
+import fastify, { type FastifyRequest, type FastifyReply } from "fastify";
 import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
+import swagger from "@fastify/swagger";
+import swaggerUi from "@fastify/swagger-ui";
+import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import * as dotenv from "dotenv";
 import { Redis } from "ioredis";
 import {
@@ -59,6 +67,9 @@ import {
 import { startIndexer } from "./services/indexer.js";
 import { evaluate } from "./services/evaluate.js";
 import { registerScannerRoutes } from "./routes/scanner.js";
+import { initSentry, registerSentryHooks } from "./plugins/sentry.js";
+import { registerMetrics } from "./plugins/metrics.js";
+import { CredentialVerifySchema } from "./schemas/index.js";
 import { CORS_ORIGINS, API_KEYS, API_KEY_REQUIRED, PLANNER_URL, CHAIN, CHAIN_ID, publicClient, CONTRACTS } from "./config.js";
 import {
   RevocationAnchorAbi,
@@ -70,10 +81,20 @@ import { isValidAddress, isValidBytes32 } from "./config.js";
 
 dotenv.config();
 
-const server: FastifyInstance = fastify({
+// Sentry (no-op unless QTRUST_SENTRY_DSN is configured) — init before any
+// route work so early errors are captured.
+initSentry();
+
+const PACKAGE_VERSION: string = (
+  JSON.parse(
+    readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8"),
+  ) as { version: string }
+).version;
+
+const server = fastify({
   logger: true,
   bodyLimit: 1 * 1024 * 1024,
-});
+}).withTypeProvider<TypeBoxTypeProvider>();
 
 // Redis for webhook subscriptions (optional — degrades gracefully)
 const redisUrl =
@@ -90,8 +111,13 @@ try {
 }
 
 // ------------------------------------------------------------------
-// Global hardening
+// Global hardening + OpenAPI docs
 // ------------------------------------------------------------------
+await server.register(helmet, {
+  contentSecurityPolicy: false,
+  hsts: { maxAge: 15552000 },
+});
+
 server.register(cors, {
   origin: CORS_ORIGINS.includes("*") ? true : CORS_ORIGINS,
   methods: ["GET", "POST", "OPTIONS"],
@@ -101,6 +127,29 @@ server.register(rateLimit, {
   max: 120,
   timeWindow: "1 minute",
   // Allow generous bursts for paginated reads; strict per-IP by default.
+});
+
+// ------------------------------------------------------------------
+// Observability — Sentry error hook + Prometheus /metrics endpoint.
+// Applied to the root instance so hooks cover every route below.
+// ------------------------------------------------------------------
+registerSentryHooks(server);
+registerMetrics(server);
+
+await server.register(swagger, {
+  openapi: {
+    info: {
+      title: "Q-Trust API",
+      version: PACKAGE_VERSION,
+      description:
+        "Q-Trust supply-chain verification API. PQC readiness scanning, migration tracking, and post-quantum migration evidence anchoring with tamper-evident SHA-256 chains.",
+    },
+    servers: [{ url: process.env.QTRUST_PUBLIC_URL ?? "http://localhost:3001" }],
+  },
+});
+
+await server.register(swaggerUi, {
+  routePrefix: "/docs",
 });
 
 /** Require a valid admin API key on write routes. Fail-closed in production. */
@@ -487,14 +536,11 @@ server.post("/v1/credentials/issue", { preHandler: requireApiKey }, async (reque
   };
 });
 
-server.post("/v1/credentials/verify", async (request, reply) => {
+server.post("/v1/credentials/verify", { schema: { body: CredentialVerifySchema } }, async (request, reply) => {
   const { presentation, verifier_did } = request.body as {
     presentation: Record<string, unknown>;
     verifier_did?: string;
   };
-  if (!presentation) {
-    return reply.status(400).send({ error: "presentation is required" });
-  }
 
   // Structural validation
   if (!presentation.issuer || !presentation.credentialSubject) {

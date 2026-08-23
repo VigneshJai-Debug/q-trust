@@ -3,6 +3,8 @@
  */
 import type { Metadata } from "next";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { Providers } from "@/components/providers";
+import "@rainbow-me/rainbowkit/styles.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -25,7 +27,9 @@ export default function RootLayout({
         <meta name="referrer" content="strict-origin-when-cross-origin" />
       </head>
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
-        <ErrorBoundary>{children}</ErrorBoundary>
+        <ErrorBoundary>
+          <Providers>{children}</Providers>
+        </ErrorBoundary>
       </body>
     </html>
   );

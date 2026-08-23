@@ -16,7 +16,60 @@ jobs:
           submodules: recursive
       - uses: foundry-rs/foundry-toolchain@18d02e710a5a0eb41d156e4e7b434043e6a7f478 # v1.4.0
       - run: forge build --sizes
+        working-directory: contracts
       - run: forge test -vvv
+        working-directory: contracts
+      - name: Forge Coverage (lcov)
+        working-directory: contracts
+        run: forge coverage --report lcov
+      - name: Upload Contracts coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: contracts/lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+  contract-verify:
+    name: Basescan Contract Verification
+    runs-on: ubuntu-latest
+    # Verification only makes sense against freshly merged main deployments.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@18d02e710a5a0eb41d156e4e7b434043e6a7f478 # v1.4.0
+      - run: forge build
+        working-directory: contracts
+      - name: Verify deployed contracts on Basescan
+        working-directory: contracts
+        env:
+          BASESCAN_API_KEY: ${{ secrets.BASESCAN_API_KEY }}
+          DEPLOYED_PROXY_ADDRESSES: ${{ vars.DEPLOYED_PROXY_ADDRESSES }}
+        run: |
+          if [ -z "$BASESCAN_API_KEY" ]; then echo "BASESCAN_API_KEY not set — skipping verification"; exit 0; fi
+          if [ -z "$DEPLOYED_PROXY_ADDRESSES" ]; then echo "DEPLOYED_PROXY_ADDRESSES not configured — skipping"; exit 0; fi
+          # DEPLOYED_PROXY_ADDRESSES: multiline "Name=0x..." pairs (see contracts/verification/README.md).
+          while IFS= read -r line || [ -n "$line" ]; do
+            line="$(echo "$line" | tr -d '[:space:]')"
+            case "$line" in ''|\#*) continue ;; esac
+            name="${line%%=*}"
+            addr="${line#*=}"
+            echo "Verifying $name at $addr"
+            args=()
+            if [ -f "verification/${name}.args" ]; then
+              args=(--constructor-args-path "verification/${name}.args")
+            fi
+            forge verify-contract \
+              --chain-id 8453 \
+              --verifier etherscan \
+              --verifier-url https://api.basescan.org/api \
+              "${args[@]}" \
+              "$addr" "src/${name}.sol:${name}" \
+              || echo "::warning::verification failed for ${name}"
+          done <<EOF
+          $DEPLOYED_PROXY_ADDRESSES
+          EOF
 
   sdk:
     name: Python SDK Tests
@@ -27,7 +80,13 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -e ./sdk[dev]
-      - run: pytest sdk/tests/ -v
+      - run: pytest sdk/tests/ -v --cov=qtrust --cov-report=xml:coverage-sdk.xml --cov-report=term
+      - name: Upload SDK coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage-sdk.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
       - run: pip install ruff && ruff check sdk/
 
   inspector:
@@ -39,7 +98,13 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -e ./inspector[dev]
-      - run: pytest inspector/tests/ -v
+      - run: pytest inspector/tests/ -v --cov=qtrust_inspector --cov-report=xml:coverage-inspector.xml --cov-report=term
+      - name: Upload Inspector coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage-inspector.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   backend:
     name: Backend Build & Test

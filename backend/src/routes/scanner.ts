@@ -4,7 +4,28 @@ import { appendFileSync, existsSync, mkdirSync, promises as fsp, readFileSync } 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { Type } from "@sinclair/typebox";
 import type { FastifyInstance } from "fastify";
+import {
+  ScanRequestSchema,
+  ScanFullRequestSchema,
+  ScanResponseSchema,
+  ErrorResponseSchema,
+  RiskScoreSchema,
+  ScoredFindingsResponseSchema,
+  ComplianceEvaluateSchema,
+  ComplianceEvaluateResponseSchema,
+  EvidenceCreateSchema,
+  EvidenceCreateResponseSchema,
+  EvidenceVerifySchema,
+} from "../schemas/index.js";
+
+const scanResponseSchemas = {
+  200: ScanResponseSchema,
+  400: ErrorResponseSchema,
+  403: ErrorResponseSchema,
+  503: ErrorResponseSchema,
+};
 
 const execFileAsync = promisify(execFile);
 
@@ -277,17 +298,15 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
     return { status: "ok", version: "1.0.0", services: { scanner: true, risk: true, compliance: true } };
   });
 
-  app.post("/v1/scan/source", async (request, reply) => {
+  app.post("/v1/scan/source", {
+    schema: { body: ScanRequestSchema, response: scanResponseSchemas },
+  }, async (request, reply) => {
     const { directory } = request.body as { directory: string };
-    if (!directory) {
-      reply.code(400);
-      return { error: "directory is required" };
-    }
     let resolvedDir: string;
     try {
       resolvedDir = await validateScanDirectory(directory);
     } catch (err) {
-      reply.code((err as { statusCode?: number }).statusCode ?? 400);
+      reply.code((err as { statusCode?: number }).statusCode === 403 ? 403 : 400);
       return { error: (err as Error).message };
     }
     let result: { findings?: any[]; error?: string };
@@ -309,17 +328,15 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
     return { directory: resolvedDir, findings, scanType: "source", timestamp: new Date().toISOString() };
   });
 
-  app.post("/v1/scan/manifests", async (request, reply) => {
+  app.post("/v1/scan/manifests", {
+    schema: { body: ScanRequestSchema, response: scanResponseSchemas },
+  }, async (request, reply) => {
     const { directory } = request.body as { directory: string };
-    if (!directory) {
-      reply.code(400);
-      return { error: "directory is required" };
-    }
     let resolvedDir: string;
     try {
       resolvedDir = await validateScanDirectory(directory);
     } catch (err) {
-      reply.code((err as { statusCode?: number }).statusCode ?? 400);
+      reply.code((err as { statusCode?: number }).statusCode === 403 ? 403 : 400);
       return { error: (err as Error).message };
     }
     let result: { findings?: any[]; error?: string };
@@ -341,16 +358,14 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
     return { directory: resolvedDir, findings, scanType: "manifests", timestamp: new Date().toISOString() };
   });
 
-  app.post("/v1/scan/full", async (request, reply) => {
+  app.post("/v1/scan/full", {
+    schema: { body: ScanFullRequestSchema, response: scanResponseSchemas },
+  }, async (request, reply) => {
     const { target, includeSource = true, includeManifests = true } = request.body as {
       target: string;
       includeSource?: boolean;
       includeManifests?: boolean;
     };
-    if (!target) {
-      reply.code(400);
-      return { error: "target is required" };
-    }
     if (!includeSource && !includeManifests) {
       reply.code(400);
       return { error: "at least one of includeSource or includeManifests must be true" };
@@ -359,7 +374,7 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
     try {
       resolvedTarget = await validateScanDirectory(target);
     } catch (err) {
-      reply.code((err as { statusCode?: number }).statusCode ?? 400);
+      reply.code((err as { statusCode?: number }).statusCode === 403 ? 403 : 400);
       return { error: (err as Error).message };
     }
     const scanType =
@@ -383,22 +398,32 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
     return { target: resolvedTarget, findings: allFindings, scanType: "full", timestamp: new Date().toISOString() };
   });
 
-  app.post("/v1/risk/score", async (request, reply) => {
+  app.post("/v1/risk/score", {
+    schema: { body: RiskScoreSchema, response: { 200: ScoredFindingsResponseSchema } },
+  }, async (request) => {
     const { findings } = request.body as { findings: any[] };
-    if (!Array.isArray(findings)) {
-      reply.code(400);
-      return { error: "findings must be an array" };
-    }
     const scored = findings.map(computeRiskFinding);
     return { findings: scored };
   });
 
-  app.post("/v1/risk/summary", async (request, reply) => {
+  app.post("/v1/risk/summary", {
+    schema: {
+      body: RiskScoreSchema,
+      response: {
+        200: Type.Object({
+          totalFindings: Type.Integer(),
+          critical: Type.Integer(),
+          high: Type.Integer(),
+          medium: Type.Integer(),
+          low: Type.Integer(),
+          none: Type.Integer(),
+          averageRiskScore: Type.Integer(),
+          overallRiskLevel: Type.String(),
+        }),
+      },
+    },
+  }, async (request) => {
     const { findings } = request.body as { findings: any[] };
-    if (!Array.isArray(findings)) {
-      reply.code(400);
-      return { error: "findings must be an array" };
-    }
     const scored = findings.map(computeRiskFinding);
     const critical = scored.filter((f) => f.riskLevel === "CRITICAL").length;
     const high = scored.filter((f) => f.riskLevel === "HIGH").length;
@@ -419,12 +444,10 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
     };
   });
 
-  app.post("/v1/compliance/evaluate", async (request, reply) => {
+  app.post("/v1/compliance/evaluate", {
+    schema: { body: ComplianceEvaluateSchema, response: { 200: ComplianceEvaluateResponseSchema } },
+  }, async (request) => {
     const { findings, framework } = request.body as { findings: any[]; framework: string };
-    if (!Array.isArray(findings) || !framework) {
-      reply.code(400);
-      return { error: "findings array and framework string are required" };
-    }
     const evaluator = framework.toUpperCase() === "CNSA" ? evaluateCNSACompliance : evaluateNISTCompliance;
     const results = findings.map((f) => ({
       ...f,
@@ -435,12 +458,10 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
     return { framework, results, compliant, nonCompliant, total: results.length };
   });
 
-  app.post("/v1/compliance/full-report", async (request, reply) => {
+  app.post("/v1/compliance/full-report", {
+    schema: { body: RiskScoreSchema },
+  }, async (request) => {
     const { findings } = request.body as { findings: any[] };
-    if (!Array.isArray(findings)) {
-      reply.code(400);
-      return { error: "findings must be an array" };
-    }
     const frameworks = ["NIST", "CNSA"];
     const reports: Record<string, any> = {};
     for (const fw of frameworks) {
@@ -459,17 +480,15 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
     return { reports, timestamp: new Date().toISOString() };
   });
 
-  app.post("/v1/evidence/create", async (request, reply) => {
+  app.post("/v1/evidence/create", {
+    schema: { body: EvidenceCreateSchema, response: { 200: EvidenceCreateResponseSchema } },
+  }, async (request) => {
     const { scanResultHash, scanTarget, findingsCount, riskSummary } = request.body as {
       scanResultHash: string;
       scanTarget: string;
       findingsCount: number;
       riskSummary: object;
     };
-    if (!scanResultHash || !scanTarget || findingsCount === undefined || !riskSummary) {
-      reply.code(400);
-      return { error: "scanResultHash, scanTarget, findingsCount, and riskSummary are required" };
-    }
     const ledger = generateEvidenceLedger({
       scanResultHash,
       scanTarget,
@@ -480,12 +499,10 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
     return { ledger };
   });
 
-  app.post("/v1/evidence/verify", async (request, reply) => {
+  app.post("/v1/evidence/verify", {
+    schema: { body: EvidenceVerifySchema },
+  }, async (request) => {
     const { ledger } = request.body as { ledger: any };
-    if (!ledger || !ledger.data || !ledger.integrityHash) {
-      reply.code(400);
-      return { error: "ledger with data, previousHash, chainIndex and integrityHash is required" };
-    }
     if (typeof ledger.previousHash !== "string" || typeof ledger.chainIndex !== "number") {
       return {
         valid: false,
@@ -538,12 +555,10 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
     return { valid: true, expectedHash: recomputed, providedHash: ledger.integrityHash, chainLength: evidenceChain.length };
   });
 
-  app.post("/v1/roadmap/generate", async (request, reply) => {
+  app.post("/v1/roadmap/generate", {
+    schema: { body: RiskScoreSchema },
+  }, async (request) => {
     const { findings, dailyRate } = request.body as { findings: any[]; dailyRate?: number };
-    if (!Array.isArray(findings)) {
-      reply.code(400);
-      return { error: "findings must be an array" };
-    }
     const rate = dailyRate || 1500;
     const scored = findings.map(computeRiskFinding);
     const broken = scored.filter((f) => f.riskLevel === "CRITICAL");
