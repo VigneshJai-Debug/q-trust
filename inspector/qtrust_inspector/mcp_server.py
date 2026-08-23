@@ -1,6 +1,6 @@
 """Model Context Protocol (MCP) server for Q-Trust PQC tools.
 
-Provides 16 tools for AI coding agents (Claude, Copilot, Cursor) to
+Provides AST-backed source scanning tools for AI coding agents (Claude, Copilot, Cursor) to
 scan, analyze, and remediate quantum-vulnerable cryptography.
 
 Run: python -m qtrust_inspector.mcp_server
@@ -64,11 +64,23 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "scan_pcap",
-        "description": "Analyze a PCAP capture file for Harvest-Now-Decrypt-Later (HNDL) exposure scoring.",
+        "description": "Analyze a capture file (PCAP/PCAPNG), Zeek ssl.log or Suricata EVE JSON for Harvest-Now-Decrypt-Later (HNDL) exposure with real TLS cipher-suite extraction.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "Path to PCAP file"},
+                "path": {"type": "string", "description": "Path to PCAP/PCAPNG/Zeek/Suricata file"},
+                "format": {"type": "string", "description": "Input format: auto, pcap, zeek, suricata", "default": "auto"},
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "scan_binary",
+        "description": "Scan a binary or archive file (ELF, PE, Mach-O, JAR/WAR/APK, wheel) for embedded cryptographic libraries and artifacts (OpenSSL, BoringSSL, libgcrypt, wolfSSL, mbedTLS, liboqs, BouncyCastle, keystores, PEM blobs).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Path to the binary/archive file or directory"},
             },
             "required": ["path"],
         },
@@ -186,7 +198,7 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "conformance_test",
-        "description": "Run conformance test against FIPS 203/204/205 for a PQC implementation.",
+        "description": "Parameter-set validation against FIPS 203/204/205 tables (sizes, parameters, security levels); NOT ACVP cryptographic testing.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -230,6 +242,14 @@ TOOLS: list[dict[str, Any]] = [
                 "findings": {"type": "array", "description": "Scan findings"},
             },
             "required": ["findings"],
+        },
+    },
+    {
+        "name": "get_detector_capabilities",
+        "description": "Report which AST/regex detectors are active in this install (python stdlib-ast, tree-sitter vs regex-fallback per language).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
         },
     },
 ]
@@ -346,14 +366,27 @@ def _handle_tool_call(name: str, args: dict[str, Any]) -> dict[str, Any]:
         from .source_scanner import scan_source_file
         from pathlib import Path
         path = Path(args["path"])
+        ast_extensions = {".py", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"}
         if path.is_file():
-            findings = scan_source_file(path, language=args.get("language"))
+            if path.suffix.lower() in ast_extensions:
+                from .ast_scanner import scan_file_ast
+                findings = scan_file_ast(path)
+            else:
+                findings = scan_source_file(path, language=args.get("language"))
             return {"findings": [f.model_dump() for f in findings], "count": len(findings)}
         elif path.is_dir():
+            from .ast_scanner import merge_findings_dedupe, scan_source_directory_ast
             from .source_scanner import scan_source_directory
-            findings = scan_source_directory(str(path))
+            findings = merge_findings_dedupe(
+                scan_source_directory(str(path)),
+                scan_source_directory_ast(str(path)),
+            )
             return {"findings": [f.model_dump() for f in findings], "count": len(findings)}
         return {"error": f"Path not found: {args['path']}"}
+
+    elif name == "get_detector_capabilities":
+        from .ast_scanner import DETECTOR_CAPABILITIES
+        return {"capabilities": DETECTOR_CAPABILITIES}
 
     elif name == "scan_tls":
         from .scanner import scan_host
@@ -362,7 +395,17 @@ def _handle_tool_call(name: str, args: dict[str, Any]) -> dict[str, Any]:
 
     elif name == "scan_pcap":
         from .pcap_scanner import analyze_pcap
-        return analyze_pcap(args["path"])
+        return analyze_pcap(args["path"], fmt=args.get("format", "auto"))
+
+    elif name == "scan_binary":
+        from .binary_scanner import scan_binary, scan_binaries_in_directory
+        from pathlib import Path as _Path
+        target = _Path(args["path"])
+        if target.is_dir():
+            findings_list = scan_binaries_in_directory(str(target))
+        else:
+            findings_list = scan_binary(target)
+        return {"findings": [f.model_dump() for f in findings_list], "count": len(findings_list)}
 
     elif name == "risk_score":
         from .risk_engine import calculate_risk_score, _lookup_vulnerability, _determine_risk_level

@@ -695,13 +695,39 @@ class TestRemediation:
 
 class TestConformance:
     def test_ml_kem_768_parameter_sizes(self):
-        from qtrust_inspector.conformance import run_conformance_tests, ML_KEM_PARAMS
+        from qtrust_inspector.conformance import run_conformance_tests
         result = run_conformance_tests("ML-KEM-768")
         assert result.algorithm.value == "ML-KEM-768"
         assert result.level == 768
         assert result.total_tests > 0
-        # All tests should pass or skip (no actual implementation to test against)
+        # Deterministic spec-table checks actually run and pass.
         assert result.failed == 0
+        assert result.passed > 0
+        assert result.conformance_score == 100.0
+        assert result.parameter_set_valid is True
+
+    def test_ml_kem_768_executes_not_all_skip(self):
+        from qtrust_inspector.conformance import TestStatus, run_conformance_tests
+        result = run_conformance_tests("ML-KEM-768")
+        statuses = {t.status for t in result.tests}
+        assert statuses & {TestStatus.PASS}, "spec-table checks should execute and PASS"
+        assert TestStatus.FAIL not in statuses
+        # Skips are only for genuinely external validations (KATs/ACVP).
+        skipped = [t for t in result.tests if t.status == TestStatus.SKIP]
+        assert skipped, "keygen/encaps KATs should be reported as SKIP"
+        assert all(
+            "requires NIST ACVP vectors / liboqs integration" in t.details for t in skipped
+        )
+        assert all(t.name.endswith("_kat") or t.name.endswith("_vectors") for t in skipped)
+
+    def test_ml_kem_768_spec_values(self):
+        from qtrust_inspector.conformance import run_conformance_tests
+        result = run_conformance_tests("ML-KEM-768")
+        by_name = {t.name: t for t in result.tests}
+        assert by_name["ML-KEM-768_pk_size"].status.value == "PASS"
+        assert by_name["ML-KEM-768_pk_size"].expected == "1184"
+        assert by_name["ML-KEM-768_sk_size"].expected == "2400"
+        assert by_name["ML-KEM-768_ct_size"].expected == "1088"
 
     def test_ml_dsa_65_parameter_sizes(self):
         from qtrust_inspector.conformance import run_conformance_tests
@@ -710,6 +736,8 @@ class TestConformance:
         assert result.level == 65
         assert result.total_tests > 0
         assert result.failed == 0
+        assert result.passed > 0
+        assert result.conformance_score == 100.0
 
     def test_slh_dsa_128s(self):
         from qtrust_inspector.conformance import run_conformance_tests
@@ -717,6 +745,34 @@ class TestConformance:
         assert result.algorithm.value == "SLH-DSA-128s"
         assert result.total_tests > 0
         assert result.failed == 0
+        assert result.passed > 0
+        assert result.conformance_score == 100.0
+
+    def test_all_variants_validate_clean(self):
+        from qtrust_inspector.conformance import run_conformance_tests
+        for algo in (
+            "ML-KEM-512", "ML-KEM-1024", "ML-DSA-44", "ML-DSA-87",
+            "SLH-DSA-128f", "SLH-DSA-192s", "SLH-DSA-192f",
+            "SLH-DSA-256s", "SLH-DSA-256f",
+        ):
+            r = run_conformance_tests(algo)
+            assert r.failed == 0, f"{algo}: {[t.name for t in r.tests if t.status.value == 'FAIL']}"
+            assert r.parameter_set_valid is True
+
+    def test_mismatch_injection_surfaces_fail(self, monkeypatch):
+        from qtrust_inspector import conformance
+        monkeypatch.setitem(conformance.ML_KEM_PARAMS["ML-KEM-768"], "ct_size", 9999)
+        result = conformance.run_conformance_tests("ML-KEM-768")
+        failures = [t for t in result.tests if t.status.value == "FAIL"]
+        assert len(failures) >= 1
+        assert any(t.name == "ML-KEM-768_ct_size" for t in failures)
+        bad = next(t for t in failures if t.name == "ML-KEM-768_ct_size")
+        assert bad.expected == "1088"
+        assert bad.actual == "9999"
+        assert result.failed >= 1
+        assert result.conformance_score < 100.0
+        assert result.parameter_set_valid is False
+        assert not result.fips_compliant
 
     def test_conformance_result_to_dict(self):
         from qtrust_inspector.conformance import run_conformance_tests
@@ -726,7 +782,10 @@ class TestConformance:
         assert "tests" in d
         assert isinstance(d["tests"], list)
         assert "conformance_score" in d
+        assert "parameter_set_valid" in d
+        # Backward-compat alias still present.
         assert "fips_compliant" in d
+        assert d["fips_compliant"] == d["parameter_set_valid"]
 
     def test_ml_kem_512_vs_1024_different_levels(self):
         from qtrust_inspector.conformance import run_conformance_tests

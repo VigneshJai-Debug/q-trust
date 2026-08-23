@@ -34,6 +34,45 @@ Security-hardening fixes shipped in the current hardening pass:
 - **Indexer reorg handling** — chain reorganizations are detected and replayed
   instead of persisting orphaned events into indexed state.
 
+### Added
+
+- **Real AST-based detection** — Python analysis via the stdlib `ast` module
+  (scope-aware, key-size/curve refinement, false-positive controls);
+  optional tree-sitter upgrade path for JS/TS with honest per-finding
+  `detector` labels (`ast-python` / `tree-sitter` / `regex-fallback`).
+  Wired into CLI, API, and MCP server.
+- **Real PCAP TLS extraction** — pure-stdlib pcap/pcapng reader with TCP
+  reassembly-lite and full ClientHello/ServerHello parsing: cipher suites,
+  negotiated groups (incl. X25519MLKEM768), SNI. HNDL scoring now derives
+  from the actual negotiated suite instead of worst-case defaults.
+- **Zeek/Suricata log ingestion** — `analyze_zeek_ssl_log` and
+  `analyze_suricata_eve` normalize network TLS telemetry into flow records.
+- **Binary artifact scanning** — ELF/PE/Mach-O crypto-library fingerprinting
+  (OpenSSL/BoringSSL/liboqs/...), JAR/WAR/APK/wheel/gem inspection,
+  embedded PEM detection; wired into CLI/API/MCP.
+- **Benchmark corpus + CI gate** — labeled ground-truth fixtures with
+  precision/recall thresholds enforced in pytest (first published evaluation
+  harness in the PQC-scanning space).
+- **EAS schema publication kit** — three PQC-compliance attestation schemas
+  (compliance, vendor readiness, migration milestone) with field mappings
+  from Q-Trust registries plus a Foundry registration script for EAS on Base.
+- **FIPS parameter-set validator** — conformance module now executes real
+  spec-table checks (PASS/FAIL) against FIPS 203/204/205 constants,
+  reserving SKIP strictly for external KAT/ACVP items; corrected stale
+  ML-DSA constants to final FIPS values.
+
+### Fixed
+
+- **Deployment integrity** — docker-compose fail-fast credentials (no more
+  empty-password Postgres/Redis), loopback-only DB/Redis ports,
+  service healthchecks; backend image bundles Python + inspector so
+  `/v1/scan/*` works in containers; evidence chain persists across restarts
+  (append-only JSONL store); planner serves explicit heuristic mode instead
+  of placeholder model weights.
+- **Package honesty** — inspector renamed `qtrust-inspector` v1.1.0 with an
+  accurate description; SDK version drift resolved (0.2.0/1.0.0 → 1.1.0);
+  python-nmap moved to optional extra.
+
 ## [1.1.0] - 2026-06-30
 
 ### Added

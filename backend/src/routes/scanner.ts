@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { promises as fsp } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, promises as fsp, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -144,8 +144,77 @@ interface LedgerEntry {
 
 const GENESIS_HASH = "0".repeat(64);
 
-// Module-level in-memory chain (persisted chain should come from Postgres in production)
+// Evidence chain persistence: JSONL append-only log so the SHA-256 chain
+// survives restarts. Primary store is the file below; if persistence fails
+// (read-only fs, bad path) the chain degrades gracefully to in-memory only.
+const EVIDENCE_DB_PATH =
+  process.env.QTRUST_EVIDENCE_DB_PATH ||
+  path.join(process.env.QTRUST_DATA_DIR || "/var/lib/qtrust", "evidence_chain.jsonl");
+
 const evidenceChain: LedgerEntry[] = [];
+
+/** Load persisted chain entries from the JSONL evidence log at module init. */
+function loadEvidenceChain(): void {
+  if (!existsSync(EVIDENCE_DB_PATH)) {
+    return;
+  }
+  let raw: string;
+  try {
+    raw = readFileSync(EVIDENCE_DB_PATH, "utf8");
+  } catch (err) {
+    console.warn(
+      `Evidence chain unreadable at ${EVIDENCE_DB_PATH} — starting empty:`,
+      err instanceof Error ? err.message : err,
+    );
+    return;
+  }
+  const lines = raw.split("\n");
+  while (lines.length > 0 && lines[lines.length - 1].trim() === "") {
+    lines.pop();
+  }
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    try {
+      const entry = JSON.parse(line) as LedgerEntry;
+      if (
+        typeof entry.chainIndex !== "number" ||
+        typeof entry.previousHash !== "string" ||
+        typeof entry.integrityHash !== "string"
+      ) {
+        throw new Error("entry missing chain metadata");
+      }
+      evidenceChain.push(entry);
+    } catch {
+      // A torn final write (crash mid-append) leaves a partial trailing line —
+      // skip it quietly-ish; corruption elsewhere is worth a louder warning.
+      if (i === lines.length - 1) {
+        console.warn(
+          `Evidence chain: skipping incomplete trailing line in ${EVIDENCE_DB_PATH}`,
+        );
+      } else {
+        console.warn(
+          `Evidence chain: skipping corrupt line ${i + 1} in ${EVIDENCE_DB_PATH}`,
+        );
+      }
+    }
+  }
+}
+
+loadEvidenceChain();
+
+/** Append one JSONL line per entry. Creates the directory on first write; never rewrites existing data. */
+function persistEvidenceEntry(entry: LedgerEntry): void {
+  try {
+    mkdirSync(path.dirname(EVIDENCE_DB_PATH), { recursive: true });
+    appendFileSync(EVIDENCE_DB_PATH, `${JSON.stringify(entry)}\n`, "utf8");
+  } catch (err) {
+    console.warn(
+      `Evidence chain persistence failed at ${EVIDENCE_DB_PATH} — continuing in memory only:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
 
 function computeIntegrityHash(entry: Omit<LedgerEntry, "integrityHash">): string {
   return createHash("sha256")
@@ -175,6 +244,7 @@ function generateEvidenceLedger(data: {
   };
   const full: LedgerEntry = { ...entry, integrityHash: computeIntegrityHash(entry) };
   evidenceChain.push(full);
+  persistEvidenceEntry(full);
   return full;
 }
 

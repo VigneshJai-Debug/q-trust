@@ -2094,7 +2094,7 @@ version = "0.1.0"
 description = "Cryptographic asset scanner that produces CBOMs for Q-Trust"
 requires-python = ">=3.10"
 dependencies = [
-    "qtrust-sdk>=0.1.0",
+    "qtrust-sdk>=1.1.0",
     "cryptography>=42.0.0",
     "pyasn1>=0.5.0",
     "requests>=2.31.0",

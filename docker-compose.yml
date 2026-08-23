@@ -10,8 +10,8 @@
 services:
   api:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     image: qtrust-backend:0.1.0
     container_name: qtrust-api
     restart: unless-stopped
@@ -23,8 +23,8 @@ services:
       - NODE_ENV=production
       - PORT=3001
       - HOST=0.0.0.0
-      - QTRUST_REDIS_URL=redis://redis:6379
-      - QTRUST_PG_URL=postgres://qtrust:qtrust@postgres:5432/qtrust
+      - QTRUST_REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
+      - QTRUST_PG_URL=postgres://${POSTGRES_USER:-qtrust}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-qtrust}
       - QTRUST_PLANNER_URL=http://planner:8000
       - QTRUST_BASE_SEPOLIA_RPC=${QTRUST_BASE_SEPOLIA_RPC:-http://host.docker.internal:8545}
     extra_hosts:
@@ -46,12 +46,14 @@ services:
       - .env
     environment:
       - NODE_ENV=production
-      - QTRUST_REDIS_URL=redis://redis:6379
+      - QTRUST_REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379
       - QTRUST_BASE_SEPOLIA_RPC=${QTRUST_BASE_SEPOLIA_RPC:-http://host.docker.internal:8545}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
       api:
         condition: service_started
@@ -65,16 +67,16 @@ services:
     container_name: qtrust-postgres
     restart: unless-stopped
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-qtrust}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-${POSTGRES_PASSWORD}}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       - POSTGRES_DB=${POSTGRES_DB:-qtrust}
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./backend/src/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U qtrust -d qtrust"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-qtrust} -d ${POSTGRES_DB:-qtrust}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -101,12 +103,29 @@ services:
     container_name: qtrust-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
-    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru", "--requirepass", "${REDIS_PASSWORD:-${REDIS_PASSWORD}}"]
+      - "127.0.0.1:6379:6379"
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--maxmemory",
+        "256mb",
+        "--maxmemory-policy",
+        "allkeys-lru",
+        "--requirepass",
+        "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}",
+      ]
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-${REDIS_PASSWORD}}", "ping"]
+      test:
+        [
+          "CMD-SHELL",
+          "redis-cli --no-auth-warning -a \"$$REDIS_PASSWORD\" ping | grep -q PONG",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5

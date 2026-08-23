@@ -33,6 +33,23 @@ except ImportError:
     SDK_AVAILABLE = False
 
 
+@app.callback(invoke_without_command=True)
+def _root(
+    ctx: typer.Context,
+    detectors: bool = typer.Option(
+        False,
+        "--detectors",
+        help="Print active AST/regex detector capabilities as JSON and exit.",
+    ),
+):
+    if detectors:
+        from .ast_scanner import DETECTOR_CAPABILITIES
+        typer.echo(json.dumps(DETECTOR_CAPABILITIES))
+        raise typer.Exit()
+    if ctx.invoked_subcommand is None and ctx.params.get("detectors") is None:
+        raise typer.Exit()
+
+
 def _get_client():
     if not SDK_AVAILABLE:
         console.print(
@@ -77,6 +94,8 @@ def directory(
     output: Optional[Path] = typer.Option(None, "--output", "-o"),
     source: bool = typer.Option(True, "--source/--no-source", help="Scan source code for crypto APIs"),
     manifests: bool = typer.Option(True, "--manifests/--no-manifests", help="Scan package manifests"),
+    binaries: bool = typer.Option(True, "--binaries/--no-binaries", help="Scan binaries/archives for embedded crypto artifacts"),
+    ast: bool = typer.Option(True, "--ast/--no-ast", help="Enable AST-based crypto API detection (merged with regex results)"),
     risk: bool = typer.Option(True, "--risk/--no-risk", help="Include risk scoring"),
     compliance: Optional[str] = typer.Option(None, "--compliance", "-c"),
     cyclonedx: Optional[Path] = typer.Option(None, "--cyclonedx", help="Export CycloneDX 1.7 CBOM"),
@@ -94,6 +113,16 @@ def directory(
             from .manifest_scanner import scan_manifest
             for finding in scan_manifest(str(path)):
                 result.findings.append(finding)
+        if binaries:
+            from .binary_scanner import scan_binaries_in_directory
+            for finding in scan_binaries_in_directory(str(path)):
+                result.findings.append(finding)
+        if ast:
+            from .ast_scanner import merge_findings_dedupe, scan_source_directory_ast
+            result.findings = merge_findings_dedupe(
+                result.findings,
+                scan_source_directory_ast(str(path)),
+            )
     _display(result)
     _apply_outputs(result, output, risk, compliance, cyclonedx, sarif_out, False)
 
@@ -104,6 +133,8 @@ def scan(
     output: Optional[Path] = typer.Option(None, "--output", "-o"),
     source: bool = typer.Option(True, "--source/--no-source"),
     manifests: bool = typer.Option(True, "--manifests/--no-manifests"),
+    binaries: bool = typer.Option(True, "--binaries/--no-binaries"),
+    ast: bool = typer.Option(True, "--ast/--no-ast", help="Enable AST-based crypto API detection (merged with regex results)"),
     risk: bool = typer.Option(True, "--risk/--no-risk"),
     compliance: Optional[str] = typer.Option(None, "--compliance", "-c"),
     cyclonedx: Optional[Path] = typer.Option(None, "--cyclonedx"),
@@ -126,6 +157,16 @@ def scan(
                 from .manifest_scanner import scan_manifest
                 for finding in scan_manifest(target):
                     result.findings.append(finding)
+            if binaries:
+                from .binary_scanner import scan_binaries_in_directory
+                for finding in scan_binaries_in_directory(target):
+                    result.findings.append(finding)
+            if ast:
+                from .ast_scanner import merge_findings_dedupe, scan_source_directory_ast
+                result.findings = merge_findings_dedupe(
+                    result.findings,
+                    scan_source_directory_ast(target),
+                )
             results.append(result)
     elif _is_cidr(target):
         with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as progress:
@@ -332,21 +373,25 @@ def retire(asset_id: str = typer.Argument(...)):
     console.print(f"[bold green]Asset retired[/bold green] tx={tx_hash}")
 
 
-@app.command()
+@app.command("pcap-scan")
 def pcap_scan(
-    path: Path = typer.Argument(..., help="Path to PCAP file"),
+    path: Path = typer.Argument(..., help="Path to PCAP file, Zeek ssl.log or Suricata EVE JSON"),
     output: Optional[Path] = typer.Option(None, "--output", "-o"),
     deep: bool = typer.Option(False, "--deep", help="Deep analysis with ML-KEM/SLH-DSA detection"),
     top_n: int = typer.Option(10, "--top", help="Top N flows to display"),
+    fmt: str = typer.Option("auto", "--format", "-f", help="Input format: auto|pcap|zeek|suricata"),
 ):
-    """Analyze PCAP capture for Harvest-Now-Decrypt-Later exposure scoring."""
+    """Analyze capture/log files for Harvest-Now-Decrypt-Later exposure scoring."""
     from .pcap_scanner import analyze_pcap
+    if fmt not in ("auto", "pcap", "zeek", "suricata"):
+        console.print(f"[red]Unknown format '{fmt}' (expected auto|pcap|zeek|suricata)[/red]")
+        raise typer.Exit(1)
     with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as progress:
         progress.add_task(description=f"Analyzing {path}...", total=None)
-        result = analyze_pcap(str(path), deep_scan=deep, top_n=top_n)
-    console.print(f"\n[bold cyan]PCAP Analysis: {result['summary']['total_flows']} flows[/bold cyan]")
-    console.print(f"  High-risk: {result['summary']['high_risk_flows']}")
-    console.print(f"  HNDL Score: {result['summary']['average_hndl_score']:.1f}/100")
+        result = analyze_pcap(str(path), deep_scan=deep, top_n=top_n, fmt=fmt)
+    console.print(f"\n[bold cyan]PCAP Analysis ({result.get('format', 'pcap')}): {result['summary'].get('total_flows', 0)} flows[/bold cyan]")
+    console.print(f"  High-risk: {result['summary'].get('high_risk_flows', 0)}")
+    console.print(f"  HNDL Score: {result['summary'].get('average_hndl_score', 0.0):.1f}/100")
     if output:
         output.write_text(json.dumps(result, indent=2))
         console.print(f"[green]Saved to {output}[/green]")
@@ -395,15 +440,19 @@ def conformance(
     test_vectors: Optional[Path] = typer.Option(None, "--test-vectors", help="Path to NIST test vectors"),
     output: Optional[Path] = typer.Option(None, "--output", "-o"),
 ):
-    """Run FIPS 203/204/205 conformance tests for PQC implementations."""
+    """Parameter-set validation: verify declared FIPS 203/204/205 parameter sizes and security levels.
+
+    Executes deterministic spec-table comparisons only; implementation-level
+    known-answer testing (ACVP) is reported as skipped.
+    """
     from .conformance import run_conformance_tests
     with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as progress:
-        progress.add_task(description=f"Running conformance tests for {algorithm}...", total=None)
+        progress.add_task(description=f"Validating parameter sets for {algorithm}...", total=None)
         result = run_conformance_tests(algorithm, level, str(test_vectors) if test_vectors else None)
-    console.print(f"\n[bold cyan]Conformance: {result.algorithm.value}[/bold cyan]")
+    console.print(f"\n[bold cyan]Parameter-set validation: {result.algorithm.value}[/bold cyan]")
     console.print(f"  Score: {result.conformance_score:.0f}%")
-    console.print(f"  Tests: {result.passed} passed, {result.failed} failed, {result.skipped} skipped")
-    console.print(f"  FIPS Compliant: {'YES' if result.fips_compliant else 'NO'}")
+    console.print(f"  Checks: {result.passed} passed, {result.failed} failed, {result.skipped} skipped")
+    console.print(f"  Parameter set valid: {'YES' if result.parameter_set_valid else 'NO'}")
     for test in result.tests:
         status_color = "green" if test.status.value == "PASS" else "red" if test.status.value == "FAIL" else "yellow"
         console.print(f"  [{status_color}]{test.status.value}[/{status_color}] {test.name}")

@@ -1,0 +1,26 @@
+# Keep the backend image build context small and secret-free.
+.env
+.env.*
+!.env.example
+.git/
+.github/
+.claude/
+.ipynb_checkpoints/
+**/node_modules/
+**/dist/
+**/__pycache__/
+**/*.pyc
+**/.venv/
+**/venv/
+frontend/
+contracts/
+docs/
+notebooks/
+pilot/
+sdk/
+data/
+*.pdf
+*.md
+!backend/README.md
+planner/results/
+docker-compose.yml

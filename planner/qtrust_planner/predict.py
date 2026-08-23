@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -32,6 +33,37 @@ else:
 
 
 DEFAULT_MODEL_PATH = str(Path(__file__).resolve().parents[1] / "model.pt")
+
+logger = logging.getLogger("qtrust_planner.predict")
+
+_DEFAULT_GNN_CONFIG = {"input_features": 6, "hidden_dim": 64, "embedding_dim": 32}
+
+
+def _warn_heuristic_mode(reason: str) -> None:
+    """Emit a structured warning whenever trained weights are unavailable."""
+    logger.warning(
+        json.dumps({
+            "event": "planner_heuristic_mode",
+            "level": "WARNING",
+            "message": "PQC planner weights unavailable — serving heuristic mode",
+            "reason": reason,
+        })
+    )
+
+
+def _load_trained_model(model_path: str) -> tuple[Any, dict[str, Any]]:
+    """Load the MigrationGNN checkpoint. Either fully succeeds or raises —
+    there is no partial/silent-load path.
+    """
+    checkpoint = torch.load(model_path, map_location="cpu", weights_only=True)
+    config = checkpoint.get("model_config", _DEFAULT_GNN_CONFIG)
+    state_dict = checkpoint.get("model_state_dict")
+    if not isinstance(state_dict, dict) or len(state_dict) == 0:
+        raise ValueError("checkpoint contains no usable model_state_dict")
+    model = MigrationGNN(**config)
+    model.load_state_dict(state_dict)
+    model.eval()
+    return model, checkpoint
 
 
 def load_cbom(cbom_path: str) -> dict[str, Any]:
@@ -131,8 +163,46 @@ def cbom_to_graph(cbom: dict[str, Any], deps_path: str | None = None) -> tuple[D
     return data, asset_records
 
 
+def _heuristic_priority(asset: dict[str, Any]) -> float:
+    """Rule-based priority score for an asset record. Higher = migrate first."""
+    criticality_weights = {"Critical": 5, "High": 4, "Medium": 3, "Low": 2, "Info": 1}
+    crit = criticality_weights.get(asset.get("criticality", "Medium"), 3)
+    key_size = int(asset.get("key_size", 0) or 0)
+    pqc_ready = bool(asset.get("pqc_ready", False))
+    algorithm = asset.get("algorithm", "unknown")
+    family = algorithm.split("-")[0] if "-" in algorithm else algorithm
+
+    score = float(crit)
+    if not pqc_ready:
+        if family in ("RSA", "ECC", "DSA", "DH", "ECDH", "ECDSA"):
+            score += 3.0
+        elif family in ("EdDSA",):
+            score += 2.0
+        else:
+            score += 1.0
+    if key_size >= 4096:
+        score += 2.0
+    elif key_size >= 2048:
+        score += 1.0
+    if pqc_ready:
+        score -= 2.0
+    return score
+
+
+def _heuristic_risk(asset: dict[str, Any]) -> float:
+    """Rule-based risk score. Higher = riskier to migrate now."""
+    criticality_weights = {"Critical": 5, "High": 4, "Medium": 3, "Low": 2, "Info": 1}
+    crit = criticality_weights.get(asset.get("criticality", "Medium"), 3)
+    if bool(asset.get("pqc_ready", False)):
+        return 0.1
+    return crit / 5.0
+
+
 def predict_migration_order(cbom_path: str, model_path: str = DEFAULT_MODEL_PATH) -> list[str]:
     """Predict the recommended migration order for a CBOM.
+
+    Uses the trained GNN when the checkpoint exists and loads cleanly;
+    otherwise serves an explicit, logged heuristic ordering.
 
     Args:
         cbom_path: Path to a CBOM JSON file.
@@ -145,32 +215,28 @@ def predict_migration_order(cbom_path: str, model_path: str = DEFAULT_MODEL_PATH
     data, asset_records = cbom_to_graph(cbom)
 
     if not os.path.exists(model_path):
-        raise FileNotFoundError(
-            f"Model not found at {model_path}. Run `python gnn/train.py` first."
-        )
+        _warn_heuristic_mode(f"model file not found at {model_path}")
+        return _heuristic_order(asset_records)
 
-    checkpoint = torch.load(model_path, map_location="cpu", weights_only=True)
-    config = checkpoint.get(
-        "model_config", {"input_features": 6, "hidden_dim": 64, "embedding_dim": 32}
-    )
     try:
-        model = MigrationGNN(**config)
-        model.load_state_dict(checkpoint["model_state_dict"])
-    except Exception:
-        # Fallback for legacy checkpoints (GCN-only) with strict=False
-        model = MigrationGNN(**{k: v for k, v in config.items() if k in ["input_features","hidden_dim","embedding_dim"]})
-        model.load_state_dict(checkpoint["model_state_dict"], strict=False)
-    model.eval()
+        model, _checkpoint = _load_trained_model(model_path)
+    except Exception as exc:  # noqa: BLE001 - any load failure degrades to heuristic mode
+        _warn_heuristic_mode(f"model load failed: {type(exc).__name__}: {exc}")
+        return _heuristic_order(asset_records)
 
     with torch.no_grad():
-        order_logits, risk_logits = model(data)
+        order_logits, _risk_logits = model(data)
 
-    # Sort by priority (descending = migrate first)
     priority_scores = order_logits.cpu().numpy()
 
     sorted_indices = sorted(range(len(asset_records)), key=lambda i: -priority_scores[i])
 
     return [asset_records[i]["asset_id"] for i in sorted_indices]
+
+
+def _heuristic_order(asset_records: list[dict[str, Any]]) -> list[str]:
+    indices = sorted(range(len(asset_records)), key=lambda i: -_heuristic_priority(asset_records[i]))
+    return [asset_records[i]["asset_id"] for i in indices]
 
 
 def predict_detailed(
@@ -192,21 +258,14 @@ def predict_detailed(
     data, asset_records = cbom_to_graph(cbom, deps_path)
 
     if not os.path.exists(model_path):
-        raise FileNotFoundError(
-            f"Model not found at {model_path}. Run `python gnn/train.py` first."
-        )
+        _warn_heuristic_mode(f"model file not found at {model_path}")
+        return _heuristic_detailed(cbom, asset_records, model_path)
 
-    checkpoint = torch.load(model_path, map_location="cpu", weights_only=True)
-    config = checkpoint.get(
-        "model_config", {"input_features": 6, "hidden_dim": 64, "embedding_dim": 32}
-    )
     try:
-        model = MigrationGNN(**config)
-        model.load_state_dict(checkpoint["model_state_dict"])
-    except Exception:
-        model = MigrationGNN(**{k: v for k, v in config.items() if k in ["input_features","hidden_dim","embedding_dim"]})
-        model.load_state_dict(checkpoint["model_state_dict"], strict=False)
-    model.eval()
+        model, checkpoint = _load_trained_model(model_path)
+    except Exception as exc:  # noqa: BLE001 - any load failure degrades to heuristic mode
+        _warn_heuristic_mode(f"model load failed: {type(exc).__name__}: {exc}")
+        return _heuristic_detailed(cbom, asset_records, model_path)
 
     with torch.no_grad():
         order_logits, risk_logits = model(data)
@@ -235,9 +294,46 @@ def predict_detailed(
     eval_metrics = checkpoint.get("eval_metrics", {})
     model_accuracy = eval_metrics.get("kendall", checkpoint.get("final_accuracy", 0.0))
     return {
+        "mode": "gnn",
         "model_path": model_path,
         "model_accuracy": float(model_accuracy),
         "model_metrics": {k: float(v) for k, v in eval_metrics.items()},
+        "cbom_schema": cbom.get("schema_version", "unknown"),
+        "total_assets": len(asset_records),
+        "migration_order": migration_order,
+    }
+
+
+def _heuristic_detailed(
+    cbom: dict[str, Any],
+    asset_records: list[dict[str, Any]],
+    model_path: str,
+) -> dict[str, Any]:
+    """Build a detailed plan using rule-based scores (no trained weights)."""
+    scored = [(_heuristic_priority(a), _heuristic_risk(a)) for a in asset_records]
+    sorted_indices = sorted(range(len(asset_records)), key=lambda i: -scored[i][0])
+
+    migration_order = []
+    for rank, idx in enumerate(sorted_indices):
+        asset = asset_records[idx]
+        migration_order.append({
+            "rank": rank + 1,
+            "asset_id": asset["asset_id"],
+            "algorithm": asset["algorithm"],
+            "host": asset.get("host", ""),
+            "port": asset.get("port", 0),
+            "key_size": asset["key_size"],
+            "criticality": asset["criticality"],
+            "pqc_ready": asset["pqc_ready"],
+            "priority_score": float(scored[idx][0]),
+            "risk_score": float(scored[idx][1]),
+        })
+
+    return {
+        "mode": "heuristic",
+        "model_path": model_path,
+        "model_accuracy": 0.0,
+        "model_metrics": {},
         "cbom_schema": cbom.get("schema_version", "unknown"),
         "total_assets": len(asset_records),
         "migration_order": migration_order,

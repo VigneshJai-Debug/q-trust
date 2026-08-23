@@ -1,0 +1,41 @@
+{
+  "fixtures": [
+    {
+      "file": "python_vulnerable.py",
+      "expected": [
+        {"algorithm": "RSA", "kind": "any"},
+        {"algorithm": "ECDSA", "kind": "any"},
+        {"algorithm": "MD5", "kind": "any"},
+        {"algorithm": "SHA-1", "kind": "any"}
+      ]
+    },
+    {
+      "file": "python_clean.py",
+      "expected": []
+    },
+    {
+      "file": "javascript_vulnerable.js",
+      "expected": [
+        {"algorithm": "RSA", "kind": "any"},
+        {"algorithm": "MD5", "kind": "any"}
+      ]
+    },
+    {
+      "file": "go_vulnerable.go",
+      "expected": [
+        {"algorithm": "RSA", "kind": "any"},
+        {"algorithm": "MD5", "kind": "any"}
+      ]
+    }
+  ],
+  "matching_rules": {
+    "algorithm_normalization": "uppercase; family extracted by longest-prefix match (e.g. RSA-2048 -> RSA, SHA-1 stays SHA-1)",
+    "counting": "a fixture finding matches an expected label at most once; duplicate detections of same algorithm in one file collapse",
+    "ignored_families": ["HAZMAT", "CRYPTO", "NODE-CRYPTO", "NODE", "SSL", "JWT", "GENERIC"],
+    "ignored_families_rationale": "import/library-level informational labels are not algorithm detections; they are excluded from algorithm-precision scoring rather than suppressed at the scanner layer"
+  },
+  "thresholds": {
+    "recall_min": 0.9,
+    "precision_min": 0.8
+  }
+}

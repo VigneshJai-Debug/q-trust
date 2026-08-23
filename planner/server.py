@@ -14,6 +14,7 @@ Endpoints:
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -68,9 +69,22 @@ DEADLINES_PATH = os.environ.get(
     "QTRUST_DEADLINES_PATH", str(Path(__file__).resolve().parents[1] / "data" / "algorithms.json")
 )
 
+logger = logging.getLogger("qtrust_planner.server")
+
 _model = None
 _model_info: dict[str, Any] = {}
 _deadlines: dict[str, Any] = {}
+
+
+def _warn_heuristic_mode(reason: str) -> None:
+    logger.warning(
+        json.dumps({
+            "event": "planner_heuristic_mode",
+            "level": "WARNING",
+            "message": "PQC planner weights unavailable — serving heuristic mode",
+            "reason": reason,
+        })
+    )
 
 try:
     with open(DEADLINES_PATH, encoding="utf-8") as f:
@@ -84,20 +98,26 @@ def _load_model() -> None:
     try:
         import torch
         from qtrust_planner.model import MigrationGNN
-    except ImportError:
+    except ImportError as exc:
+        _warn_heuristic_mode(f"torch/model deps not importable: {exc}")
         _model_info = {"mode": "heuristic", "reason": "torch not installed"}
         return
 
     if not os.path.exists(MODEL_PATH):
+        _warn_heuristic_mode(f"model file not found at {MODEL_PATH}")
         _model_info = {"mode": "heuristic", "reason": "model.pt not found"}
         return
 
     try:
         checkpoint = torch.load(MODEL_PATH, map_location="cpu", weights_only=True)
         config = checkpoint.get("model_config", {"input_features": 6, "hidden_dim": 64, "embedding_dim": 32})
-        _model = MigrationGNN(**config)
-        _model.load_state_dict(checkpoint["model_state_dict"])
-        _model.eval()
+        state_dict = checkpoint.get("model_state_dict")
+        if not isinstance(state_dict, dict) or len(state_dict) == 0:
+            raise ValueError("checkpoint contains no usable model_state_dict")
+        model = MigrationGNN(**config)
+        model.load_state_dict(state_dict)
+        model.eval()
+        _model = model
         _model_info = {
             "mode": "gnn",
             "path": MODEL_PATH,
@@ -105,6 +125,7 @@ def _load_model() -> None:
             "eval_metrics": checkpoint.get("eval_metrics", {}),
         }
     except Exception as exc:
+        _warn_heuristic_mode(f"model load failed: {type(exc).__name__}: {exc}")
         _model_info = {"mode": "heuristic", "reason": f"model load failed: {exc}"}
 
 

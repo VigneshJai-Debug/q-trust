@@ -3,9 +3,9 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cryptography-inspector"
-version = "1.0.0"
-description = "Enterprise-grade PQC migration scanner. Discovers cryptographic assets across TLS, SSH, source code, binaries, package manifests, containers, and cloud. Produces CycloneDX 1.7 CBOM, SARIF 2.1, risk scores (NIST/CNSA 2.0/HNDL), compliance reports (NIST SP 800-131A, CNSA 2.0, FIPS 140-3, EU NIS2, FISMA, FedRAMP, CMMC), migration roadmaps, and hash-chained evidence ledgers."
+name = "qtrust-inspector"
+version = "1.1.0"
+description = "Multi-language cryptographic inventory & post-quantum risk scanner producing CycloneDX CBOMs, SARIF findings, compliance scoring (NIST/CNSA/PCI/BSI/NCSC/ASD), PCAP & network-log HNDL analysis, and migration roadmaps."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -27,13 +27,13 @@ classifiers = [
 ]
 dependencies = [
     "cryptography>=43.0.0",
-    "python-nmap>=0.7.1",
     "pydantic>=2.0.0",
     "typer>=0.9.0",
     "rich>=13.0.0",
 ]
 
 [project.optional-dependencies]
+net = ["python-nmap>=0.7.1"]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
