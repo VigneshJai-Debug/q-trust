@@ -39,6 +39,8 @@ declare global {
     ethereum?: {
       request(args: { method: string; params?: unknown[] }): Promise<unknown>;
       isMetaMask?: boolean;
+      on?(event: string, listener: (...args: unknown[]) => void): void;
+      removeListener?(event: string, listener: (...args: unknown[]) => void): void;
     };
   }
 }
@@ -71,8 +73,11 @@ export async function connectWallet(): Promise<WalletHandle> {
       mock: false,
     };
   }
-  if (process.env.QTRUST_MOCK_WALLET === "true") {
-    // Dev fallback: a fixed anvil test account (never used in production).
+  if (
+    process.env.NODE_ENV !== "production" &&
+    process.env.QTRUST_MOCK_WALLET === "true"
+  ) {
+    // Dev/test fallback: a fixed anvil test account (never used in production).
     return {
       address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" as Address,
       connected: true,

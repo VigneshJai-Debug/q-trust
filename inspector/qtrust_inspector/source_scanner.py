@@ -352,6 +352,8 @@ def scan_source_directory(
     for path in root.rglob("*"):
         if any(skip in path.parts for skip in SKIP_PATTERNS):
             continue
+        if path.is_symlink():
+            continue
         if not path.is_file():
             continue
         if path.suffix.lower() not in extensions:

@@ -23,6 +23,7 @@ contract ComplianceAttestation is AccessControl, ReentrancyGuard, Pausable, Init
     error InvalidValidityDays(uint256 validityDays);
     error NotOwner(address caller);
     error AlreadyRevoked(bytes32 attestationId);
+    error InvalidSignature();
     error InvalidNonce(address signer, uint256 provided, uint256 expected);
     error NotInitialized();
 
@@ -281,6 +282,20 @@ contract ComplianceAttestation is AccessControl, ReentrancyGuard, Pausable, Init
         if (att.orgDid == address(0)) revert AttestationNotFound(attestationId);
         if (att.revoked) revert AlreadyRevoked(attestationId);
         if (att.orgDid != msg.sender) revert NotOwner(msg.sender);
+
+        att.revoked = true;
+
+        emit ComplianceRevoked(attestationId, reason, block.timestamp);
+    }
+
+    /// @notice Governance-controlled revocation for lapsed/lost-issuer cases.
+    function adminRevokeAttestation(
+        bytes32 attestationId,
+        string calldata reason
+    ) external nonReentrant whenNotPaused onlyRole(DEFAULT_ADMIN_ROLE) {
+        Attestation storage att = _attestations[attestationId];
+        if (att.orgDid == address(0)) revert AttestationNotFound(attestationId);
+        if (att.revoked) revert AlreadyRevoked(attestationId);
 
         att.revoked = true;
 

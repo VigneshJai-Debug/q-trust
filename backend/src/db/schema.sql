@@ -76,3 +76,16 @@ CREATE TABLE IF NOT EXISTS indexer_state (
     block      BIGINT NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Reorg support: block_hash may be added to existing deployments.
+ALTER TABLE indexer_state ADD COLUMN IF NOT EXISTS block_hash TEXT NOT NULL DEFAULT '';
+
+-- Blocks whose events have been indexed (block hash recorded so a later
+-- poll can detect chain reorganizations by comparing canonical hashes).
+CREATE TABLE IF NOT EXISTS processed_blocks (
+    block_number BIGINT PRIMARY KEY,
+    block_hash   TEXT NOT NULL,
+    first_seen   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_processed_blocks_number ON processed_blocks (block_number DESC);

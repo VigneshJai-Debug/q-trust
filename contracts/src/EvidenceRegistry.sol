@@ -20,6 +20,7 @@ contract EvidenceRegistry is AccessControl, ReentrancyGuard, Pausable, Initializ
     error EmptyEvidenceRoot();
     error NotOwnerOrAdmin(address caller);
     error AlreadyRevoked(bytes32 evidenceId);
+    error InvalidSignature();
     error InvalidNonce(address signer, uint256 provided, uint256 expected);
     error NotInitialized();
 

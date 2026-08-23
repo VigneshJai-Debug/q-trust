@@ -1,7 +1,7 @@
 /**
  * Relayer service — writes attestations to the Q-Trust contracts with the
- * configured relayer account (QTRUST_RELAYER_PRIVATE_KEY, falling back to
- * QTRUST_DEPLOYER_PRIVATE_KEY).
+ * configured relayer account (QTRUST_RELAYER_PRIVATE_KEY — required; the
+ * deployer key is NEVER used for runtime transactions).
  *
  * Also implements EIP-712 gasless attestations: vendors sign typed data
  * off-chain (SDK sign_attestation / MetaMask); the relayer verifies the
@@ -9,7 +9,7 @@
  * hold funds or run a node. The contract records the SIGNER as the vendor.
  */
 import { createPublicClient, createWalletClient, http, recoverTypedDataAddress, type Address } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
+import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import * as dotenv from "dotenv";
 import {
   AssetRegistryAbi,
@@ -20,28 +20,46 @@ import { CHAIN, CHAIN_ID } from "../config.js";
 
 dotenv.config();
 
-const RELAYER_KEY = process.env.QTRUST_RELAYER_PRIVATE_KEY || process.env.QTRUST_DEPLOYER_PRIVATE_KEY!;
+const RELAYER_KEY = process.env.QTRUST_RELAYER_PRIVATE_KEY;
 const RPC_URL = process.env.QTRUST_BASE_SEPOLIA_RPC ?? "http://127.0.0.1:8545";
 const ASSET_REGISTRY = process.env.QTRUST_ASSET_REGISTRY_ADDRESS as Address;
 const VENDOR_REGISTRY = process.env.QTRUST_VENDOR_REGISTRY_ADDRESS as Address;
 const MIGRATION_REGISTRY = process.env.QTRUST_MIGRATION_REGISTRY_ADDRESS as Address;
 
-if (!RELAYER_KEY) {
-  throw new Error("QTRUST_RELAYER_PRIVATE_KEY or QTRUST_DEPLOYER_PRIVATE_KEY is required");
+// Fail fast in production: a relayer key is mandatory at boot.
+if (process.env.NODE_ENV === "production" && !RELAYER_KEY) {
+  throw new Error("QTRUST_RELAYER_PRIVATE_KEY is required");
 }
 
-const account = privateKeyToAccount(RELAYER_KEY as `0x${string}`);
-const walletClient = createWalletClient({
-  account,
-  chain: CHAIN,
-  transport: http(RPC_URL),
-});
+let cachedAccount: PrivateKeyAccount | null = null;
+
+/** Lazily load the relayer account. In dev, throws on first use if unset. */
+function getRelayerAccount(): PrivateKeyAccount {
+  if (!RELAYER_KEY) {
+    throw new Error(
+      "QTRUST_RELAYER_PRIVATE_KEY is required for transaction signing — refusing to fall back to the deployer key",
+    );
+  }
+  cachedAccount ??= privateKeyToAccount(RELAYER_KEY as `0x${string}`);
+  return cachedAccount;
+}
+
+function getWalletClient() {
+  return createWalletClient({
+    account: getRelayerAccount(),
+    chain: CHAIN,
+    transport: http(RPC_URL),
+  });
+}
+
 const publicClient = createPublicClient({
   chain: CHAIN,
   transport: http(RPC_URL),
 });
 
-export const relayerAddress = account.address;
+export function relayerAddress(): Address {
+  return getRelayerAccount().address;
+}
 
 export interface RegisterCBOMPayload {
   cbomHash: string;
@@ -49,7 +67,7 @@ export interface RegisterCBOMPayload {
 }
 
 export async function registerCBOM(payload: RegisterCBOMPayload) {
-  const txHash = await walletClient.writeContract({
+  const txHash = await getWalletClient().writeContract({
     address: ASSET_REGISTRY,
     abi: AssetRegistryAbi,
     functionName: "registerCBOM",
@@ -67,7 +85,7 @@ export interface AttestProductPayload {
 }
 
 export async function attestProduct(payload: AttestProductPayload) {
-  const txHash = await walletClient.writeContract({
+  const txHash = await getWalletClient().writeContract({
     address: VENDOR_REGISTRY,
     abi: VendorRegistryAbi,
     functionName: "attestProduct",
@@ -92,7 +110,7 @@ export interface MigrationPayload {
 }
 
 export async function recordMigration(payload: MigrationPayload) {
-  const txHash = await walletClient.writeContract({
+  const txHash = await getWalletClient().writeContract({
     address: MIGRATION_REGISTRY,
     abi: MigrationRegistryAbi,
     functionName: "recordMigration",
@@ -189,7 +207,7 @@ export async function relaySignedAttestation(
     );
   }
 
-  const txHash = await walletClient.writeContract({
+  const txHash = await getWalletClient().writeContract({
     address: VENDOR_REGISTRY,
     abi: VendorRegistryAbi,
     functionName: "attestProductSigned",
@@ -295,7 +313,7 @@ export async function relaySignedCBOMRegistration(
     );
   }
 
-  const txHash = await walletClient.writeContract({
+  const txHash = await getWalletClient().writeContract({
     address: ASSET_REGISTRY,
     abi: AssetRegistryAbi,
     functionName: "registerCBOMSigned",
@@ -410,7 +428,7 @@ export async function relaySignedMigration(
     );
   }
 
-  const txHash = await walletClient.writeContract({
+  const txHash = await getWalletClient().writeContract({
     address: MIGRATION_REGISTRY,
     abi: MigrationRegistryAbi,
     functionName: "recordMigrationSigned",

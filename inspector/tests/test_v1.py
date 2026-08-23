@@ -125,13 +125,18 @@ class TestRiskEngine:
         assert isinstance(score, RiskScore)
         assert score.value > 0.7
 
-    def test_weakened_algorithm_medium_risk(self):
-        score = calculate_risk_score(self._finding("RSA-2048", key_size=2048))
+    def test_weakened_symmetric_medium_risk(self):
+        # AES-128 is weakened by Grover's algorithm -> medium quantum risk.
+        score = calculate_risk_score(self._finding("AES-128", key_type="AES", key_size=128))
         assert 0.3 < score.value <= 0.7
+        assert score.quantum_vulnerability == QuantumVulnerability.WEAKENED
 
-    def test_safe_algorithm_low_risk(self):
+    def test_rsa_4096_quantum_broken_high_risk(self):
+        # Shor's algorithm breaks RSA at ANY key size -- RSA-4096 must never be
+        # downgraded toward safe by classical key-size logic.
         score = calculate_risk_score(self._finding("RSA-4096", key_size=4096))
-        assert score.value < 0.3
+        assert score.value > 0.7
+        assert score.quantum_vulnerability == QuantumVulnerability.BROKEN
 
     def test_pqc_ready_algorithm_very_low_risk(self):
         score = calculate_risk_score(self._finding("ML-KEM-1024", key_type="ML-KEM", key_size=1024))
@@ -142,9 +147,17 @@ class TestRiskEngine:
         score = calculate_risk_score(self._finding("ECDSA-SHA256", key_type="EC", key_size=192))
         assert score.value > 0.7
 
-    def test_safe_ecdsa(self):
+    def test_ecdsa_p384_quantum_broken_high_risk(self):
+        # P-384 curve size does not protect ECDSA from Shor's algorithm.
         score = calculate_risk_score(self._finding("ECDSA-SHA384", key_type="EC", key_size=384))
+        assert score.value > 0.7
+        assert score.quantum_vulnerability == QuantumVulnerability.BROKEN
+
+    def test_aes_256_stays_low_risk(self):
+        # Symmetric sizing still applies: AES-256 resists Grover's algorithm.
+        score = calculate_risk_score(self._finding("AES-256", key_type="AES", key_size=256))
         assert score.value < 0.3
+        assert score.quantum_vulnerability == QuantumVulnerability.SAFE
 
     def test_risk_score_has_components(self):
         score = calculate_risk_score(self._finding("RSA-2048", key_size=2048))

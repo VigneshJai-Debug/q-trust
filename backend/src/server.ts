@@ -27,6 +27,7 @@
 import fastify, { type FastifyInstance, type FastifyRequest, type FastifyReply } from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
+import { createHash } from "node:crypto";
 import * as dotenv from "dotenv";
 import { Redis } from "ioredis";
 import {
@@ -128,7 +129,7 @@ function requireApiKey(request: FastifyRequest, reply: FastifyReply, done: () =>
 server.get("/health", async () => ({
   status: "ok",
   chain_id: CHAIN_ID,
-  relayer: relayerAddress,
+  relayer: relayerAddress(),
 }));
 
 // ------------------------------------------------------------------
@@ -289,7 +290,7 @@ server.post("/v1/write/assets", { preHandler: requireApiKey }, async (request, r
       cbomHash: body.cbomHash,
       metadataURI: body.metadataURI ?? "",
     });
-    return { ...result, relayer: relayerAddress };
+    return { ...result, relayer: relayerAddress() };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return reply.status(422).send({ error: `Registration failed: ${msg}` });
@@ -317,7 +318,7 @@ server.post("/v1/write/attestations", { preHandler: requireApiKey }, async (requ
       supported: Boolean(body.supported),
       evidenceURI: body.evidenceURI ?? "",
     });
-    return { ...result, relayer: relayerAddress };
+    return { ...result, relayer: relayerAddress() };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return reply.status(422).send({ error: `Attestation failed: ${msg}` });
@@ -347,7 +348,7 @@ server.post("/v1/write/migrations", { preHandler: requireApiKey }, async (reques
       evidenceHash: body.evidenceHash ?? "0x" + "0".repeat(64),
       evidenceURI: body.evidenceURI ?? "",
     });
-    return { ...result, relayer: relayerAddress };
+    return { ...result, relayer: relayerAddress() };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return reply.status(422).send({ error: `Migration failed: ${msg}` });
@@ -371,7 +372,7 @@ server.post("/v1/write/migrations", { preHandler: requireApiKey }, async (reques
   }
   try {
     const result = await relaySignedAttestation(body);
-    return { ...result, relayer: relayerAddress, chain_id: CHAIN.id };
+    return { ...result, relayer: relayerAddress(), chain_id: CHAIN.id };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const code = msg.includes("signature") || msg.includes("Nonce") ? 400 : 422;
@@ -401,7 +402,7 @@ server.get("/v1/relay/nonce/:did", async (request, reply) => {
   }
   try {
     const result = await relaySignedCBOMRegistration(body);
-    return { ...result, relayer: relayerAddress, chain_id: CHAIN.id };
+    return { ...result, relayer: relayerAddress(), chain_id: CHAIN.id };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const code = msg.includes("signature") || msg.includes("Nonce") ? 400 : 422;
@@ -421,7 +422,7 @@ server.get("/v1/relay/nonce/:did", async (request, reply) => {
   }
   try {
     const result = await relaySignedMigration(body);
-    return { ...result, relayer: relayerAddress, chain_id: CHAIN.id };
+    return { ...result, relayer: relayerAddress(), chain_id: CHAIN.id };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const code = msg.includes("signature") || msg.includes("Nonce") ? 400 : 422;
@@ -517,23 +518,31 @@ server.post("/v1/credentials/verify", async (request, reply) => {
 
   // Check proof presence
   const hasProof = Boolean(
-    presentation.proof && typeof presentation.proof === "object" && "proofValue" in presentation.proof,
+    presentation.proof &&
+      typeof presentation.proof === "object" &&
+      "proofValue" in presentation.proof &&
+      (presentation.proof as Record<string, unknown>).proofValue,
   );
+  if (!hasProof) {
+    return {
+      valid: false,
+      reason: "unsigned_credential",
+      detail: "Credential has no proof — cryptographic verification required",
+      checked: { structure: true, expiration: !expired, signature: false },
+      timestamp: new Date().toISOString(),
+    };
+  }
 
+  // Fail closed: a proof being present is NOT proof of validity. The backend
+  // cannot verify Ed25519 signatures, so never report valid:true here.
   return {
-    valid: !expired,
-    issuer_did: typeof presentation.issuer === "string" ? presentation.issuer : null,
-    subject_did: presentation.credentialSubject && typeof presentation.credentialSubject === "object" && "id" in presentation.credentialSubject
-      ? (presentation.credentialSubject as Record<string, unknown>).id as string
-      : null,
-    schema_id: presentation.credentialSchema && typeof presentation.credentialSchema === "object" && "id" in presentation.credentialSchema
-      ? (presentation.credentialSchema as Record<string, unknown>).id as string
-      : null,
-    expired,
-    has_proof: hasProof,
-    revoked: false,
-    verified_at: new Date().toISOString(),
-    note: "Structural validation only. For full Ed25519 signature verification with DID resolution, use the Python SDK (qtrust.vc.VCVerifier)",
+    valid: false,
+    reason: "signature_verification_unavailable_in_backend",
+    detail:
+      "Backend cannot verify Ed25519 signatures. Use the Python SDK VCVerifier for full verification, or integrate Veramo.",
+    has_proof: true,
+    checked: { structure: true, expiration: !expired, signature: false },
+    timestamp: new Date().toISOString(),
   };
 });
 
@@ -709,11 +718,33 @@ server.post("/v1/webhooks/unsubscribe", { preHandler: requireApiKey }, async (re
 
 server.get("/v1/webhooks/subscribers", { preHandler: requireApiKey }, async () => {
   if (!redis) return { subscribers: [] };
-  const keys = await redis.smembers("subscribers:*");
-  const subscribers = keys.map((key) => ({
-    event: key.replace("subscribers:", ""),
-  }));
-  return { subscribers };
+  // Records are JSON strings ({url, address, secret}) stored in per-event sets.
+  const keys = await redis.keys("subscribers:*");
+  const byId = new Map<string, { id: string; url: string; events: string[] }>();
+  for (const key of keys) {
+    const event = key.replace("subscribers:", "");
+    const records = await redis.smembers(key);
+    for (const raw of records) {
+      let url = "";
+      try {
+        const parsed = JSON.parse(raw) as { url?: string; address?: string; secret?: string };
+        url = typeof parsed.url === "string" ? parsed.url : "";
+      } catch {
+        continue; // skip malformed records rather than leaking raw contents
+      }
+      if (!url) continue;
+      // Stable ID from the record contents — never expose address/secret.
+      const id = createHash("sha256").update(url).digest("hex").slice(0, 16);
+      const existing = byId.get(id);
+      if (existing) {
+        if (!existing.events.includes(event)) existing.events.push(event);
+      } else {
+        byId.set(id, { id, url, events: [event] });
+      }
+    }
+  }
+  // Only { id, url, events } are returned — secrets are stripped entirely.
+  return { subscribers: Array.from(byId.values()) };
 });
 
 // ------------------------------------------------------------------

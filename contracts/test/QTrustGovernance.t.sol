@@ -90,8 +90,8 @@ contract QTrustGovernanceTest is Test {
         // Still active during the notice period.
         assertTrue(vendors.isVendorActive(vendor));
 
-        // Advance past the 2-day delay and execute as the executor.
-        vm.warp(block.timestamp + 3 days);
+        // Advance past the 7-day delay and execute as the executor.
+        vm.warp(block.timestamp + 8 days);
         vm.prank(admin);
         governance.execute(
             address(vendors),
@@ -137,7 +137,7 @@ contract QTrustGovernanceTest is Test {
 
         assertTrue(assets.getAsset(assetId).active, "asset still active during delay");
 
-        vm.warp(block.timestamp + 3 days);
+        vm.warp(block.timestamp + 8 days);
         vm.prank(admin);
         governance.execute(
             address(assets),
@@ -156,7 +156,7 @@ contract QTrustGovernanceTest is Test {
 
         assertFalse(assets.hasRole(registrarRole, admin), "role not granted yet");
 
-        vm.warp(block.timestamp + 3 days);
+        vm.warp(block.timestamp + 8 days);
         vm.prank(admin);
         governance.execute(
             address(assets),

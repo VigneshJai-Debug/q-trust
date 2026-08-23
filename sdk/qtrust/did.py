@@ -2,13 +2,18 @@
 """W3C DID:web resolver and DID document handling."""
 from __future__ import annotations
 
+import ipaddress
 import json
+import os
+import socket
 import time
 from typing import Any
 from urllib.parse import urlparse
 
 import httpx
 from pydantic import BaseModel, Field
+
+ALLOWED_HOSTS_ENV_VAR = "QTRUST_DID_ALLOWED_HOSTS"
 
 
 class DIDDocument(BaseModel):
@@ -33,10 +38,54 @@ class DIDResolver:
         doc = resolver.resolve_sync("did:web:example.com")
     """
 
-    def __init__(self, timeout: float = 10.0):
+    def __init__(
+        self,
+        timeout: float = 10.0,
+        allowed_hosts: list[str] | None = None,
+        validate_resolution: bool = True,
+    ):
         self.timeout = timeout
         self._cache: dict[str, tuple[DIDDocument, float]] = {}
         self._cache_ttl = 300  # 5 minutes
+        # SSRF guard: explicit allowlist (param takes precedence over env var).
+        self.allowed_hosts = set(allowed_hosts or self._allowed_hosts_from_env())
+        self.validate_resolution = validate_resolution
+
+    @staticmethod
+    def _allowed_hosts_from_env() -> list[str]:
+        raw = os.environ.get(ALLOWED_HOSTS_ENV_VAR, "")
+        return [host.strip().lower() for host in raw.split(",") if host.strip()]
+
+    def _validate_domain(self, domain: str) -> None:
+        """Reject did:web domains that resolve to private/link-local/metadata IPs.
+
+        Prevents SSRF against cloud metadata endpoints such as 169.254.169.254.
+        Opt out ONLY via the explicit allowed_hosts constructor param or the
+        QTRUST_DID_ALLOWED_HOSTS environment variable (comma-separated hosts).
+        """
+        if not self.validate_resolution:
+            return
+        if domain.lower() in self.allowed_hosts:
+            return
+
+        try:
+            addr_infos = socket.getaddrinfo(domain, None)
+        except socket.gaierror as e:
+            raise ValueError(f"DID web domain could not be resolved: {domain}") from e
+
+        for info in addr_infos:
+            ip = ipaddress.ip_address(info[4][0])
+            forbidden = (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_link_local
+                or ip.is_reserved
+                or ip.is_multicast
+                or ip.is_unspecified
+                or str(ip) == "169.254.169.254"
+            )
+            if forbidden:
+                raise ValueError("DID web domain resolves to forbidden address")
 
     def _did_to_url(self, did: str) -> str:
         """Convert a did:web to an HTTPS URL for the DID document."""
@@ -69,12 +118,20 @@ class DIDResolver:
 
         return method, rest, fragment
 
+    @staticmethod
+    def _did_to_domain(identifier: str) -> str:
+        """Extract the bare domain (first path segment) from a did:web identifier."""
+        return identifier.split(":")[0]
+
     async def resolve(self, did: str) -> DIDDocument:
         """Resolve a did:web DID asynchronously."""
         method, identifier, _ = self._parse_did(did)
 
         if method != "web":
             raise ValueError(f"Only did:web is supported, got did:{method}")
+
+        # SSRF guard: reject domains resolving to private/metadata addresses
+        self._validate_domain(self._did_to_domain(identifier))
 
         # Check cache
         cached = self._cache.get(did)
@@ -99,6 +156,9 @@ class DIDResolver:
         method, identifier, _ = self._parse_did(did)
         if method != "web":
             raise ValueError(f"Only did:web is supported, got did:{method}")
+
+        # SSRF guard: reject domains resolving to private/metadata addresses
+        self._validate_domain(self._did_to_domain(identifier))
 
         cached = self._cache.get(did)
         if cached and (time.time() - cached[1]) < self._cache_ttl:

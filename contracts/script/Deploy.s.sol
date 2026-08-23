@@ -106,6 +106,10 @@ contract Deploy is Script {
             ))
         );
         bytes32 adminRole = 0x00;
+        // Operational roles must not remain exclusively on the deployer:
+        // transfer them to the timelock BEFORE renouncing admin.
+        revocation.grantRole(revocation.ISSUER_ADMIN_ROLE(), address(timelock));
+        console2.log("  RevocationAnchor.ISSUER_ADMIN_ROLE ->", address(timelock));
         revocation.grantRole(adminRole, address(timelock));
         revocation.renounceRole(adminRole, deployer);
 
@@ -117,6 +121,8 @@ contract Deploy is Script {
                 abi.encodeCall(PolicyCommitment.initialize, ())
             ))
         );
+        policy.grantRole(policy.POLICY_AUTHORITY_ROLE(), address(timelock));
+        console2.log("  PolicyCommitment.POLICY_AUTHORITY_ROLE ->", address(timelock));
         policy.grantRole(adminRole, address(timelock));
         policy.renounceRole(adminRole, deployer);
 
@@ -128,6 +134,8 @@ contract Deploy is Script {
                 abi.encodeCall(SchemaRegistry.initialize, ())
             ))
         );
+        schema.grantRole(schema.SCHEMA_AUTHORITY_ROLE(), address(timelock));
+        console2.log("  SchemaRegistry.SCHEMA_AUTHORITY_ROLE ->", address(timelock));
         schema.grantRole(adminRole, address(timelock));
         schema.renounceRole(adminRole, deployer);
 
@@ -139,6 +147,8 @@ contract Deploy is Script {
                 abi.encodeCall(TrustAnchorRegistry.initialize, ())
             ))
         );
+        trustAnchor.grantRole(trustAnchor.GOVERNANCE_ROLE(), address(timelock));
+        console2.log("  TrustAnchorRegistry.GOVERNANCE_ROLE ->", address(timelock));
         trustAnchor.grantRole(adminRole, address(timelock));
         trustAnchor.renounceRole(adminRole, deployer);
 
@@ -157,7 +167,7 @@ contract Deploy is Script {
         proposers[0] = deployer;
         address[] memory executors = new address[](1);
         executors[0] = deployer;
-        return new TimelockController(2 days, proposers, executors, deployer);
+        return new TimelockController(7 days, proposers, executors, deployer);
     }
 
     function _handAdminToTimelock(
@@ -169,6 +179,23 @@ contract Deploy is Script {
         address deployer
     ) internal {
         bytes32 adminRole = 0x00;
+
+        // Transfer operational roles to the timelock BEFORE renouncing admin,
+        // otherwise they would be stranded on the deployer with no way to
+        // ever be reassigned once admin control moves to governance.
+        assets.grantRole(assets.REGISTRAR_ROLE(), address(timelock));
+        vendors.grantRole(vendors.VENDOR_ADMIN_ROLE(), address(timelock));
+        migrations.grantRole(migrations.MIGRATOR_ROLE(), address(timelock));
+        migrations.grantRole(migrations.AUDITOR_ROLE(), address(timelock));
+        audits.grantRole(audits.AUDITOR_ROLE(), address(timelock));
+
+        console2.log("Operational roles transferred to timelock:");
+        console2.log("  AssetRegistry.REGISTRAR_ROLE      ->", address(timelock));
+        console2.log("  VendorRegistry.VENDOR_ADMIN_ROLE  ->", address(timelock));
+        console2.log("  MigrationRegistry.MIGRATOR_ROLE   ->", address(timelock));
+        console2.log("  MigrationRegistry.AUDITOR_ROLE    ->", address(timelock));
+        console2.log("  AuditRegistry.AUDITOR_ROLE        ->", address(timelock));
+
         assets.grantRole(adminRole, address(timelock));
         vendors.grantRole(adminRole, address(timelock));
         migrations.grantRole(adminRole, address(timelock));
@@ -178,5 +205,11 @@ contract Deploy is Script {
         vendors.renounceRole(adminRole, deployer);
         migrations.renounceRole(adminRole, deployer);
         audits.renounceRole(adminRole, deployer);
+
+        console2.log("DEFAULT_ADMIN_ROLE granted to timelock; deployer renounced:");
+        console2.log("  AssetRegistry     ", address(assets));
+        console2.log("  VendorRegistry    ", address(vendors));
+        console2.log("  MigrationRegistry ", address(migrations));
+        console2.log("  AuditRegistry     ", address(audits));
     }
 }

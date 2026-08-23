@@ -22,3 +22,11 @@ base_sepolia = "${QTRUST_BASE_SEPOLIA_RPC}"
 
 [etherscan]
 base_sepolia = { key = "${QTRUST_BASESCAN_API_KEY}", url = "https://api-sepolia.basescan.org/api" }
+
+[fuzz]
+runs = 256
+max_test_rejects = 65536
+
+[invariant]
+runs = 64
+depth = 32

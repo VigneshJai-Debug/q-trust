@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -230,11 +229,11 @@ def evidence_verify(
     """Verify the integrity of a hash-chained evidence ledger."""
     from .evidence import EvidenceLedger
     ledger = EvidenceLedger.load(str(ledger_path))
-    valid, msg = ledger.verify()
+    valid = ledger.verify_chain()
     if valid:
-        console.print(f"[bold green]LEDGER VALID[/bold green] -- {ledger.entry_count} entries")
+        console.print(f"[bold green]LEDGER VALID[/bold green] -- {len(ledger.entries)} entries")
     else:
-        console.print(f"[bold red]LEDGER INVALID[/bold red] -- {msg}")
+        console.print("[bold red]LEDGER INVALID[/bold red] -- hash chain verification failed")
         raise typer.Exit(1)
 
 
@@ -554,9 +553,7 @@ def _apply_outputs(result, output, risk, compliance, cyclonedx, sarif_out, regis
 
 def _write_evidence(result: ScanResult, evidence_path: Path):
     from .evidence import EvidenceLedger
-    import hashlib
     cbom = result.to_cbom()
-    cbom_hash = "0x" + hashlib.sha256(json.dumps(cbom, sort_keys=True).encode()).hexdigest()
     batch_id = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     ledger = EvidenceLedger(batch_id)
     risk_summary = {}
@@ -565,10 +562,12 @@ def _write_evidence(result: ScanResult, evidence_path: Path):
         rs = calculate_risk_score(f)
         risk_summary[f.location] = rs.risk_level
     ledger.append(
-        scan_result_hash=cbom_hash,
-        scan_target=result.target,
-        findings_count=result.finding_count,
-        risk_summary=risk_summary,
+        cbom,
+        metadata={
+            "scan_target": result.target,
+            "findings_count": result.finding_count,
+            "risk_summary": risk_summary,
+        },
     )
     ledger.save(str(evidence_path))
     console.print(f"\n[green]Evidence ledger saved to {evidence_path}[/green]")

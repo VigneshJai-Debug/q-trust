@@ -14,6 +14,8 @@ describe("API key fail-closed behavior", () => {
   it("API_KEY_REQUIRED is true in production regardless of keys", async () => {
     process.env.NODE_ENV = "production";
     process.env.QTRUST_API_KEYS = "";
+    // Production config requires explicit CORS origins (fail-fast guard).
+    process.env.QTRUST_CORS_ORIGINS = "https://app.example.com";
 
     // Dynamic import to pick up env changes
     const mod = await import("../src/config.js");

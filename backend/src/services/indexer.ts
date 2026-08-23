@@ -182,13 +182,74 @@ export async function getCursor(key: string): Promise<bigint> {
   return res.rows.length ? BigInt(res.rows[0].block) : BigInt(0);
 }
 
-export async function setCursor(key: string, block: bigint): Promise<void> {
+export async function setCursor(key: string, block: bigint, blockHash = ""): Promise<void> {
   if (!pool) return;
   await pool.query(
-    `INSERT INTO indexer_state (key, block, updated_at) VALUES ($1,$2,now())
-     ON CONFLICT (key) DO UPDATE SET block=EXCLUDED.block, updated_at=now()`,
-    [key, block.toString()],
+    `INSERT INTO indexer_state (key, block, block_hash, updated_at) VALUES ($1,$2,$3,now())
+     ON CONFLICT (key) DO UPDATE SET block=EXCLUDED.block, block_hash=EXCLUDED.block_hash, updated_at=now()`,
+    [key, block.toString(), blockHash],
   );
+}
+
+// ------------------------------------------------------------------
+// Reorg detection
+// ------------------------------------------------------------------
+
+/** Number of recent blocks to keep for reorg verification (≈ one epoch). */
+const REORG_CHECK_DEPTH = Number(process.env.QTRUST_INDEXER_REORG_DEPTH ?? 12);
+
+/** Record a processed block number + hash so forks can be detected later. */
+async function recordProcessedBlock(blockNumber: bigint, blockHash: string): Promise<void> {
+  if (!pool || !blockNumber || !blockHash) return;
+  await pool.query(
+    `INSERT INTO processed_blocks (block_number, block_hash) VALUES ($1,$2)
+     ON CONFLICT (block_number) DO UPDATE SET block_hash=EXCLUDED.block_hash`,
+    [blockNumber.toString(), blockHash],
+  );
+}
+
+/**
+ * Verify the last REORG_CHECK_DEPTH processed blocks against the canonical
+ * chain. On a hash mismatch (reorg), delete all indexed rows from the forked
+ * blocks and rewind the cursor so backfill re-indexes from the fork point.
+ * Returns the block the cursor was rewound to, or null if no reorg occurred.
+ */
+async function detectAndHandleReorg(spec: EventSpec): Promise<bigint | null> {
+  if (!pool) return null;
+  const res = await pool.query(
+    `SELECT block_number, block_hash FROM processed_blocks ORDER BY block_number DESC LIMIT $1`,
+    [REORG_CHECK_DEPTH],
+  );
+  for (const row of res.rows) {
+    const storedNumber = BigInt(row.block_number);
+    let canonical;
+    try {
+      canonical = await publicClient.getBlock({ blockNumber: storedNumber });
+    } catch {
+      continue; // transient RPC error — retry on next poll
+    }
+    if (canonical.hash.toLowerCase() !== String(row.block_hash).toLowerCase()) {
+      // Fork detected at this block: purge everything at/after it.
+      console.warn(
+        `Indexer: reorg detected at block ${storedNumber} (stored ${row.block_hash}, canonical ${canonical.hash}) — rewinding ${spec.key}`,
+      );
+      await pool.query("BEGIN");
+      try {
+        await pool.query("DELETE FROM assets WHERE block_number >= $1", [storedNumber]);
+        await pool.query("DELETE FROM attestations WHERE block_number >= $1", [storedNumber]);
+        await pool.query("DELETE FROM migrations WHERE block_number >= $1", [storedNumber]);
+        await pool.query("DELETE FROM audits WHERE block_number >= $1", [storedNumber]);
+        await pool.query("DELETE FROM processed_blocks WHERE block_number >= $1", [storedNumber]);
+        await pool.query("COMMIT");
+      } catch (err) {
+        await pool.query("ROLLBACK");
+        throw err;
+      }
+      await setCursor(spec.key, storedNumber);
+      return storedNumber;
+    }
+  }
+  return null;
 }
 
 /** Backfill one event stream from the stored cursor to head, then advance. */
@@ -197,7 +258,15 @@ async function backfill(spec: EventSpec): Promise<void> {
   const address = spec.contract();
   if (address === "0x0") return;
 
+  // Reorg check first: if previously indexed blocks are no longer canonical,
+  // purge forked rows and resume from the fork point.
+  await detectAndHandleReorg(spec).catch((err) => {
+    console.warn(`Indexer: reorg check failed for ${spec.key}:`, err);
+  });
+
   let from = await getCursor(spec.key);
+  // detectAndHandleReorg already rewrote the cursor to the fork point on a
+  // reorg, so a plain read resumes indexing from there.
   if (from === 0n) from = BigInt(process.env.QTRUST_INDEXER_FROM_BLOCK ?? 0);
   const head = await publicClient.getBlockNumber();
 
@@ -213,7 +282,12 @@ async function backfill(spec: EventSpec): Promise<void> {
       fromBlock: start,
       toBlock: end,
     });
-    for (const log of logs) await applyLog(spec, log as Log);
+    for (const log of logs) {
+      await applyLog(spec, log as Log);
+      if (log.blockNumber && log.blockHash) {
+        await recordProcessedBlock(log.blockNumber, log.blockHash);
+      }
+    }
     await setCursor(spec.key, end);
   }
   console.log(`Indexer: ${spec.key} caught up to block ${head}`);
@@ -221,6 +295,10 @@ async function backfill(spec: EventSpec): Promise<void> {
 
 /** Number of block confirmations to wait before treating an event as final. */
 const CONFIRMATIONS = Number(process.env.QTRUST_INDEXER_CONFIRMATIONS ?? 12);
+
+/** Minimum interval between reorg checks triggered by live polls (ms). */
+const REORG_CHECK_INTERVAL_MS = Number(process.env.QTRUST_INDEXER_REORG_CHECK_INTERVAL_MS ?? 30_000);
+let lastReorgCheckAt = 0;
 
 /** Subscribe to live events after the initial backfill. */
 function watchLive(spec: EventSpec): void {
@@ -230,6 +308,17 @@ function watchLive(spec: EventSpec): void {
     address,
     event: parseAbiItem(spec.event) as AbiEvent,
     onLogs: async (logs) => {
+      // Reorg check on each poll — verify recently indexed blocks are still
+      // canonical; purge + rewind if the chain reorganized underneath us.
+      const now = Date.now();
+      if (now - lastReorgCheckAt >= REORG_CHECK_INTERVAL_MS) {
+        lastReorgCheckAt = now;
+        try {
+          await detectAndHandleReorg(spec);
+        } catch (err) {
+          console.warn(`Indexer: reorg check failed for ${spec.key}:`, err);
+        }
+      }
       for (const log of logs) {
         const blockNum = log.blockNumber ?? 0n;
         // Wait for N confirmations before processing to handle re-orgs.
@@ -242,7 +331,10 @@ function watchLive(spec: EventSpec): void {
         }
         try {
           await applyLog(spec, log as Log);
-          await setCursor(spec.key, blockNum + 1n);
+          if (log.blockNumber && log.blockHash) {
+            await recordProcessedBlock(log.blockNumber, log.blockHash);
+          }
+          await setCursor(spec.key, blockNum + 1n, log.blockHash ?? "");
 
           // Fan out webhook delivery for this event.
           try {

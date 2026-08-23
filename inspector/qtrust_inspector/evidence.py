@@ -36,7 +36,7 @@ class EvidenceLedger:
         data = f"{entry.index}:{entry.cbom_hash}:{entry.prev_hash}:{entry.timestamp}:{entry.batch_id}"
         return hashlib.sha256(data.encode()).hexdigest()
 
-    def append(self, cbom: dict[str, Any]) -> EvidenceEntry:
+    def append(self, cbom: dict[str, Any], metadata: dict[str, Any] | None = None) -> EvidenceEntry:
         prev_hash = self._entries[-1].entry_hash if self._entries else "0" * 64
         cbom_hash = self._hash_cbom(cbom)
         entry = EvidenceEntry(
@@ -44,6 +44,7 @@ class EvidenceLedger:
             cbom_hash=cbom_hash,
             prev_hash=prev_hash,
             batch_id=self.batch_id,
+            metadata=metadata or {},
         )
         entry.entry_hash = self._compute_entry_hash(entry)
         self._entries.append(entry)

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import ipaddress
 import json
+import os
 import socket
 import ssl
 import subprocess
@@ -23,6 +25,67 @@ except ImportError:
 
 DEFAULT_TIMEOUT = 5
 CBOM_SCHEMA_VERSION = "qtrust.cbom.v1"
+ALLOW_PRIVATE_SCANS_ENV_VAR = "QTRUST_ALLOW_PRIVATE_SCANS"
+METADATA_IPV4 = "169.254.169.254"
+
+
+def _ip_is_forbidden(ip: ipaddress._BaseAddress) -> bool:
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+        or str(ip) == METADATA_IPV4
+    )
+
+
+def validate_scan_target(target: str, allow_private: bool = False) -> None:
+    """Reject host targets resolving to private/link-local/loopback/metadata IPs.
+
+    Guards against accidentally scanning internal infrastructure or cloud
+    metadata endpoints (e.g. 169.254.169.254). Unresolvable targets are left
+    alone here -- their connections simply fail naturally later.
+
+    Scans may be opted in explicitly via ``allow_private=True`` or globally via
+    the QTRUST_ALLOW_PRIVATE_SCANS=1 environment variable.
+    """
+    if not allow_private and os.environ.get(ALLOW_PRIVATE_SCANS_ENV_VAR) == "1":
+        allow_private = True
+    if allow_private:
+        return
+
+    try:
+        addr_infos = socket.getaddrinfo(target, None)
+    except socket.gaierror:
+        return
+
+    for info in addr_infos:
+        if _ip_is_forbidden(ipaddress.ip_address(info[4][0])):
+            raise ValueError(f"Scan target resolves to forbidden address: {target}")
+
+
+def validate_scan_cidr(cidr: str, allow_private: bool = False) -> None:
+    """Reject CIDR ranges covering private/link-local/loopback/metadata space."""
+    if not allow_private and os.environ.get(ALLOW_PRIVATE_SCANS_ENV_VAR) == "1":
+        allow_private = True
+    if allow_private:
+        return
+    try:
+        network = ipaddress.ip_network(cidr, strict=False)
+    except ValueError:
+        return
+    if (
+        network.is_private
+        or network.is_loopback
+        or network.is_link_local
+        or network.is_reserved
+        or network.is_multicast
+        or network.is_unspecified
+        or METADATA_IPV4 in network
+    ):
+        raise ValueError(f"Scan target resolves to forbidden address: {cidr}")
 
 # Map of algorithms to their post-quantum readiness status.
 PQC_ALGORITHMS = {
@@ -63,8 +126,31 @@ class CryptoScanner:
     # ------------------------------------------------------------------
     # TLS scanning
     # ------------------------------------------------------------------
+    def _unverified_cipher_probe(self, host: str, port: int) -> str | None:
+        """Cipher-only probe for endpoints that FAIL certificate verification.
+
+        Builds a throwaway SSLContext with verification disabled. This context
+        exists solely to observe the negotiated cipher suite of endpoints whose
+        certificates cannot be verified (e.g. self-signed). It must NEVER be
+        reused to fetch certificates or any other content.
+        """
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        try:
+            with socket.create_connection((host, port), timeout=self.timeout) as sock:
+                with ctx.wrap_socket(sock, server_hostname=host) as ssock:
+                    cipher = ssock.cipher()
+            return cipher[0] if cipher else None
+        except (TimeoutError, ConnectionRefusedError, OSError, ssl.SSLError):
+            return None
+
     def scan_tls(self, host: str, port: int = 443) -> AssetFinding | None:
         """Scan a TLS endpoint and extract certificate metadata.
+
+        The certificate is fetched exclusively over a fully VERIFIED TLS
+        connection; no certificate data is ever accepted from an unverified
+        handshake.
 
         Args:
             host: Hostname or IP address.
@@ -74,14 +160,33 @@ class CryptoScanner:
             An AssetFinding object or None if failed.
         """
         ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
 
         try:
             with socket.create_connection((host, port), timeout=self.timeout) as sock:
                 with ctx.wrap_socket(sock, server_hostname=host) as ssock:
                     der_cert = ssock.getpeercert(binary_form=True)
                     cipher = ssock.cipher()
+        except ssl.SSLCertVerificationError:
+            # Certificate could not be verified (self-signed, hostname mismatch,
+            # expired chain...). Do NOT fall back to an unverified content fetch;
+            # only the isolated cipher probe runs.
+            cipher_name = self._unverified_cipher_probe(host, port)
+            if cipher_name is None:
+                return None
+            return AssetFinding(
+                asset_type="tls_certificate",
+                host=host,
+                port=port,
+                algorithm=None,
+                key_type=None,
+                key_size=None,
+                criticality="medium",
+                cipher=cipher_name,
+                metadata={
+                    "certificate_verification": "failed",
+                    "note": "cipher observed via isolated unverified handshake; certificate not fetched",
+                },
+            )
         except (TimeoutError, ConnectionRefusedError, OSError, ssl.SSLError):
             return None
 

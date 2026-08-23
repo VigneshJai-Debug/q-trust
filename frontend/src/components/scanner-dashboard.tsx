@@ -2,7 +2,13 @@
 
 /**
  * Scanner dashboard — scan targets for PQC vulnerabilities, view risk scores,
- * compliance status, migration roadmap, and evidence ledger.
+ * compliance status, migration roadmap, and evidence records.
+ *
+ * Endpoints used are the ones that actually exist on the backend:
+ *   POST /v1/scan/full            POST /v1/risk/score
+ *   POST /v1/compliance/evaluate  POST /v1/roadmap/generate
+ *   POST /v1/evidence/create      POST /v1/evidence/verify
+ * Panels marked "(client-side)" are computed locally from fetched data.
  */
 import { useState } from "react";
 import { API_BASE_URL } from "@/lib/api";
@@ -13,86 +19,98 @@ import { ShieldCheckIcon, XCircleIcon, ClockIcon } from "@/app/icons";
 /* -------------------------------------------------------------------------- */
 
 interface ScanFinding {
+  type?: string;
   file: string;
-  line: number;
   algorithm: string;
-  key_size: number;
-  context: string;
-  severity: "critical" | "high" | "medium" | "low";
+  line?: number;
+  severity?: string;
+  message?: string;
 }
 
+interface ScanSummary {
+  totalFindings: number;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  info: number;
+  algorithmsDetected: string[];
+}
+
+/** Shape returned by POST /v1/scan/full (summary is computed client-side). */
 interface ScanResult {
-  scan_id: string;
   target: string;
-  scan_type: string;
-  timestamp: number;
+  scanType: string;
+  timestamp: string;
   findings: ScanFinding[];
-  summary: {
-    total_findings: number;
-    critical: number;
-    high: number;
-    medium: number;
-    low: number;
-    algorithms_detected: string[];
-  };
+  summary: ScanSummary;
 }
 
-interface RiskScore {
-  finding: string;
-  algorithm: string;
-  quantum_vulnerable: boolean;
-  risk_level: "critical" | "high" | "medium" | "low";
-  hndl_score: number;
-  recommended_action: string;
+type RiskLevel = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "NONE";
+
+/** Shape returned by POST /v1/risk/score. */
+interface ScoredFinding extends ScanFinding {
+  algorithmClassification: string;
+  riskScore: number;
+  riskLevel: RiskLevel;
 }
 
-interface ComplianceRule {
-  rule_id: string;
-  description: string;
-  status: "pass" | "fail" | "warning";
-  details: string;
+interface ComplianceFinding extends ScanFinding {
+  compliance: { compliant: boolean; reason: string };
 }
 
+/** Shape returned by POST /v1/compliance/evaluate (+ client-side score). */
 interface ComplianceReport {
   framework: string;
-  score: number;
-  total_rules: number;
-  passed: number;
-  failed: number;
-  warnings: number;
-  rules: ComplianceRule[];
+  results: ComplianceFinding[];
+  compliant: number;
+  nonCompliant: number;
+  total: number;
+  scorePercent: number;
 }
 
+/** Shape returned by POST /v1/roadmap/generate. */
 interface RoadmapPhase {
   phase: number;
-  name: string;
-  description: string;
-  start_date: string;
-  end_date: string;
-  effort_days: number;
-  assets: string[];
-  cost_estimate: number;
+  title: string;
+  priority: string;
+  estimatedDays: number;
+  findings: ScanFinding[];
+}
+
+interface RoadmapSummary {
+  totalFindings: number;
+  totalDays: number;
+  totalCost: number;
+  dailyRate: number;
+  completionDate: string;
 }
 
 interface Roadmap {
   phases: RoadmapPhase[];
-  total_effort_days: number;
-  total_cost_estimate: number;
-  deadline: string | null;
+  summary: RoadmapSummary;
 }
 
-interface EvidenceEntry {
-  evidence_id: string;
-  scan_id: string;
-  cbom_hash: string;
-  timestamp: number;
-  verified: boolean;
-  signer: string;
-}
-
+/** Shape returned by POST /v1/evidence/create. */
 interface EvidenceLedger {
-  entries: EvidenceEntry[];
-  total: number;
+  version: string;
+  data: {
+    scanResultHash: string;
+    scanTarget: string;
+    findingsCount: number;
+    riskSummary: ScanSummary;
+    timestamp: string;
+  };
+  integrityHash: string;
+  previousHash: string;
+  chainIndex: number;
+}
+
+/** Shape returned by POST /v1/evidence/verify. */
+interface EvidenceVerifyResult {
+  valid: boolean;
+  expectedHash: string;
+  providedHash: string;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -110,13 +128,8 @@ const TABS: { id: TabId; label: string }[] = [
 ];
 
 const COMPLIANCE_FRAMEWORKS = [
-  { value: "NIST-SP-800-131A", label: "NIST SP 800-131A" },
-  { value: "CNSA-2.0", label: "CNSA 2.0" },
-  { value: "FIPS-140-3", label: "FIPS 140-3" },
-  { value: "EU-NIS2", label: "EU NIS2" },
-  { value: "FISMA", label: "FISMA" },
-  { value: "FedRAMP", label: "FedRAMP" },
-  { value: "CMMC", label: "CMMC" },
+  { value: "NIST", label: "NIST SP 800-131A" },
+  { value: "CNSA", label: "CNSA 2.0" },
 ] as const;
 
 /* -------------------------------------------------------------------------- */
@@ -124,7 +137,7 @@ const COMPLIANCE_FRAMEWORKS = [
 /* -------------------------------------------------------------------------- */
 
 function severityColor(s: string) {
-  switch (s) {
+  switch (s.toLowerCase()) {
     case "critical":
       return "bg-rose-100 text-rose-700";
     case "high":
@@ -133,6 +146,8 @@ function severityColor(s: string) {
       return "bg-indigo-100 text-indigo-700";
     case "low":
       return "bg-emerald-100 text-emerald-700";
+    case "info":
+      return "bg-sky-100 text-sky-700";
     default:
       return "bg-slate-100 text-slate-600";
   }
@@ -174,6 +189,136 @@ function downloadBlob(content: string, filename: string, mime: string) {
   URL.revokeObjectURL(url);
 }
 
+function safeName(input: string): string {
+  return input.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "scan";
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  if (typeof crypto === "undefined" || !crypto.subtle) {
+    throw new Error("Web Crypto is unavailable in this context — cannot hash scan evidence.");
+  }
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function summarizeFindings(findings: ScanFinding[]): ScanSummary {
+  const algorithms = new Set<string>();
+  let critical = 0;
+  let high = 0;
+  let medium = 0;
+  let low = 0;
+  let info = 0;
+  for (const f of findings) {
+    if (f.algorithm) algorithms.add(f.algorithm);
+    switch ((f.severity ?? "").toLowerCase()) {
+      case "critical":
+        critical++;
+        break;
+      case "high":
+        high++;
+        break;
+      case "medium":
+        medium++;
+        break;
+      case "low":
+        low++;
+        break;
+      default:
+        info++;
+    }
+  }
+  return {
+    totalFindings: findings.length,
+    critical,
+    high,
+    medium,
+    low,
+    info,
+    algorithmsDetected: Array.from(algorithms).sort(),
+  };
+}
+
+async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errBody = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(errBody.error ?? `Request failed (${res.status})`);
+  }
+  return (await res.json()) as T;
+}
+
+/* Client-side CycloneDX-style CBOM generated from the returned findings. */
+function buildCbom(result: ScanResult): Record<string, unknown> {
+  return {
+    bomFormat: "CycloneDX",
+    specVersion: "1.6",
+    serialNumber: `urn:uuid:${crypto.randomUUID()}`,
+    metadata: {
+      timestamp: new Date().toISOString(),
+      tools: [{ vendor: "Q-Trust", name: "Q-Trust Scanner Dashboard", version: "1.0" }],
+      properties: [
+        { name: "qtrust:generatedBy", value: "client-side export from scan findings" },
+        { name: "qtrust:scanTarget", value: result.target },
+        { name: "qtrust:scanTimestamp", value: result.timestamp },
+      ],
+    },
+    components: result.findings.map((f, i) => ({
+      type: "cryptographic-asset",
+      "bom-ref": `qtrust-finding-${i + 1}`,
+      name: f.algorithm,
+      properties: [
+        ...(f.file ? [{ name: "qtrust:file", value: f.file }] : []),
+        ...(f.line !== undefined ? [{ name: "qtrust:line", value: String(f.line) }] : []),
+        ...(f.severity ? [{ name: "qtrust:severity", value: f.severity }] : []),
+        ...(f.message ? [{ name: "qtrust:message", value: f.message }] : []),
+      ],
+    })),
+  };
+}
+
+/* Client-side SARIF 2.1.0 generated from the returned findings. */
+function buildSarif(result: ScanResult): Record<string, unknown> {
+  return {
+    version: "2.1.0",
+    runs: [
+      {
+        tool: {
+          driver: {
+            name: "Q-Trust PQC Scanner",
+            version: "1.0",
+            properties: { generatedBy: "client-side export from scan findings" },
+          },
+        },
+        invocations: [{ endTimeUtc: new Date().toISOString() }],
+        results: result.findings.map((f) => ({
+          ruleId: f.algorithm,
+          level:
+            f.severity === "critical" || f.severity === "high"
+              ? "error"
+              : f.severity === "medium"
+                ? "warning"
+                : "note",
+          message: { text: f.message ?? `${f.algorithm} usage detected` },
+          locations: [
+            {
+              physicalLocation: {
+                artifactLocation: { uri: f.file },
+                ...(f.line !== undefined ? { region: { startLine: f.line } } : {}),
+              },
+            },
+          ],
+        })),
+      },
+    ],
+  };
+}
+
 /* -------------------------------------------------------------------------- */
 /*  Main component                                                             */
 /* -------------------------------------------------------------------------- */
@@ -190,7 +335,7 @@ export function ScannerDashboard() {
   const [scanError, setScanError] = useState("");
 
   /* ---- Risk state ---- */
-  const [riskScores, setRiskScores] = useState<RiskScore[]>([]);
+  const [riskScores, setRiskScores] = useState<ScoredFinding[]>([]);
   const [riskLoading, setRiskLoading] = useState(false);
   const [riskError, setRiskError] = useState("");
 
@@ -201,16 +346,17 @@ export function ScannerDashboard() {
   const [complianceError, setComplianceError] = useState("");
 
   /* ---- Roadmap state ---- */
-  const [roadmapDeadline, setRoadmapDeadline] = useState("");
+  const [roadmapDailyRate, setRoadmapDailyRate] = useState("");
   const [roadmap, setRoadmap] = useState<Roadmap | null>(null);
   const [roadmapLoading, setRoadmapLoading] = useState(false);
   const [roadmapError, setRoadmapError] = useState("");
 
   /* ---- Evidence state ---- */
   const [evidenceLedger, setEvidenceLedger] = useState<EvidenceLedger | null>(null);
+  const [evidenceVerify, setEvidenceVerify] = useState<EvidenceVerifyResult | null>(null);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [evidenceError, setEvidenceError] = useState("");
-  const [verifyLoading, setVerifyLoading] = useState<string | null>(null);
+  const [verifyLoading, setVerifyLoading] = useState(false);
 
   /* ---- Export state ---- */
   const [exportLoading, setExportLoading] = useState<string | null>(null);
@@ -223,20 +369,17 @@ export function ScannerDashboard() {
     setScanError("");
     setScanResult(null);
     try {
-      const res = await fetch(`${API_BASE_URL}/v1/scan`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          target: target.trim(),
-          scan_type: scanSource && scanManifest ? "full" : scanSource ? "source" : "manifest",
-        }),
+      const data = await postJson<{
+        target: string;
+        scanType: string;
+        timestamp: string;
+        findings: ScanFinding[];
+      }>("/v1/scan/full", {
+        target: target.trim(),
+        includeSource: scanSource,
+        includeManifests: scanManifest,
       });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail ?? body.error ?? `Scan failed (${res.status})`);
-      }
-      const data: ScanResult = await res.json();
-      setScanResult(data);
+      setScanResult({ ...data, summary: summarizeFindings(data.findings) });
     } catch (err) {
       setScanError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -249,13 +392,10 @@ export function ScannerDashboard() {
     setRiskLoading(true);
     setRiskError("");
     try {
-      const res = await fetch(`${API_BASE_URL}/v1/risk/${encodeURIComponent(scanResult.scan_id)}`);
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail ?? body.error ?? `Risk fetch failed (${res.status})`);
-      }
-      const data: RiskScore[] = await res.json();
-      setRiskScores(data);
+      const data = await postJson<{ findings: ScoredFinding[] }>("/v1/risk/score", {
+        findings: scanResult.findings,
+      });
+      setRiskScores(Array.isArray(data.findings) ? data.findings : []);
     } catch (err) {
       setRiskError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -268,15 +408,21 @@ export function ScannerDashboard() {
     setComplianceLoading(true);
     setComplianceError("");
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/v1/compliance/${encodeURIComponent(scanResult.scan_id)}?framework=${encodeURIComponent(complianceFramework)}`,
-      );
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail ?? body.error ?? `Compliance fetch failed (${res.status})`);
-      }
-      const data: ComplianceReport = await res.json();
-      setComplianceReport(data);
+      const data = await postJson<{
+        framework: string;
+        results: ComplianceFinding[];
+        compliant: number;
+        nonCompliant: number;
+        total: number;
+      }>("/v1/compliance/evaluate", {
+        findings: scanResult.findings,
+        framework: complianceFramework,
+      });
+      setComplianceReport({
+        ...data,
+        // The evaluate endpoint returns counts only; percentage derived here.
+        scorePercent: data.total > 0 ? Math.round((data.compliant / data.total) * 100) : 100,
+      });
     } catch (err) {
       setComplianceError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -289,14 +435,17 @@ export function ScannerDashboard() {
     setRoadmapLoading(true);
     setRoadmapError("");
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/v1/roadmap/${encodeURIComponent(scanResult.scan_id)}${roadmapDeadline ? `?deadline=${encodeURIComponent(roadmapDeadline)}` : ""}`,
-      );
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail ?? body.error ?? `Roadmap fetch failed (${res.status})`);
+      const rate = Number(roadmapDailyRate);
+      const body: { findings: ScanFinding[]; dailyRate?: number } = {
+        findings: scanResult.findings,
+      };
+      if (roadmapDailyRate.trim() !== "" && Number.isFinite(rate) && rate > 0) {
+        body.dailyRate = rate;
       }
-      const data: Roadmap = await res.json();
+      const data = await postJson<{ phases: RoadmapPhase[]; summary: RoadmapSummary }>(
+        "/v1/roadmap/generate",
+        body,
+      );
       setRoadmap(data);
     } catch (err) {
       setRoadmapError(err instanceof Error ? err.message : String(err));
@@ -305,17 +454,20 @@ export function ScannerDashboard() {
     }
   }
 
-  async function fetchEvidence() {
+  async function createEvidence() {
+    if (!scanResult) return;
     setEvidenceLoading(true);
     setEvidenceError("");
+    setEvidenceVerify(null);
     try {
-      const res = await fetch(`${API_BASE_URL}/v1/evidence`);
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail ?? body.error ?? `Evidence fetch failed (${res.status})`);
-      }
-      const data: EvidenceLedger = await res.json();
-      setEvidenceLedger(data);
+      const scanResultHash = await sha256Hex(JSON.stringify(scanResult.findings));
+      const data = await postJson<{ ledger: EvidenceLedger }>("/v1/evidence/create", {
+        scanResultHash,
+        scanTarget: scanResult.target,
+        findingsCount: scanResult.findings.length,
+        riskSummary: scanResult.summary,
+      });
+      setEvidenceLedger(data.ledger);
     } catch (err) {
       setEvidenceError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -323,26 +475,19 @@ export function ScannerDashboard() {
     }
   }
 
-  async function verifyEvidence(evidenceId: string) {
-    setVerifyLoading(evidenceId);
+  async function verifyLedger() {
+    if (!evidenceLedger) return;
+    setVerifyLoading(true);
+    setEvidenceError("");
     try {
-      const res = await fetch(`${API_BASE_URL}/v1/evidence/${encodeURIComponent(evidenceId)}/verify`);
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail ?? body.error ?? `Verify failed (${res.status})`);
-      }
-      if (evidenceLedger) {
-        setEvidenceLedger({
-          ...evidenceLedger,
-          entries: evidenceLedger.entries.map((e) =>
-            e.evidence_id === evidenceId ? { ...e, verified: true } : e,
-          ),
-        });
-      }
+      const data = await postJson<EvidenceVerifyResult>("/v1/evidence/verify", {
+        ledger: evidenceLedger,
+      });
+      setEvidenceVerify(data);
     } catch (err) {
       setEvidenceError(err instanceof Error ? err.message : String(err));
     } finally {
-      setVerifyLoading(null);
+      setVerifyLoading(false);
     }
   }
 
@@ -350,12 +495,11 @@ export function ScannerDashboard() {
     if (!scanResult) return;
     setExportLoading("cbom");
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/v1/scan/${encodeURIComponent(scanResult.scan_id)}/export/cbom`,
+      downloadBlob(
+        JSON.stringify(buildCbom(scanResult), null, 2),
+        `cbom-${safeName(scanResult.target)}.json`,
+        "application/json",
       );
-      if (!res.ok) throw new Error(`Export failed (${res.status})`);
-      const data = await res.json();
-      downloadBlob(JSON.stringify(data, null, 2), `cbom-${scanResult.scan_id}.json`, "application/json");
     } catch (err) {
       setScanError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -367,12 +511,11 @@ export function ScannerDashboard() {
     if (!scanResult) return;
     setExportLoading("sarif");
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/v1/scan/${encodeURIComponent(scanResult.scan_id)}/export/sarif`,
+      downloadBlob(
+        JSON.stringify(buildSarif(scanResult), null, 2),
+        `sarif-${safeName(scanResult.target)}.sarif`,
+        "application/sarif+json",
       );
-      if (!res.ok) throw new Error(`Export failed (${res.status})`);
-      const data = await res.json();
-      downloadBlob(JSON.stringify(data, null, 2), `sarif-${scanResult.scan_id}.sarif`, "application/sarif+json");
     } catch (err) {
       setScanError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -380,11 +523,15 @@ export function ScannerDashboard() {
     }
   }
 
-  async function exportJson() {
+  function exportJson() {
     if (!scanResult) return;
     setExportLoading("json");
     try {
-      downloadBlob(JSON.stringify(scanResult, null, 2), `scan-${scanResult.scan_id}.json`, "application/json");
+      downloadBlob(
+        JSON.stringify(scanResult, null, 2),
+        `scan-${safeName(scanResult.target)}.json`,
+        "application/json",
+      );
     } finally {
       setExportLoading(null);
     }
@@ -418,16 +565,17 @@ export function ScannerDashboard() {
             Cryptographic Asset Scan
           </h2>
           <p className="mt-1 text-xs text-slate-500">
-            Enter a target host, directory, or CIDR range to scan for quantum-vulnerable cryptography.
+            Enter a directory target to scan source files and dependency manifests for
+            quantum-vulnerable cryptography.
           </p>
 
           <div className="mt-4 flex flex-wrap items-end gap-3">
             <label className="flex-1 min-w-[240px] text-xs font-medium text-slate-600">
-              Target (host / directory / CIDR)
+              Target directory
               <input
                 value={target}
                 onChange={(e) => setTarget(e.target.value)}
-                placeholder="e.g. 192.168.1.0/24, /opt/app, api.example.com"
+                placeholder="e.g. /opt/app or ./src"
                 className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm"
                 onKeyDown={(e) => e.key === "Enter" && void runScan()}
               />
@@ -456,7 +604,7 @@ export function ScannerDashboard() {
             <button
               onClick={() => void runScan()}
               disabled={scanLoading || !target.trim()}
-              className="ml-auto inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50"
             >
               {scanLoading && <Spinner />}
               {scanLoading ? "Scanning…" : "Run scan"}
@@ -471,14 +619,17 @@ export function ScannerDashboard() {
               <div className="flex flex-wrap items-center gap-4">
                 <h3 className="text-sm font-semibold text-slate-800">Results</h3>
                 <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
-                  {scanResult.summary.total_findings} findings
+                  {scanResult.summary.totalFindings} findings
                 </span>
-                {scanResult.summary.algorithms_detected.length > 0 && (
+                {scanResult.summary.algorithmsDetected.length > 0 && (
                   <span className="text-xs text-slate-500">
-                    Algorithms: {scanResult.summary.algorithms_detected.join(", ")}
+                    Algorithms: {scanResult.summary.algorithmsDetected.join(", ")}
                   </span>
                 )}
               </div>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Summary counts are computed client-side from the backend findings.
+              </p>
 
               {/* Summary badges */}
               <div className="mt-3 flex flex-wrap gap-2">
@@ -502,6 +653,11 @@ export function ScannerDashboard() {
                     {scanResult.summary.low} low
                   </span>
                 )}
+                {scanResult.summary.info > 0 && (
+                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${severityColor("info")}`}>
+                    {scanResult.summary.info} info
+                  </span>
+                )}
               </div>
 
               {/* Findings table */}
@@ -512,29 +668,27 @@ export function ScannerDashboard() {
                       <th className="px-4 py-2 font-medium">File</th>
                       <th className="px-4 py-2 font-medium">Line</th>
                       <th className="px-4 py-2 font-medium">Algorithm</th>
-                      <th className="px-4 py-2 font-medium">Key Size</th>
                       <th className="px-4 py-2 font-medium">Severity</th>
-                      <th className="px-4 py-2 font-medium">Context</th>
+                      <th className="px-4 py-2 font-medium">Message</th>
                     </tr>
                   </thead>
                   <tbody>
                     {scanResult.findings.map((f, i) => (
                       <tr key={i} className="border-b border-slate-100">
                         <td className="px-4 py-2 font-mono text-slate-700">{f.file}</td>
-                        <td className="px-4 py-2 text-slate-500">{f.line}</td>
+                        <td className="px-4 py-2 text-slate-500">{f.line ?? "—"}</td>
                         <td className="px-4 py-2 font-medium text-slate-800">{f.algorithm}</td>
-                        <td className="px-4 py-2 text-slate-600">{f.key_size || "—"}</td>
                         <td className="px-4 py-2">
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${severityColor(f.severity)}`}>
-                            {f.severity}
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${severityColor(f.severity ?? "")}`}>
+                            {f.severity ?? "unknown"}
                           </span>
                         </td>
-                        <td className="max-w-[200px] truncate px-4 py-2 text-slate-500">{f.context}</td>
+                        <td className="max-w-[240px] truncate px-4 py-2 text-slate-500">{f.message}</td>
                       </tr>
                     ))}
                     {scanResult.findings.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="px-4 py-6 text-center text-slate-500">
+                        <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
                           No findings — no quantum-vulnerable algorithms detected.
                         </td>
                       </tr>
@@ -544,14 +698,14 @@ export function ScannerDashboard() {
               </div>
 
               {/* Export buttons */}
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-4 flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => void exportCbom()}
                   disabled={exportLoading === "cbom"}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-indigo-400 hover:text-indigo-700 disabled:opacity-50"
                 >
                   {exportLoading === "cbom" ? <Spinner /> : null}
-                  CycloneDX 1.7 CBOM
+                  CycloneDX CBOM
                 </button>
                 <button
                   onClick={() => void exportSarif()}
@@ -562,13 +716,16 @@ export function ScannerDashboard() {
                   SARIF 2.1
                 </button>
                 <button
-                  onClick={() => void exportJson()}
+                  onClick={() => exportJson()}
                   disabled={exportLoading === "json"}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-indigo-400 hover:text-indigo-700 disabled:opacity-50"
                 >
                   {exportLoading === "json" ? <Spinner /> : null}
                   Raw JSON
                 </button>
+                <span className="text-[11px] text-slate-400">
+                  CBOM &amp; SARIF are generated client-side from the returned findings.
+                </span>
               </div>
             </div>
           )}
@@ -582,7 +739,7 @@ export function ScannerDashboard() {
             Quantum Risk Scores
           </h2>
           <p className="mt-1 text-xs text-slate-500">
-            Risk assessment for each finding based on HNDL attack feasibility and algorithm vulnerability.
+            Risk assessment for each finding based on algorithm classification (POST /v1/risk/score).
           </p>
 
           {!scanResult ? (
@@ -609,41 +766,48 @@ export function ScannerDashboard() {
                   <table className="w-full text-left text-xs">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50 text-slate-500">
-                        <th className="px-4 py-2 font-medium">Finding</th>
+                        <th className="px-4 py-2 font-medium">File</th>
+                        <th className="px-4 py-2 font-medium">Line</th>
                         <th className="px-4 py-2 font-medium">Algorithm</th>
                         <th className="px-4 py-2 font-medium">Quantum Vulnerable</th>
+                        <th className="px-4 py-2 font-medium">Classification</th>
                         <th className="px-4 py-2 font-medium">Risk Level</th>
-                        <th className="px-4 py-2 font-medium">HNDL Score</th>
-                        <th className="px-4 py-2 font-medium">Recommended Action</th>
+                        <th className="px-4 py-2 font-medium">Risk Score</th>
+                        <th className="px-4 py-2 font-medium">Message</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {riskScores.map((r, i) => (
-                        <tr key={i} className="border-b border-slate-100">
-                          <td className="max-w-[160px] truncate px-4 py-2 font-mono text-slate-700">
-                            {r.finding}
-                          </td>
-                          <td className="px-4 py-2 font-medium text-slate-800">{r.algorithm}</td>
-                          <td className="px-4 py-2">
-                            {r.quantum_vulnerable ? (
-                              <span className="inline-flex items-center gap-1 text-rose-600">
-                                <XCircleIcon className="h-3.5 w-3.5" /> Yes
+                      {riskScores.map((r, i) => {
+                        const broken = r.algorithmClassification === "BROKEN" || r.algorithmClassification === "WEAKENED";
+                        return (
+                          <tr key={i} className="border-b border-slate-100">
+                            <td className="max-w-[160px] truncate px-4 py-2 font-mono text-slate-700">
+                              {r.file}
+                            </td>
+                            <td className="px-4 py-2 text-slate-500">{r.line ?? "—"}</td>
+                            <td className="px-4 py-2 font-medium text-slate-800">{r.algorithm}</td>
+                            <td className="px-4 py-2">
+                              {broken ? (
+                                <span className="inline-flex items-center gap-1 text-rose-600">
+                                  <XCircleIcon className="h-3.5 w-3.5" /> Yes
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-emerald-600">
+                                  <ShieldCheckIcon className="h-3.5 w-3.5" /> No
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2 text-slate-600">{r.algorithmClassification}</td>
+                            <td className="px-4 py-2">
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${severityColor(r.riskLevel.toLowerCase())}`}>
+                                {r.riskLevel}
                               </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-emerald-600">
-                                <ShieldCheckIcon className="h-3.5 w-3.5" /> No
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-2">
-                            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${severityColor(r.risk_level)}`}>
-                              {r.risk_level}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2 font-mono text-slate-700">{r.hndl_score.toFixed(2)}</td>
-                          <td className="max-w-[200px] px-4 py-2 text-slate-600">{r.recommended_action}</td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td className="px-4 py-2 font-mono text-slate-700">{r.riskScore.toFixed(0)}</td>
+                            <td className="max-w-[200px] truncate px-4 py-2 text-slate-500">{r.message}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -660,7 +824,7 @@ export function ScannerDashboard() {
             Compliance Assessment
           </h2>
           <p className="mt-1 text-xs text-slate-500">
-            Evaluate scan results against NIST and industry compliance frameworks.
+            Evaluate scan results against NIST SP 800-131A and CNSA 2.0 frameworks (POST /v1/compliance/evaluate).
           </p>
 
           {!scanResult ? (
@@ -698,7 +862,7 @@ export function ScannerDashboard() {
 
               {complianceReport && (
                 <div className="mt-6">
-                  {/* Score gauge */}
+                  {/* Score gauge (percentage computed client-side) */}
                   <div className="flex items-center gap-6">
                     <div className="relative h-24 w-24">
                       <svg className="h-24 w-24 -rotate-90" viewBox="0 0 36 36">
@@ -716,61 +880,65 @@ export function ScannerDashboard() {
                           r="15.9155"
                           fill="none"
                           stroke={
-                            complianceReport.score >= 80
+                            complianceReport.scorePercent >= 80
                               ? "#10b981"
-                              : complianceReport.score >= 50
+                              : complianceReport.scorePercent >= 50
                                 ? "#f59e0b"
                                 : "#ef4444"
                           }
                           strokeWidth="3"
-                          strokeDasharray={`${complianceReport.score} ${100 - complianceReport.score}`}
+                          strokeDasharray={`${complianceReport.scorePercent} ${100 - complianceReport.scorePercent}`}
                           strokeLinecap="round"
                         />
                       </svg>
                       <div className="absolute inset-0 flex items-center justify-center">
                         <span className="text-lg font-bold text-slate-900">
-                          {complianceReport.score}%
+                          {complianceReport.scorePercent}%
                         </span>
                       </div>
                     </div>
                     <div className="text-sm text-slate-600">
                       <div>
-                        <span className="font-medium text-emerald-600">{complianceReport.passed}</span> passed
+                        <span className="font-medium text-emerald-600">{complianceReport.compliant}</span>{" "}
+                        compliant
                       </div>
                       <div>
-                        <span className="font-medium text-rose-600">{complianceReport.failed}</span> failed
-                      </div>
-                      <div>
-                        <span className="font-medium text-amber-600">{complianceReport.warnings}</span> warnings
+                        <span className="font-medium text-rose-600">{complianceReport.nonCompliant}</span>{" "}
+                        non-compliant
                       </div>
                       <div className="text-xs text-slate-500">
-                        {complianceReport.total_rules} total rules
+                        {complianceReport.total} findings evaluated ({complianceReport.framework})
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        Percentage derived client-side from server counts.
                       </div>
                     </div>
                   </div>
 
-                  {/* Rules table */}
+                  {/* Results table */}
                   <div className="mt-6 overflow-x-auto rounded-lg border border-slate-200">
                     <table className="w-full text-left text-xs">
                       <thead>
                         <tr className="border-b border-slate-200 bg-slate-50 text-slate-500">
-                          <th className="px-4 py-2 font-medium">Rule ID</th>
-                          <th className="px-4 py-2 font-medium">Description</th>
+                          <th className="px-4 py-2 font-medium">File</th>
+                          <th className="px-4 py-2 font-medium">Algorithm</th>
                           <th className="px-4 py-2 font-medium">Status</th>
                           <th className="px-4 py-2 font-medium">Details</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {complianceReport.rules.map((rule) => (
-                          <tr key={rule.rule_id} className="border-b border-slate-100">
-                            <td className="px-4 py-2 font-mono text-slate-700">{rule.rule_id}</td>
-                            <td className="px-4 py-2 text-slate-700">{rule.description}</td>
+                        {complianceReport.results.map((r, i) => (
+                          <tr key={i} className="border-b border-slate-100">
+                            <td className="max-w-[180px] truncate px-4 py-2 font-mono text-slate-700">{r.file}</td>
+                            <td className="px-4 py-2 font-medium text-slate-800">{r.algorithm}</td>
                             <td className="px-4 py-2">
-                              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${complianceColor(rule.status)}`}>
-                                {rule.status}
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${complianceColor(r.compliance?.compliant ? "pass" : "fail")}`}>
+                                {r.compliance?.compliant ? "pass" : "fail"}
                               </span>
                             </td>
-                            <td className="max-w-[240px] px-4 py-2 text-slate-500">{rule.details}</td>
+                            <td className="max-w-[320px] px-4 py-2 text-slate-500">
+                              {r.compliance?.reason}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -790,7 +958,7 @@ export function ScannerDashboard() {
             Migration Roadmap
           </h2>
           <p className="mt-1 text-xs text-slate-500">
-            Phased migration plan with effort estimates, timelines, and cost projections.
+            Phased remediation plan with effort and cost estimates (POST /v1/roadmap/generate).
           </p>
 
           {!scanResult ? (
@@ -801,12 +969,14 @@ export function ScannerDashboard() {
             <>
               <div className="mt-4 flex flex-wrap items-end gap-3">
                 <label className="text-xs font-medium text-slate-600">
-                  Deadline (optional)
+                  Daily rate ($, optional)
                   <input
-                    type="date"
-                    value={roadmapDeadline}
-                    onChange={(e) => setRoadmapDeadline(e.target.value)}
-                    className="mt-1 block rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    type="number"
+                    min="1"
+                    value={roadmapDailyRate}
+                    onChange={(e) => setRoadmapDailyRate(e.target.value)}
+                    placeholder="1500"
+                    className="mt-1 block w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   />
                 </label>
                 <button
@@ -830,7 +1000,7 @@ export function ScannerDashboard() {
                         Total Effort
                       </div>
                       <div className="mt-1 text-2xl font-bold text-slate-900">
-                        {roadmap.total_effort_days} days
+                        {roadmap.summary.totalDays} days
                       </div>
                     </div>
                     <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -838,70 +1008,56 @@ export function ScannerDashboard() {
                         Estimated Cost
                       </div>
                       <div className="mt-1 text-2xl font-bold text-slate-900">
-                        ${roadmap.total_cost_estimate.toLocaleString()}
+                        ${roadmap.summary.totalCost.toLocaleString()}
                       </div>
                     </div>
                     <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                       <div className="text-xs font-medium uppercase tracking-wider text-slate-500">
-                        Phases
+                        Est. Completion
                       </div>
-                      <div className="mt-1 text-2xl font-bold text-slate-900">
-                        {roadmap.phases.length}
+                      <div className="mt-1 flex items-center gap-2 text-lg font-bold text-slate-900">
+                        <ClockIcon className="h-4 w-4 text-slate-400" />
+                        {new Date(roadmap.summary.completionDate).toLocaleDateString()}
                       </div>
                     </div>
                   </div>
 
-                  {/* Timeline */}
+                  {/* Phases */}
                   <div className="mt-6 space-y-4">
                     {roadmap.phases.map((phase) => (
-                      <div
-                        key={phase.phase}
-                        className="relative rounded-lg border border-slate-200 bg-white p-4 pl-8 shadow-sm"
-                      >
+                      <div key={phase.phase} className="relative rounded-lg border border-slate-200 bg-white p-4 pl-12 shadow-sm">
                         {/* Timeline dot */}
                         <div className="absolute left-3 top-4 flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-bold text-white">
                           {phase.phase}
                         </div>
-                        {/* Timeline line */}
-                        <div className="absolute bottom-0 left-[19px] top-9 w-0.5 bg-slate-200" />
-
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div>
-                            <h3 className="text-sm font-semibold text-slate-800">{phase.name}</h3>
-                            <p className="mt-0.5 text-xs text-slate-500">{phase.description}</p>
-                          </div>
-                          <div className="flex items-center gap-3 text-xs text-slate-500">
-                            <span className="inline-flex items-center gap-1">
-                              <ClockIcon className="h-3.5 w-3.5" />
-                              {phase.effort_days}d
-                            </span>
-                            <span className="font-medium text-slate-700">
-                              ${phase.cost_estimate.toLocaleString()}
+                            <h3 className="text-sm font-semibold text-slate-800">{phase.title}</h3>
+                            <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${severityColor(phase.priority.toLowerCase())}`}>
+                              {phase.priority}
                             </span>
                           </div>
-                        </div>
-
-                        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
-                          <span className="text-slate-500">
-                            {phase.start_date} → {phase.end_date}
+                          <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                            <ClockIcon className="h-3.5 w-3.5" />
+                            {phase.estimatedDays}d
                           </span>
-                          {phase.assets.length > 0 && (
-                            <span className="text-slate-400">
-                              {phase.assets.length} asset{phase.assets.length !== 1 ? "s" : ""}
-                            </span>
-                          )}
                         </div>
 
-                        {phase.assets.length > 0 && (
+                        {phase.findings.length > 0 && (
                           <div className="mt-2 flex flex-wrap gap-1">
-                            {phase.assets.map((a) => (
+                            {phase.findings.slice(0, 8).map((f, i) => (
                               <span
-                                key={a}
+                                key={i}
                                 className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600"
                               >
-                                {a}
+                                {f.file}
                               </span>
                             ))}
+                            {phase.findings.length > 8 && (
+                              <span className="text-[10px] text-slate-400">
+                                +{phase.findings.length - 8} more
+                              </span>
+                            )}
                           </div>
                         )}
                       </div>
@@ -918,78 +1074,84 @@ export function ScannerDashboard() {
       {activeTab === "evidence" && (
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
-            Evidence Ledger
+            Evidence Record
           </h2>
           <p className="mt-1 text-xs text-slate-500">
-            Cryptographically signed scan evidence stored on-chain. Verify integrity and view CBOM diffs.
+            Generate a tamper-evident integrity record for your latest scan (POST /v1/evidence/create)
+            and verify its hash (POST /v1/evidence/verify). Records are created per request — the
+            backend does not persist them.
           </p>
 
-          <div className="mt-4 flex justify-end">
+          <div className="mt-4 flex justify-end gap-2">
             <button
-              onClick={() => void fetchEvidence()}
-              disabled={evidenceLoading}
+              onClick={() => void createEvidence()}
+              disabled={evidenceLoading || !scanResult}
               className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50"
             >
               {evidenceLoading && <Spinner />}
-              {evidenceLoading ? "Loading…" : "Load evidence"}
+              {!scanResult ? "Run a scan first" : evidenceLoading ? "Creating…" : "Create evidence record"}
             </button>
           </div>
 
           {evidenceError && <p className="mt-3 text-xs text-rose-600">{evidenceError}</p>}
 
           {evidenceLedger && (
-            <div className="mt-4">
-              <p className="mb-3 text-xs text-slate-500">
-                {evidenceLedger.total} evidence record{evidenceLedger.total !== 1 ? "s" : ""}
-              </p>
-
-              <div className="space-y-3">
-                {evidenceLedger.entries.map((entry) => (
-                  <div
-                    key={entry.evidence_id}
-                    className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 p-4"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-slate-700">{entry.evidence_id}</span>
-                        {entry.verified ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                            <ShieldCheckIcon className="h-3 w-3" /> verified
-                          </span>
-                        ) : (
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
-                            unverified
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        CBOM: <span className="font-mono">{entry.cbom_hash.slice(0, 16)}…</span>
-                        {" · "}
-                        {new Date(entry.timestamp * 1000).toLocaleDateString()}
-                        {" · "}
-                        signer: <span className="font-mono">{entry.signer.slice(0, 10)}…</span>
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 gap-2">
-                      <button
-                        onClick={() => void verifyEvidence(entry.evidence_id)}
-                        disabled={verifyLoading === entry.evidence_id || entry.verified}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-emerald-400 hover:text-emerald-700 disabled:opacity-50"
-                      >
-                        {verifyLoading === entry.evidence_id ? <Spinner /> : null}
-                        {entry.verified ? "Verified" : "Verify"}
-                      </button>
-                    </div>
+            <div className="mt-4 rounded-lg border border-slate-200 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs text-slate-700">
+                      {evidenceLedger.integrityHash.slice(0, 16)}…
+                    </span>
+                    {evidenceVerify?.valid ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                        <ShieldCheckIcon className="h-3 w-3" /> verified
+                      </span>
+                    ) : evidenceVerify && !evidenceVerify.valid ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700">
+                        <XCircleIcon className="h-3 w-3" /> mismatch
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+                        unverified
+                      </span>
+                    )}
                   </div>
-                ))}
-
-                {evidenceLedger.entries.length === 0 && (
-                  <p className="py-6 text-center text-sm text-slate-500">
-                    No evidence records yet. Run a scan to generate evidence.
-                  </p>
-                )}
+                  <div className="mt-1 text-xs text-slate-500">
+                    Target: <span className="font-mono">{safeName(evidenceLedger.data.scanTarget)}</span>
+                    {" · "}
+                    {evidenceLedger.data.findingsCount} finding
+                    {evidenceLedger.data.findingsCount !== 1 ? "s" : ""}
+                    {" · "}
+                    {new Date(evidenceLedger.data.timestamp).toLocaleString()}
+                    {" · "}
+                    v{evidenceLedger.version}, index #{evidenceLedger.chainIndex}
+                  </div>
+                  {evidenceVerify && !evidenceVerify.valid && (
+                    <div className="mt-1 text-[11px] text-rose-600">
+                      Expected {evidenceVerify.expectedHash.slice(0, 16)}… but got{" "}
+                      {evidenceVerify.providedHash.slice(0, 16)}…
+                    </div>
+                  )}
+                </div>
+                <div className="shrink-0">
+                  <button
+                    onClick={() => void verifyLedger()}
+                    disabled={verifyLoading || Boolean(evidenceVerify?.valid)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-emerald-400 hover:text-emerald-700 disabled:opacity-50"
+                  >
+                    {verifyLoading ? <Spinner /> : null}
+                    {evidenceVerify?.valid ? "Verified" : verifyLoading ? "Verifying…" : "Verify"}
+                  </button>
+                </div>
               </div>
             </div>
+          )}
+
+          {!evidenceLedger && !evidenceError && (
+            <p className="py-6 text-center text-sm text-slate-500">
+              No evidence record yet. Run a scan to create one.
+            </p>
           )}
         </div>
       )}

@@ -210,6 +210,10 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
         }
         attestationId = keccak256(abi.encode(vendorDid, productIdHash));
 
+        if (_attestations[attestationId].vendorDid != address(0)) {
+            revert DuplicateAttestation(attestationId);
+        }
+
         _attestations[attestationId] = ProductAttestation({
             vendorDid: vendorDid,
             productId: productId,

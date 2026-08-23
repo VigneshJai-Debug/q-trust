@@ -19,6 +19,8 @@ contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
     error NotRegistrar(address caller);
     error EmptyHash();
     error MetadataTooLong();
+    error InvalidCBOMHash();
+    error InvalidMetadataURI();
     error AssetAlreadyRetired(bytes32 assetId);
     error InvalidSignature();
     error InvalidNonce(address signer, uint256 provided, uint256 expected);
@@ -185,6 +187,7 @@ contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
         string calldata metadataURI
     ) internal returns (bytes32 assetId) {
         if (cbomHash == bytes32(0)) revert EmptyHash();
+        if (bytes(metadataURI).length == 0) revert InvalidMetadataURI();
         if (bytes(metadataURI).length > 512) revert MetadataTooLong();
 
         assetId = keccak256(abi.encode(orgDid, cbomHash));
@@ -219,6 +222,8 @@ contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
         if (asset.orgDid != msg.sender && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) {
             revert NotRegistrar(msg.sender);
         }
+        if (newCbomHash == bytes32(0)) revert InvalidCBOMHash();
+        if (bytes(newMetadataURI).length == 0 || bytes(newMetadataURI).length > 512) revert InvalidMetadataURI();
         asset.cbomHash = newCbomHash;
         asset.metadataURI = newMetadataURI;
         asset.lastUpdated = block.timestamp;

@@ -1,4 +1,61 @@
+import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
+import { promises as fsp } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import type { FastifyInstance } from "fastify";
+
+const execFileAsync = promisify(execFile);
+
+const INSPECTOR_SCRIPT = fileURLToPath(new URL("../../scripts/run_inspector.py", import.meta.url));
+
+/**
+ * Execute the real Python inspector and parse its JSON output.
+ * Fails loudly (throws) — callers must NEVER substitute fabricated findings.
+ */
+async function runInspector(args: string[]): Promise<any> {
+  const pythonBin = process.env.QTRUST_INSPECTOR_PYTHON || "python3";
+  const script = process.env.QTRUST_INSPECTOR_SCRIPT || INSPECTOR_SCRIPT;
+  const { stdout } = await execFileAsync(pythonBin, [script, ...args], {
+    timeout: 60_000,
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  return JSON.parse(stdout);
+}
+
+/** Validate a scan directory against SSRF/path-traversal abuse. Throws on invalid input. */
+async function validateScanDirectory(rawDir: string): Promise<string> {
+  if (!path.isAbsolute(rawDir)) {
+    throw Object.assign(new Error("directory must be an absolute path"), { statusCode: 400 });
+  }
+  // Resolve symlinks/.. segments so the allowed-roots check cannot be bypassed.
+  let resolved: string;
+  try {
+    resolved = await fsp.realpath(path.resolve(rawDir));
+  } catch {
+    throw Object.assign(new Error("directory does not exist"), { statusCode: 400 });
+  }
+  const stat = await fsp.stat(resolved).catch(() => null);
+  if (!stat?.isDirectory()) {
+    throw Object.assign(new Error("path is not a directory"), { statusCode: 400 });
+  }
+  const allowedRootsRaw = process.env.QTRUST_SCAN_ALLOWED_ROOTS;
+  if (allowedRootsRaw) {
+    const roots = allowedRootsRaw
+      .split(",")
+      .map((r) => r.trim())
+      .filter(Boolean);
+    const allowed = roots.some((root) => resolved === root || resolved.startsWith(root + path.sep));
+    if (!allowed) {
+      throw Object.assign(
+        new Error(`directory is outside allowed scan roots (${allowedRootsRaw})`),
+        { statusCode: 403 },
+      );
+    }
+  }
+  return resolved;
+}
 
 const ALGORITHM_RISK_MAP: Record<string, string> = {
   RSA: "BROKEN",
@@ -77,27 +134,70 @@ function evaluateCNSACompliance(finding: any): { compliant: boolean; reason: str
   return { compliant: false, reason: `${alg} is not on the CNSA approved list` };
 }
 
+interface LedgerEntry {
+  version: string;
+  data: unknown;
+  integrityHash: string;
+  previousHash: string;
+  chainIndex: number;
+}
+
+const GENESIS_HASH = "0".repeat(64);
+
+// Module-level in-memory chain (persisted chain should come from Postgres in production)
+const evidenceChain: LedgerEntry[] = [];
+
+function computeIntegrityHash(entry: Omit<LedgerEntry, "integrityHash">): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        data: entry.data,
+        previousHash: entry.previousHash,
+        chainIndex: entry.chainIndex,
+      }),
+    )
+    .digest("hex");
+}
+
 function generateEvidenceLedger(data: {
   scanResultHash: string;
   scanTarget: string;
   findingsCount: number;
   riskSummary: object;
   timestamp: string;
-}) {
-  const payload = JSON.stringify(data);
-  let hash = 0;
-  for (let i = 0; i < payload.length; i++) {
-    const char = payload.charCodeAt(i);
-    hash = ((hash << 5) - hash + char) | 0;
-  }
-  const integrityHash = Math.abs(hash).toString(16).padStart(8, "0");
-  return {
+}): LedgerEntry {
+  const last = evidenceChain.length ? evidenceChain[evidenceChain.length - 1] : null;
+  const entry: Omit<LedgerEntry, "integrityHash"> = {
     version: "1.0",
     data,
-    integrityHash,
-    previousHash: "00000000",
-    chainIndex: 0,
+    previousHash: last ? last.integrityHash : GENESIS_HASH,
+    chainIndex: last ? last.chainIndex + 1 : 0,
   };
+  const full: LedgerEntry = { ...entry, integrityHash: computeIntegrityHash(entry) };
+  evidenceChain.push(full);
+  return full;
+}
+
+/** Re-compute every hash and validate the whole chain. Returns a reason on any mismatch/tamper. */
+function verifyEvidenceChain(entries: LedgerEntry[]): { valid: boolean; reason?: string; failedIndex?: number } {
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    if (typeof entry.chainIndex !== "number" || typeof entry.previousHash !== "string") {
+      return { valid: false, reason: "malformed_entry", failedIndex: i };
+    }
+    const expectedPrevious = i === 0 ? GENESIS_HASH : entries[i - 1].integrityHash;
+    if (entry.previousHash !== expectedPrevious) {
+      return { valid: false, reason: "previous_hash_mismatch", failedIndex: i };
+    }
+    if (entry.chainIndex !== i) {
+      return { valid: false, reason: "chain_index_mismatch", failedIndex: i };
+    }
+    const recomputed = computeIntegrityHash(entry);
+    if (recomputed !== entry.integrityHash) {
+      return { valid: false, reason: "integrity_hash_mismatch", failedIndex: i };
+    }
+  }
+  return { valid: true };
 }
 
 export async function registerScannerRoutes(app: FastifyInstance): Promise<void> {
@@ -113,13 +213,30 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
       reply.code(400);
       return { error: "directory is required" };
     }
-    const findings = [
-      { type: "source", file: "crypto.py", algorithm: "RSA", line: 42, severity: "high", message: "Hardcoded RSA key usage" },
-      { type: "source", file: "hash_utils.py", algorithm: "MD5", line: 15, severity: "medium", message: "Weak hash algorithm MD5" },
-      { type: "source", file: "tls_config.py", algorithm: "AES-256", line: 8, severity: "info", message: "Secure symmetric cipher" },
-    ];
-    scanHistory.push({ target: directory, type: "source", timestamp: new Date().toISOString(), count: findings.length });
-    return { directory, findings, scanType: "source", timestamp: new Date().toISOString() };
+    let resolvedDir: string;
+    try {
+      resolvedDir = await validateScanDirectory(directory);
+    } catch (err) {
+      reply.code((err as { statusCode?: number }).statusCode ?? 400);
+      return { error: (err as Error).message };
+    }
+    let result: { findings?: any[]; error?: string };
+    try {
+      result = await runInspector(["--scan-type", "source", "--path", resolvedDir]);
+    } catch (err) {
+      request.log.error(err, "Inspector scan failed");
+      reply.code(503);
+      return {
+        error: `Cryptographic scanner unavailable or failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    if (result?.error) {
+      reply.code(503);
+      return { error: `Cryptographic scanner failed: ${result.error}` };
+    }
+    const findings = Array.isArray(result.findings) ? result.findings : [];
+    scanHistory.push({ target: resolvedDir, type: "source", timestamp: new Date().toISOString(), count: findings.length });
+    return { directory: resolvedDir, findings, scanType: "source", timestamp: new Date().toISOString() };
   });
 
   app.post("/v1/scan/manifests", async (request, reply) => {
@@ -128,43 +245,72 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
       reply.code(400);
       return { error: "directory is required" };
     }
-    const findings = [
-      { type: "manifest", file: "requirements.txt", algorithm: "3DES", severity: "high", message: "Package uses deprecated 3DES" },
-      { type: "manifest", file: "package.json", algorithm: "SHA-256", severity: "info", message: "Package uses SHA-256" },
-      { type: "manifest", file: "Cargo.toml", algorithm: "ML-KEM", severity: "info", message: "Package uses post-quantum ML-KEM" },
-    ];
-    scanHistory.push({ target: directory, type: "manifests", timestamp: new Date().toISOString(), count: findings.length });
-    return { directory, findings, scanType: "manifests", timestamp: new Date().toISOString() };
+    let resolvedDir: string;
+    try {
+      resolvedDir = await validateScanDirectory(directory);
+    } catch (err) {
+      reply.code((err as { statusCode?: number }).statusCode ?? 400);
+      return { error: (err as Error).message };
+    }
+    let result: { findings?: any[]; error?: string };
+    try {
+      result = await runInspector(["--scan-type", "manifests", "--path", resolvedDir]);
+    } catch (err) {
+      request.log.error(err, "Inspector scan failed");
+      reply.code(503);
+      return {
+        error: `Cryptographic scanner unavailable or failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    if (result?.error) {
+      reply.code(503);
+      return { error: `Cryptographic scanner failed: ${result.error}` };
+    }
+    const findings = Array.isArray(result.findings) ? result.findings : [];
+    scanHistory.push({ target: resolvedDir, type: "manifests", timestamp: new Date().toISOString(), count: findings.length });
+    return { directory: resolvedDir, findings, scanType: "manifests", timestamp: new Date().toISOString() };
   });
 
   app.post("/v1/scan/full", async (request, reply) => {
-    const { target, includeSource, includeManifests } = request.body as {
+    const { target, includeSource = true, includeManifests = true } = request.body as {
       target: string;
-      includeSource: boolean;
-      includeManifests: boolean;
+      includeSource?: boolean;
+      includeManifests?: boolean;
     };
     if (!target) {
       reply.code(400);
       return { error: "target is required" };
     }
-    const allFindings: any[] = [];
-    if (includeSource) {
-      allFindings.push(
-        { type: "source", file: "crypto.py", algorithm: "RSA", line: 42, severity: "high", message: "Hardcoded RSA" },
-        { type: "source", file: "hash.py", algorithm: "MD5", line: 15, severity: "medium", message: "Weak hash" },
-        { type: "source", file: "cipher.py", algorithm: "AES-256", line: 8, severity: "info", message: "Secure cipher" },
-        { type: "source", file: "sign.py", algorithm: "Ed25519", line: 33, severity: "high", message: "Broken EdDSA variant" },
-      );
+    if (!includeSource && !includeManifests) {
+      reply.code(400);
+      return { error: "at least one of includeSource or includeManifests must be true" };
     }
-    if (includeManifests) {
-      allFindings.push(
-        { type: "manifest", file: "requirements.txt", algorithm: "3DES", severity: "high", message: "Deprecated 3DES" },
-        { type: "manifest", file: "package.json", algorithm: "ChaCha20", severity: "info", message: "Secure stream cipher" },
-        { type: "manifest", file: "go.mod", algorithm: "ML-DSA", severity: "info", message: "PQC ready" },
-      );
+    let resolvedTarget: string;
+    try {
+      resolvedTarget = await validateScanDirectory(target);
+    } catch (err) {
+      reply.code((err as { statusCode?: number }).statusCode ?? 400);
+      return { error: (err as Error).message };
     }
-    scanHistory.push({ target, type: "full", timestamp: new Date().toISOString(), count: allFindings.length });
-    return { target, findings: allFindings, scanType: "full", timestamp: new Date().toISOString() };
+    const scanType =
+      includeSource && includeManifests ? "full" : includeSource ? "source" : "manifests";
+    let result: { findings?: any[]; error?: string };
+    try {
+      result = await runInspector(["--scan-type", scanType, "--path", resolvedTarget]);
+    } catch (err) {
+      request.log.error(err, "Inspector scan failed");
+      reply.code(503);
+      return {
+        error: `Cryptographic scanner unavailable or failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    if (result?.error) {
+      reply.code(503);
+      return { error: `Cryptographic scanner failed: ${result.error}` };
+    }
+    const allFindings = Array.isArray(result.findings) ? result.findings : [];
+    scanHistory.push({ target: resolvedTarget, type: "full", timestamp: new Date().toISOString(), count: allFindings.length });
+    return { target: resolvedTarget, findings: allFindings, scanType: "full", timestamp: new Date().toISOString() };
   });
 
   app.post("/v1/risk/score", async (request, reply) => {
@@ -268,11 +414,58 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
     const { ledger } = request.body as { ledger: any };
     if (!ledger || !ledger.data || !ledger.integrityHash) {
       reply.code(400);
-      return { error: "ledger with data and integrityHash is required" };
+      return { error: "ledger with data, previousHash, chainIndex and integrityHash is required" };
     }
-    const recomputed = generateEvidenceLedger(ledger.data);
-    const valid = recomputed.integrityHash === ledger.integrityHash;
-    return { valid, expectedHash: recomputed.integrityHash, providedHash: ledger.integrityHash };
+    if (typeof ledger.previousHash !== "string" || typeof ledger.chainIndex !== "number") {
+      return {
+        valid: false,
+        reason: "malformed_entry",
+        detail: "Ledger entry is missing chain metadata (previousHash/chainIndex)",
+        expectedHash: null,
+        providedHash: ledger.integrityHash,
+      };
+    }
+
+    // 1. Re-compute the submitted entry's own integrity hash.
+    const recomputed = computeIntegrityHash(ledger);
+    if (recomputed !== ledger.integrityHash) {
+      return {
+        valid: false,
+        reason: "integrity_hash_mismatch",
+        expectedHash: recomputed,
+        providedHash: ledger.integrityHash,
+      };
+    }
+
+    // 2. Validate the whole in-memory chain (tamper detection across history).
+    const chainCheck = verifyEvidenceChain(evidenceChain);
+    if (!chainCheck.valid) {
+      return {
+        valid: false,
+        reason: `chain_broken_at_index_${chainCheck.failedIndex}`,
+        detail: chainCheck.reason,
+      };
+    }
+
+    // 3. If this entry was issued by this node, confirm it still matches the
+    //    chain entry at its index (detects tampering of historical entries).
+    const known = evidenceChain[ledger.chainIndex];
+    if (known && known.integrityHash !== ledger.integrityHash) {
+      return {
+        valid: false,
+        reason: "entry_not_in_chain",
+        detail: "Entry does not match the chain record at its index",
+      };
+    }
+    if (!known) {
+      return {
+        valid: false,
+        reason: "unknown_chain_index",
+        detail: `No ledger entry exists at chainIndex ${ledger.chainIndex} on this node`,
+      };
+    }
+
+    return { valid: true, expectedHash: recomputed, providedHash: ledger.integrityHash, chainLength: evidenceChain.length };
   });
 
   app.post("/v1/roadmap/generate", async (request, reply) => {

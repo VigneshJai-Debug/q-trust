@@ -58,6 +58,8 @@ export interface MigrationProgressInfo {
   total_migrations: number;
   verified_migrations: number;
   unverified_migrations: number;
+  asset_count?: number;
+  attestation_count?: number;
   fetched_at: number;
 }
 
@@ -319,17 +321,48 @@ export async function checkProductSupport(
 export async function getMigrationProgress(
   orgAddress: Address,
 ): Promise<MigrationProgressInfo> {
+  const org = orgAddress.toLowerCase();
+
+  // Indexed path: one SQL round-trip joining migrations to their assets,
+  // plus asset and attestation counts — replaces per-migration RPC fetches.
+  if (pool) {
+    const res = await pool.query(
+      `SELECT
+         COUNT(DISTINCT m.migration_id)::int AS total_migrations,
+         COUNT(DISTINCT m.migration_id) FILTER (WHERE m.verified)::int AS verified_migrations,
+         COUNT(DISTINCT a.asset_id)::int AS asset_count,
+         (SELECT COUNT(*)::int FROM attestations att
+           WHERE att.vendor_did = $1 AND NOT att.revoked) AS attestation_count
+       FROM migrations m
+       LEFT JOIN assets a ON a.asset_id = m.asset_id
+       WHERE m.org_did = $1`,
+      [org],
+    );
+    const r = res.rows[0];
+    const total = Number(r.total_migrations);
+    const verified = Number(r.verified_migrations);
+    return {
+      org_address: orgAddress,
+      total_migrations: total,
+      verified_migrations: verified,
+      unverified_migrations: total - verified,
+      asset_count: Number(r.asset_count),
+      attestation_count: Number(r.attestation_count),
+      fetched_at: Math.floor(Date.now() / 1000),
+    };
+  }
+
   const migrationIds = (await migrationRegistry.read.getMigrationsByOrg([orgAddress])) as
     readonly `0x${string}`[];
 
+  // RPC fallback: batch all migration lookups concurrently instead of
+  // fetching them sequentially.
+  const settled = await Promise.allSettled(
+    migrationIds.map((migId) => migrationRegistry.read.getMigration([migId])),
+  );
   let verified = 0;
-  for (const migId of migrationIds) {
-    try {
-      const m = await migrationRegistry.read.getMigration([migId]);
-      if (m.verified) verified += 1;
-    } catch {
-      continue;
-    }
+  for (const outcome of settled) {
+    if (outcome.status === "fulfilled" && outcome.value.verified) verified += 1;
   }
   return {
     org_address: orgAddress,

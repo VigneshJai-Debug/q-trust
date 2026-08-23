@@ -33,7 +33,14 @@ contract QTrustGovernance {
     MigrationRegistry public immutable migrationRegistry;
     AuditRegistry public immutable auditRegistry;
 
-    uint256 public constant DEFAULT_DELAY = 2 days;
+    uint256 public constant DEFAULT_DELAY = 7 days;
+
+    /// @dev DEFAULT_ADMIN_ROLE in AccessControl-based registries is bytes32(0).
+    bytes32 private constant _DEFAULT_ADMIN_ROLE = bytes32(0);
+
+    /// @notice Reverted when a scheduled call would grant, revoke, or renounce
+    ///         the DEFAULT_ADMIN_ROLE, allowing governance to escalate itself.
+    error ForbiddenGovernanceCall();
 
     event GovernanceCallScheduled(
         address indexed target,
@@ -75,6 +82,8 @@ contract QTrustGovernance {
         address account,
         bytes32 salt
     ) external {
+        // Prevent governance from escalating itself to full admin.
+        if (role == _DEFAULT_ADMIN_ROLE) revert ForbiddenGovernanceCall();
         address target = _getRegistry(registryIndex);
         bytes memory data = abi.encodeCall(IAccessControl.grantRole, (role, account));
         _schedule(target, data, salt);
@@ -100,8 +109,26 @@ contract QTrustGovernance {
     }
 
     function _schedule(address target, bytes memory data, bytes32 salt) internal {
+        // Prevent governance from escalating itself to full admin.
+        if (_isAdminRoleCall(data)) revert ForbiddenGovernanceCall();
         timelock.schedule(target, 0, data, bytes32(0), salt, DEFAULT_DELAY);
         emit GovernanceCallScheduled(target, data, DEFAULT_DELAY, salt);
+    }
+
+    /// @dev True when calldata targets grantRole/revokeRole/renounceRole with
+    ///      the DEFAULT_ADMIN_ROLE (bytes32(0)) as the role argument.
+    function _isAdminRoleCall(bytes memory data) internal pure returns (bool) {
+        if (data.length < 4 + 64) return false; // selector + role + account
+        bytes4 selector = bytes4(data);
+        bool isRoleCall = selector == IAccessControl.grantRole.selector ||
+            selector == IAccessControl.revokeRole.selector ||
+            selector == IAccessControl.renounceRole.selector;
+        if (!isRoleCall) return false;
+        bytes32 role;
+        assembly {
+            role := mload(add(data, 36))
+        }
+        return role == _DEFAULT_ADMIN_ROLE;
     }
 
     /** @notice Execute a previously scheduled call (after its delay elapses). */

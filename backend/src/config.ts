@@ -48,17 +48,27 @@ export function allContractsConfigured(): boolean {
   return Object.values(CONTRACTS).every((a) => a !== "0x0");
 }
 
+/** Thrown when required configuration is missing or invalid. */
+export class ConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConfigError";
+  }
+}
+
 /** CORS allowlist. Comma-separated origins; "*" allows all (dev only). */
 export const CORS_ORIGINS: string[] = (() => {
   const raw = process.env.QTRUST_CORS_ORIGINS ?? "*";
-  if (IS_PRODUCTION && raw === "*") {
-    if (process.env.NODE_ENV === "production") {
-      console.error("FATAL: CORS_ORIGINS must be set explicitly in production — * is not allowed");
-    } else {
-      console.warn("WARNING: CORS defaults to * — set QTRUST_CORS_ORIGINS for production");
-    }
+  const origins = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  if (IS_PRODUCTION && (origins.length === 0 || origins.includes("*"))) {
+    throw new ConfigError(
+      "CORS_ORIGINS must be set to explicit origins in production — empty or * is not allowed (set QTRUST_CORS_ORIGINS)",
+    );
   }
-  return raw.split(",").map((s) => s.trim()).filter(Boolean);
+  if (!IS_PRODUCTION && raw === "*") {
+    console.warn("WARNING: CORS defaults to * — set QTRUST_CORS_ORIGINS for production");
+  }
+  return origins;
 })();
 
 /** Validate address format (0x-prefixed, 40 hex chars). */

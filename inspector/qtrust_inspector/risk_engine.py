@@ -121,6 +121,33 @@ CNSA2_ALLOWED_ALGORITHMS: set[str] = {
     "HMAC-SHA512",
 }
 
+# Case-normalized view of CNSA2_ALLOWED_ALGORITHMS so lookups are uppercase-safe
+# regardless of how the caller spells the algorithm.
+_CNSA2_ALLOWED_UPPER: frozenset[str] = frozenset(
+    algo.upper() for algo in CNSA2_ALLOWED_ALGORITHMS
+)
+
+# Algorithm families that are broken by Shor's algorithm regardless of key size.
+_ASYMMETRIC_FAMILY_MARKERS: tuple[str, ...] = (
+    "RSA",
+    "ECDSA",
+    "ECDH",
+    "ED25519",
+    "ED448",
+    "X25519",
+    "X448",
+    "DSA",
+    "DH",
+)
+
+# Symmetric algorithm markers where key size does affect post-quantum strength
+# (Grover's algorithm halves the effective security bits).
+_SYMMETRIC_KEYSIZE_MARKERS: tuple[str, ...] = ("AES", "CHACHA20")
+
+
+def _normalize_algorithm_name(algorithm: str) -> str:
+    return algorithm.upper().replace(" ", "").replace("_", "-")
+
 
 class RiskScore(BaseModel):
     quantum_vulnerability: QuantumVulnerability
@@ -137,30 +164,50 @@ class RiskScore(BaseModel):
         return self.overall_risk_score / 100.0
 
 
-def _lookup_vulnerability(algorithm: str, key_size: int | None = None) -> QuantumVulnerability:
-    algo_upper = algorithm.upper().replace(" ", "").replace("-", "-")
+_NORMALIZED_VULNERABILITY_DB: Dict[str, QuantumVulnerability] = {
+    _normalize_algorithm_name(k): v for k, v in ALGORITHM_VULNERABILITY_DB.items()
+}
 
-    def _apply_key_size(vuln: QuantumVulnerability) -> QuantumVulnerability:
-        if vuln != QuantumVulnerability.BROKEN or key_size is None:
-            return vuln
-        if any(p in algo_upper for p in ("ECDSA", "ECDH", "ED25519", "ED448")):
-            if key_size >= 384:
-                return QuantumVulnerability.SAFE
-            elif key_size >= 256:
-                return QuantumVulnerability.WEAKENED
-        elif any(p in algo_upper for p in ("RSA", "DSA", "DH")):
-            if key_size >= 4096:
-                return QuantumVulnerability.SAFE
-            elif key_size >= 2048:
-                return QuantumVulnerability.WEAKENED
+
+def _is_asymmetric(algo_upper: str) -> bool:
+    return any(marker in algo_upper for marker in _ASYMMETRIC_FAMILY_MARKERS)
+
+
+def _apply_symmetric_key_size(
+    vuln: QuantumVulnerability, algo_upper: str, key_size: int | None
+) -> QuantumVulnerability:
+    """Apply key-size based adjustment for symmetric algorithms only.
+
+    Quantum vulnerability of asymmetric algorithms (RSA, ECDSA, ECDH, DH, DSA,
+    Ed*, X*) depends ONLY on the algorithm family -- Shor's algorithm breaks
+    them at any key size -- so no size-based downgrade is ever applied there.
+    """
+    if key_size is None:
         return vuln
+    if any(marker in algo_upper for marker in _SYMMETRIC_KEYSIZE_MARKERS):
+        if key_size < 256:
+            return QuantumVulnerability.WEAKENED
+        return QuantumVulnerability.SAFE
+    return vuln
 
-    if algo_upper in ALGORITHM_VULNERABILITY_DB:
-        return _apply_key_size(ALGORITHM_VULNERABILITY_DB[algo_upper])
-    for key, value in ALGORITHM_VULNERABILITY_DB.items():
-        if key.upper() in algo_upper or algo_upper in key.upper():
-            return _apply_key_size(value)
-    return QuantumVulnerability.SAFE
+
+def _lookup_vulnerability(algorithm: str, key_size: int | None = None) -> QuantumVulnerability:
+    algo_upper = _normalize_algorithm_name(algorithm)
+
+    if algo_upper in _NORMALIZED_VULNERABILITY_DB:
+        vuln = _NORMALIZED_VULNERABILITY_DB[algo_upper]
+    else:
+        vuln = QuantumVulnerability.SAFE
+        for key, value in ALGORITHM_VULNERABILITY_DB.items():
+            normalized_key = _normalize_algorithm_name(key)
+            if normalized_key in algo_upper or algo_upper in normalized_key:
+                vuln = value
+                break
+
+    if _is_asymmetric(algo_upper):
+        # Shor's algorithm breaks these regardless of key size; never soften.
+        return vuln
+    return _apply_symmetric_key_size(vuln, algo_upper, key_size)
 
 
 def _check_nist_800_131a(algorithm: str, key_size: Optional[int] = None) -> Tuple[bool, Optional[int]]:
@@ -178,8 +225,8 @@ def _check_nist_800_131a(algorithm: str, key_size: Optional[int] = None) -> Tupl
 
 
 def _check_cnsa2(algorithm: str) -> bool:
-    algo_upper = algorithm.upper().replace(" ", "")
-    return algo_upper in CNSA2_ALLOWED_ALGORITHMS or algorithm in CNSA2_ALLOWED_ALGORITHMS
+    # Uppercase-safe lookup on both sides so caller casing never matters.
+    return _normalize_algorithm_name(algorithm) in _CNSA2_ALLOWED_UPPER
 
 
 def _calculate_hndl_score(

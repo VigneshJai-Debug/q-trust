@@ -301,6 +301,11 @@ class VCPresenter:
 class VCVerifier:
     """Verifies W3C Verifiable Credentials and Presentations.
 
+    Verification is FAIL-CLOSED: a credential is only valid when a proof was
+    attached, the issuer DID resolved, an Ed25519 public key was extracted from
+    the DID document, the Ed25519 signature verified, and the credential is
+    neither expired nor revoked.
+
     Usage:
         verifier = VCVerifier(resolver=DIDResolver())
         result = await verifier.verify_credential(vc)
@@ -316,189 +321,162 @@ class VCVerifier:
         self.resolver = resolver or DIDResolver()
         self.revocation_anchor_address = revocation_anchor_address
 
+    # ------------------------------------------------------------------
+    # Shared verification primitives
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_expired(vc: VerifiableCredential) -> bool:
+        if not vc.expirationDate:
+            return False
+        exp_time = datetime.fromisoformat(vc.expirationDate)
+        return exp_time < datetime.now(timezone.utc)
+
+    @staticmethod
+    def _signed_message(vc: VerifiableCredential) -> bytes:
+        """Canonical JSON of the VC without its proof -- the signed payload."""
+        vc_data = vc.model_dump(by_alias=True, exclude_none=True)
+        vc_data.pop("proof", None)
+        return json.dumps(vc_data, sort_keys=True, separators=(",", ":")).encode()
+
+    @staticmethod
+    def _extract_public_key(auth_key: Any) -> bytes | None:
+        """Extract raw 32-byte Ed25519 public key from a verification method."""
+        if not isinstance(auth_key, dict):
+            return None
+
+        public_key_bytes: bytes | None = None
+
+        # publicKeyMultibase (base58btc-encoded, starts with 'z')
+        mb = auth_key.get("publicKeyMultibase", "")
+        if mb and mb.startswith("z"):
+            import base58
+            raw = base58.b58decode(mb[1:])
+            # Strip multicodec prefix (0xed 0x01) for Ed25519 keys
+            if len(raw) >= 33 and raw[0] == 0xed and raw[1] == 0x01:
+                public_key_bytes = raw[2:34]
+            elif len(raw) == 32:
+                public_key_bytes = raw
+
+        # publicKeyJwk
+        jwk = auth_key.get("publicKeyJwk", {})
+        if not public_key_bytes and jwk.get("kty") == "OKP" and jwk.get("crv") == "Ed25519":
+            import base64
+            public_key_bytes = base64.urlsafe_b64decode(jwk["x"] + "==")
+
+        if not public_key_bytes or len(public_key_bytes) != 32:
+            return None
+        return public_key_bytes
+
+    def _verify_proof(self, vc: VerifiableCredential, issuer_doc: DIDDocument) -> str | None:
+        """Verify the VC proof against the issuer DID document.
+
+        Returns None when the signature is valid, otherwise a machine-readable
+        failure reason (public_key_unavailable | invalid_signature).
+        """
+        message = self._signed_message(vc)
+        signature = bytes.fromhex(vc.proof["proofValue"])
+
+        auth_key = self.resolver.get_authentication_key(issuer_doc)
+        public_key_bytes = self._extract_public_key(auth_key)
+
+        if public_key_bytes is None:
+            return "public_key_unavailable"
+        if len(signature) != 64:
+            return "invalid_signature"
+        if _ed25519_verify(message, signature, public_key_bytes):
+            return None
+        return "invalid_signature"
+
+    def _result(
+        self,
+        vc: VerifiableCredential,
+        *,
+        valid: bool,
+        revoked: bool = False,
+        expired: bool = False,
+        explanation: str,
+    ) -> VCVerificationResult:
+        return VCVerificationResult(
+            valid=valid,
+            issuer_did=vc.issuer,
+            subject_did=vc.credentialSubject.get("id"),
+            schema_id=vc.credentialSchema.get("id") if vc.credentialSchema else None,
+            revoked=revoked,
+            expired=expired,
+            explanation=explanation,
+        )
+
     async def verify_credential(self, vc: VerifiableCredential) -> VCVerificationResult:
         """Verify a VC's signature, expiration, and revocation status."""
-        explanation_parts = []
-        revoked = False
+        # 1. Expiration check (local, always performed)
+        try:
+            expired = self._is_expired(vc)
+        except (ValueError, TypeError):
+            return self._result(vc, valid=False, explanation="invalid_expiration_date")
+        if expired:
+            return self._result(
+                vc, valid=False, expired=True, explanation=f"expired at {vc.expirationDate}"
+            )
 
-        # 1. Resolve issuer DID
+        # 2. Proof must be present -- unsigned credentials are rejected.
+        if not vc.proof or not vc.proof.get("proofValue"):
+            return self._result(vc, valid=False, explanation="missing_proof")
+
+        # 3. Issuer DID must resolve -- fail closed on any resolution error.
         try:
             issuer_doc = await self.resolver.resolve(vc.issuer)
         except Exception as e:
-            # Cannot resolve DID - still check expiration
-            expired = False
-            if vc.expirationDate:
-                exp_time = datetime.fromisoformat(vc.expirationDate)
-                expired = exp_time < datetime.now(timezone.utc)
-
-            return VCVerificationResult(
-                valid=not expired and not revoked,
-                issuer_did=vc.issuer,
-                subject_did=vc.credentialSubject.get("id"),
-                schema_id=vc.credentialSchema.get("id") if vc.credentialSchema else None,
-                revoked=revoked,
-                expired=expired,
-                explanation=f"DID resolution failed: {e}; expiration check still performed",
+            return self._result(
+                vc, valid=False, explanation=f"did_resolution_failed: {e}"
             )
 
-        # 2. Verify signature
-        if vc.proof and vc.proof.get("proofValue"):
-            vc_data = vc.model_dump(by_alias=True, exclude_none=True)
-            vc_data.pop("proof", None)
-            message = json.dumps(vc_data, sort_keys=True, separators=(",", ":")).encode()
-            signature = bytes.fromhex(vc.proof["proofValue"])
+        # 4. Signature must verify against a resolved issuer key.
+        reason = self._verify_proof(vc, issuer_doc)
+        if reason is not None:
+            return self._result(vc, valid=False, explanation=reason)
 
-            auth_key = self.resolver.get_authentication_key(issuer_doc)
-            public_key_bytes: bytes | None = None
-
-            # Extract raw public key bytes from the DID document
-            if isinstance(auth_key, dict):
-                # Try publicKeyMultibase (base58btc-encoded, starts with 'z')
-                mb = auth_key.get("publicKeyMultibase", "")
-                if mb and mb.startswith("z"):
-                    import base58
-                    # Strip the 'z' prefix and decode
-                    raw = base58.b58decode(mb[1:])
-                    # Ed25519 public keys are 32 bytes; strip the multicodec prefix (0xed 0x01 = 32 bytes)
-                    if len(raw) >= 33 and raw[0] == 0xed and raw[1] == 0x01:
-                        public_key_bytes = raw[2:34]
-                    elif len(raw) == 32:
-                        public_key_bytes = raw
-                # Try publicKeyJwk
-                jwk = auth_key.get("publicKeyJwk", {})
-                if not public_key_bytes and jwk.get("kty") == "OKP" and jwk.get("crv") == "Ed25519":
-                    import base64
-                    public_key_bytes = base64.urlsafe_b64decode(jwk["x"] + "==")
-
-            if public_key_bytes and len(signature) == 64:
-                sig_valid = _ed25519_verify(message, signature, public_key_bytes)
-                if sig_valid:
-                    explanation_parts.append("Ed25519 signature verified")
-                else:
-                    explanation_parts.append("Ed25519 signature verification FAILED")
-                    return VCVerificationResult(
-                        valid=False,
-                        issuer_did=vc.issuer,
-                        subject_did=vc.credentialSubject.get("id"),
-                        schema_id=vc.credentialSchema.get("id") if vc.credentialSchema else None,
-                        revoked=revoked,
-                        expired=False,
-                        explanation="; ".join(explanation_parts),
-                    )
-            else:
-                explanation_parts.append("Could not extract Ed25519 public key from DID document")
-        else:
-            explanation_parts.append("No proof attached")
-
-        # 3. Check expiration
-        expired = False
-        if vc.expirationDate:
-            exp_time = datetime.fromisoformat(vc.expirationDate)
-            expired = exp_time < datetime.now(timezone.utc)
-            if expired:
-                explanation_parts.append(f"Expired at {vc.expirationDate}")
-
-        # 4. Check revocation (if status is present)
+        # 5. Revocation status (informational until on-chain root check runs)
         revoked = False
+        explanation = "Ed25519 signature verified"
         if vc.credentialStatus:
-            explanation_parts.append("Revocation check requires on-chain root verification")
+            explanation += "; revocation check requires on-chain root verification"
 
-        return VCVerificationResult(
-            valid=not expired and not revoked,
-            issuer_did=vc.issuer,
-            subject_did=vc.credentialSubject.get("id"),
-            schema_id=vc.credentialSchema.get("id") if vc.credentialSchema else None,
-            revoked=revoked,
-            expired=expired,
-            explanation="; ".join(explanation_parts) if explanation_parts else "Valid",
-        )
+        return self._result(vc, valid=True, revoked=revoked, explanation=explanation)
 
     def verify_credential_sync(self, vc: VerifiableCredential) -> VCVerificationResult:
         """Synchronous verification of a VC."""
-        explanation_parts = []
-        revoked = False
+        # 1. Expiration check (local, always performed)
+        try:
+            expired = self._is_expired(vc)
+        except (ValueError, TypeError):
+            return self._result(vc, valid=False, explanation="invalid_expiration_date")
+        if expired:
+            return self._result(
+                vc, valid=False, expired=True, explanation=f"expired at {vc.expirationDate}"
+            )
 
+        # 2. Proof must be present -- unsigned credentials are rejected.
+        if not vc.proof or not vc.proof.get("proofValue"):
+            return self._result(vc, valid=False, explanation="missing_proof")
+
+        # 3. Issuer DID must resolve -- fail closed on any resolution error.
         try:
             issuer_doc = self.resolver.resolve_sync(vc.issuer)
         except Exception as e:
-            # Cannot resolve DID - still check expiration
-            expired = False
-            if vc.expirationDate:
-                exp_time = datetime.fromisoformat(vc.expirationDate)
-                expired = exp_time < datetime.now(timezone.utc)
-
-            return VCVerificationResult(
-                valid=not expired and not revoked,
-                issuer_did=vc.issuer,
-                subject_did=vc.credentialSubject.get("id"),
-                schema_id=vc.credentialSchema.get("id") if vc.credentialSchema else None,
-                revoked=revoked,
-                expired=expired,
-                explanation=f"DID resolution failed: {e}; expiration check still performed",
+            return self._result(
+                vc, valid=False, explanation=f"did_resolution_failed: {e}"
             )
 
-        # Verify signature
-        if vc.proof and vc.proof.get("proofValue"):
-            vc_data = vc.model_dump(by_alias=True, exclude_none=True)
-            vc_data.pop("proof", None)
-            message = json.dumps(vc_data, sort_keys=True, separators=(",", ":")).encode()
-            signature = bytes.fromhex(vc.proof["proofValue"])
+        # 4. Signature must verify against a resolved issuer key.
+        reason = self._verify_proof(vc, issuer_doc)
+        if reason is not None:
+            return self._result(vc, valid=False, explanation=reason)
 
-            auth_key = self.resolver.get_authentication_key(issuer_doc)
-            public_key_bytes: bytes | None = None
-
-            if isinstance(auth_key, dict):
-                mb = auth_key.get("publicKeyMultibase", "")
-                if mb and mb.startswith("z"):
-                    import base58
-                    raw = base58.b58decode(mb[1:])
-                    if len(raw) >= 33 and raw[0] == 0xed and raw[1] == 0x01:
-                        public_key_bytes = raw[2:34]
-                    elif len(raw) == 32:
-                        public_key_bytes = raw
-                jwk = auth_key.get("publicKeyJwk", {})
-                if not public_key_bytes and jwk.get("kty") == "OKP" and jwk.get("crv") == "Ed25519":
-                    import base64
-                    public_key_bytes = base64.urlsafe_b64decode(jwk["x"] + "==")
-
-            if public_key_bytes and len(signature) == 64:
-                sig_valid = _ed25519_verify(message, signature, public_key_bytes)
-                if sig_valid:
-                    explanation_parts.append("Ed25519 signature verified")
-                else:
-                    explanation_parts.append("Ed25519 signature verification FAILED")
-                    return VCVerificationResult(
-                        valid=False,
-                        issuer_did=vc.issuer,
-                        subject_did=vc.credentialSubject.get("id"),
-                        schema_id=vc.credentialSchema.get("id") if vc.credentialSchema else None,
-                        revoked=revoked,
-                        expired=False,
-                        explanation="; ".join(explanation_parts),
-                    )
-            else:
-                explanation_parts.append("Could not extract Ed25519 public key from DID document")
-        else:
-            explanation_parts.append("No proof attached")
-
-        # Check expiration
-        expired = False
-        if vc.expirationDate:
-            exp_time = datetime.fromisoformat(vc.expirationDate)
-            expired = exp_time < datetime.now(timezone.utc)
-            if expired:
-                explanation_parts.append(f"Expired at {vc.expirationDate}")
-
-        # Check revocation (if status is present)
+        # 5. Revocation status (informational until on-chain root check runs)
+        revoked = False
+        explanation = "Ed25519 signature verified"
         if vc.credentialStatus:
-            explanation_parts.append("Revocation check requires on-chain root verification")
+            explanation += "; revocation check requires on-chain root verification"
 
-        return VCVerificationResult(
-            valid=not expired and not revoked,
-            issuer_did=vc.issuer,
-            subject_did=vc.credentialSubject.get("id"),
-            schema_id=vc.credentialSchema.get("id") if vc.credentialSchema else None,
-            revoked=revoked,
-            expired=expired,
-            explanation="; ".join(explanation_parts) if explanation_parts else "Valid",
-        )
+        return self._result(vc, valid=True, revoked=revoked, explanation=explanation)

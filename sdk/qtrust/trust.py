@@ -56,7 +56,31 @@ class TrustAssessment(BaseModel):
     assessment_hash: str = ""
 
     def compute_hash(self) -> str:
-        """Compute a deterministic hash of the assessment."""
+        """Compute a deterministic, reproducible hash of the assessment.
+
+        Volatile fields (evaluated_at) are EXCLUDED so that the same evidence
+        and policy always produce the same hash.
+        """
+        data = {
+            "subject_did": self.subject_did,
+            "policy_id": self.policy_id,
+            "policy_version": self.policy_version,
+            "passed": self.passed,
+            "confidence": self.confidence,
+            "evidence_used": [e.model_dump() for e in self.evidence_used],
+            "conflicts": [c.model_dump() for c in self.conflicts],
+            "explanation": {k: v.model_dump() for k, v in self.explanation.items()},
+            "valid_until": self.valid_until,
+        }
+        canonical = json.dumps(data, sort_keys=True, separators=(",", ":"))
+        return "0x" + hashlib.sha256(canonical.encode()).hexdigest()
+
+    def compute_hash_without_timestamp(self) -> str:
+        """Backward-compatible alias for compute_hash() (timestamp excluded)."""
+        return self.compute_hash()
+
+    def compute_hash_with_timestamp(self) -> str:
+        """Compute a hash including evaluated_at (NOT reproducible across time)."""
         data = {
             "subject_did": self.subject_did,
             "policy_id": self.policy_id,
@@ -67,22 +91,6 @@ class TrustAssessment(BaseModel):
             "conflicts": [c.model_dump() for c in self.conflicts],
             "explanation": {k: v.model_dump() for k, v in self.explanation.items()},
             "evaluated_at": self.evaluated_at,
-            "valid_until": self.valid_until,
-        }
-        canonical = json.dumps(data, sort_keys=True, separators=(",", ":"))
-        return "0x" + hashlib.sha256(canonical.encode()).hexdigest()
-
-    def compute_hash_without_timestamp(self) -> str:
-        """Compute a deterministic hash excluding the evaluated_at timestamp."""
-        data = {
-            "subject_did": self.subject_did,
-            "policy_id": self.policy_id,
-            "policy_version": self.policy_version,
-            "passed": self.passed,
-            "confidence": self.confidence,
-            "evidence_used": [e.model_dump() for e in self.evidence_used],
-            "conflicts": [c.model_dump() for c in self.conflicts],
-            "explanation": {k: v.model_dump() for k, v in self.explanation.items()},
             "valid_until": self.valid_until,
         }
         canonical = json.dumps(data, sort_keys=True, separators=(",", ":"))

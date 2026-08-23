@@ -21,7 +21,7 @@ function isPrivateOrBlockedHost(host: string): boolean {
 
 export function requireApiKey(
   this: FastifyInstance,
-  _request: FastifyRequest,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): void {
   const configuredKeys = process.env.QTRUST_API_KEYS;
