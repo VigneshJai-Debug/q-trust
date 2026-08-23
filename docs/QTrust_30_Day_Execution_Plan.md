@@ -65,7 +65,7 @@
 
 - [ ] **Day 31-45:** Convert 1 of 3 pilots to paid ($25k/year). Sign 2 more LOIs for next quarter.
 - [ ] **Day 31-45 (parallel):** Commission Trail of Bits smart-contract audit. Budget $15-25k, 4-6 week lead time. Provide scope: 5 contracts + Deploy.s.sol + governance. Fix F1 first (Day 1-2).
-- [ ] **Day 31-45 (parallel):** Add frontend RBAC. Implement `useOrgRole()` and `useVendorRole()` hooks in `frontend/src/components/dynamic-provider.tsx`. Gate dashboard and vendor portal on role check.
+- [ ] **Day 31-45 (parallel):** Add frontend RBAC. Implement `useOrgRole()` and `useVendorRole()` hooks in `frontend/src/hooks/use-user-role.ts`. Gate dashboard and vendor portal on role check. Wallet connection via wagmi 2 + RainbowKit 2 (ConnectButton).
 - [ ] **Day 31-45 (parallel):** Add attack test suite. Create `contracts/test/Attack.t.sol` covering: reentrancy, proxy upgrade auth, pause bypass, cross-registry reentrancy.
 - [ ] **Day 46-60:** Record 5-minute demo video on live Base Sepolia. Script:
   - 0:00-0:30 — Problem (NIST PQC mandate, $X cost of compliance today)
