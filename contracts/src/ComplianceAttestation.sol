@@ -1,0 +1,342 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.24;
+
+import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+
+/// @title ComplianceAttestation — compliance attestation results from scanner evaluations
+/// @notice Organizations post compliance scores against standard frameworks (e.g.,
+///         NIST SP 800-131A, CNSA 2.0). Each attestation records the score, rule
+///         breakdown, and links to supporting evidence. Supports EIP-712 gasless
+///         attestation and UUPS proxy upgradeability.
+contract ComplianceAttestation is AccessControl, ReentrancyGuard, Pausable, Initializable, UUPSUpgradeable {
+
+    error AttestationNotFound(bytes32 attestationId);
+    error DuplicateAttestation(bytes32 attestationId);
+    error EmptyFramework();
+    error ScoreOutOfBounds(uint256 score);
+    error RuleCountMismatch(uint256 totalRules, uint256 compliantCount, uint256 nonCompliantCount);
+    error InvalidValidityDays(uint256 validityDays);
+    error NotOwner(address caller);
+    error AlreadyRevoked(bytes32 attestationId);
+    error InvalidNonce(address signer, uint256 provided, uint256 expected);
+    error NotInitialized();
+
+    event ComplianceAttested(
+        bytes32 indexed attestationId,
+        address indexed orgDid,
+        string  framework,
+        uint256 score,
+        uint256 timestamp
+    );
+
+    event ComplianceRevoked(
+        bytes32 indexed attestationId,
+        string  reason,
+        uint256 timestamp
+    );
+
+    struct Attestation {
+        bytes32 attestationId;
+        address orgDid;
+        string  framework;       // e.g., "NIST_SP_800_131A", "CNSA_2_0"
+        uint256 score;           // 0-100 compliance score
+        uint256 totalRules;
+        uint256 compliantCount;
+        uint256 nonCompliantCount;
+        bytes32 evidenceHash;    // hash of supporting evidence bundle
+        uint256 timestamp;
+        uint256 validUntil;
+        bool    revoked;
+    }
+
+    mapping(bytes32 => Attestation) private _attestations;
+    mapping(address => bytes32[]) private _attestationsByOrg;
+    mapping(string => bytes32[]) private _attestationsByFramework;
+
+    bytes32 public constant ATTESTER_ROLE = keccak256("ATTESTER_ROLE");
+
+    // ==================== EIP-712 (gasless compliance attestation) ====================
+    bytes32 private constant _ATTESTATION_TYPEHASH =
+        keccak256(
+            "AttestCompliance(string framework,uint256 score,uint256 totalRules,uint256 compliantCount,uint256 nonCompliantCount,bytes32 evidenceHash,uint256 validityDays,uint256 nonce)"
+        );
+
+    bytes32 private constant _DOMAIN_TYPEHASH =
+        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+
+    bytes32 private _domainSeparator;
+    bytes32 public constant EIP712_VERSION_HASH = keccak256("1");
+
+    mapping(address => uint256) public nonces;
+
+    bool private _initialized;
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {}
+
+    function initialize() public initializer {
+        if (_initialized) revert NotInitialized();
+        _initialized = true;
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(ATTESTER_ROLE, msg.sender);
+        _domainSeparator = keccak256(
+            abi.encode(
+                _DOMAIN_TYPEHASH,
+                keccak256("QTrustComplianceAttestation"),
+                EIP712_VERSION_HASH,
+                block.chainid,
+                address(this)
+            )
+        );
+    }
+
+    function _authorizeUpgrade(address) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
+
+    /// @notice Domain separator for EIP-712 typed data signing.
+    function domainSeparator() external view returns (bytes32) {
+        return _domainSeparator;
+    }
+
+    /// @notice Hash the typed Attest Compliance data for EIP-712 signing.
+    function hashTypedAttestCompliance(
+        string calldata framework,
+        uint256 score,
+        uint256 totalRules,
+        uint256 compliantCount,
+        uint256 nonCompliantCount,
+        bytes32 evidenceHash,
+        uint256 validityDays,
+        uint256 nonce
+    ) public view returns (bytes32) {
+        return keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                _domainSeparator,
+                keccak256(
+                    abi.encode(
+                        _ATTESTATION_TYPEHASH,
+                        keccak256(abi.encodePacked(framework)),
+                        score,
+                        totalRules,
+                        compliantCount,
+                        nonCompliantCount,
+                        evidenceHash,
+                        validityDays,
+                        nonce
+                    )
+                )
+            )
+        );
+    }
+
+    /// @notice Submit a gasless compliance attestation signed by the organization.
+    ///         The signer's address becomes the orgDid; the caller (any relayer)
+    ///         pays the gas.
+    function attestComplianceSigned(
+        string calldata framework,
+        uint256 score,
+        uint256 totalRules,
+        uint256 compliantCount,
+        uint256 nonCompliantCount,
+        bytes32 evidenceHash,
+        uint256 validityDays,
+        uint256 nonce,
+        bytes calldata signature
+    ) external nonReentrant whenNotPaused returns (bytes32 attestationId) {
+        address signer = _recoverAttestationSigner(
+            framework, score, totalRules, compliantCount, nonCompliantCount,
+            evidenceHash, validityDays, nonce, signature
+        );
+        if (signer == address(0)) revert InvalidSignature();
+        if (nonces[signer] != nonce) {
+            revert InvalidNonce(signer, nonce, nonces[signer]);
+        }
+
+        nonces[signer] = nonce + 1;
+
+        return _attestCompliance(
+            signer, framework, score, totalRules, compliantCount,
+            nonCompliantCount, evidenceHash, validityDays
+        );
+    }
+
+    /// @dev Recover the EIP-712 signer of a compliance attestation.
+    function _recoverAttestationSigner(
+        string calldata framework,
+        uint256 score,
+        uint256 totalRules,
+        uint256 compliantCount,
+        uint256 nonCompliantCount,
+        bytes32 evidenceHash,
+        uint256 validityDays,
+        uint256 nonce,
+        bytes calldata signature
+    ) internal view returns (address) {
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                _domainSeparator,
+                keccak256(
+                    abi.encode(
+                        _ATTESTATION_TYPEHASH,
+                        keccak256(abi.encodePacked(framework)),
+                        score,
+                        totalRules,
+                        compliantCount,
+                        nonCompliantCount,
+                        evidenceHash,
+                        validityDays,
+                        nonce
+                    )
+                )
+            )
+        );
+        return ECDSA.recover(digest, signature);
+    }
+
+    /// @notice Record a compliance attestation (direct, requires ATTESTER_ROLE)
+    /// @param framework        Compliance framework identifier
+    /// @param score            Compliance score (0-100)
+    /// @param totalRules       Total rules evaluated
+    /// @param compliantCount   Number of compliant rules
+    /// @param nonCompliantCount Number of non-compliant rules
+    /// @param evidenceHash     Hash of the supporting evidence bundle
+    /// @param validityDays     Number of days the attestation remains valid
+    /// @return attestationId   The ID under which this attestation is stored
+    function attestCompliance(
+        string calldata framework,
+        uint256 score,
+        uint256 totalRules,
+        uint256 compliantCount,
+        uint256 nonCompliantCount,
+        bytes32 evidenceHash,
+        uint256 validityDays
+    ) external nonReentrant whenNotPaused onlyRole(ATTESTER_ROLE) returns (bytes32 attestationId) {
+        return _attestCompliance(
+            msg.sender, framework, score, totalRules, compliantCount,
+            nonCompliantCount, evidenceHash, validityDays
+        );
+    }
+
+    /// @dev Internal attestation logic shared by direct and EIP-712 paths.
+    function _attestCompliance(
+        address orgDid,
+        string calldata framework,
+        uint256 score,
+        uint256 totalRules,
+        uint256 compliantCount,
+        uint256 nonCompliantCount,
+        bytes32 evidenceHash,
+        uint256 validityDays
+    ) internal returns (bytes32 attestationId) {
+        if (bytes(framework).length == 0) revert EmptyFramework();
+        if (score > 100) revert ScoreOutOfBounds(score);
+        if (compliantCount + nonCompliantCount != totalRules) {
+            revert RuleCountMismatch(totalRules, compliantCount, nonCompliantCount);
+        }
+        if (validityDays == 0) revert InvalidValidityDays(validityDays);
+
+        attestationId = keccak256(abi.encode(
+            orgDid, framework, score, totalRules, block.timestamp
+        ));
+
+        if (_attestations[attestationId].orgDid != address(0)) {
+            revert DuplicateAttestation(attestationId);
+        }
+
+        uint256 validUntil = block.timestamp + (validityDays * 1 days);
+
+        _attestations[attestationId] = Attestation({
+            attestationId: attestationId,
+            orgDid: orgDid,
+            framework: framework,
+            score: score,
+            totalRules: totalRules,
+            compliantCount: compliantCount,
+            nonCompliantCount: nonCompliantCount,
+            evidenceHash: evidenceHash,
+            timestamp: block.timestamp,
+            validUntil: validUntil,
+            revoked: false
+        });
+
+        _attestationsByOrg[orgDid].push(attestationId);
+        _attestationsByFramework[framework].push(attestationId);
+
+        emit ComplianceAttested(attestationId, orgDid, framework, score, block.timestamp);
+    }
+
+    /// @notice Revoke a compliance attestation. Only the original attestation
+    ///         owner may revoke their own attestation.
+    function revokeAttestation(
+        bytes32 attestationId,
+        string calldata reason
+    ) external nonReentrant whenNotPaused {
+        Attestation storage att = _attestations[attestationId];
+        if (att.orgDid == address(0)) revert AttestationNotFound(attestationId);
+        if (att.revoked) revert AlreadyRevoked(attestationId);
+        if (att.orgDid != msg.sender) revert NotOwner(msg.sender);
+
+        att.revoked = true;
+
+        emit ComplianceRevoked(attestationId, reason, block.timestamp);
+    }
+
+    /// @notice Pause all operations
+    function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _pause();
+    }
+
+    /// @notice Unpause the contract
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _unpause();
+    }
+
+    // ============ View Functions ============
+
+    /// @notice Get an attestation by ID
+    function getAttestation(bytes32 attestationId) external view returns (Attestation memory) {
+        if (_attestations[attestationId].orgDid == address(0)) revert AttestationNotFound(attestationId);
+        return _attestations[attestationId];
+    }
+
+    /// @notice Get all attestation IDs for an organization
+    function getAttestationsByOrg(address orgDid) external view returns (bytes32[] memory) {
+        return _attestationsByOrg[orgDid];
+    }
+
+    /// @notice Get all attestation IDs for a framework
+    function getAttestationsByFramework(string calldata framework) external view returns (bytes32[] memory) {
+        return _attestationsByFramework[framework];
+    }
+
+    /// @notice Check whether an attestation is currently valid (not revoked and
+    ///         within its validity window)
+    function isComplianceValid(bytes32 attestationId) external view returns (bool) {
+        Attestation storage att = _attestations[attestationId];
+        if (att.orgDid == address(0)) return false;
+        return !att.revoked && block.timestamp <= att.validUntil;
+    }
+
+    /// @notice Get an organization's compliance status for a given framework.
+    ///         Returns whether a valid attestation exists and the latest score.
+    function getOrgComplianceStatus(address orgDid, string calldata framework)
+        external view returns (bool valid, uint256 latestScore)
+    {
+        bytes32[] storage ids = _attestationsByOrg[orgDid];
+        for (uint256 i = ids.length; i > 0; i--) {
+            Attestation storage att = _attestations[ids[i - 1]];
+            if (keccak256(abi.encodePacked(att.framework)) == keccak256(abi.encodePacked(framework))
+                && !att.revoked && block.timestamp <= att.validUntil)
+            {
+                return (true, att.score);
+            }
+        }
+        return (false, 0);
+    }
+}

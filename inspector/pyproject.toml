@@ -4,23 +4,26 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cryptography-inspector"
-version = "0.1.0"
-description = "Cryptography scanner that discovers TLS/SSH/key assets and produces a Cryptographic Bill of Materials (CBOM)."
+version = "1.0.0"
+description = "Enterprise-grade PQC migration scanner. Discovers cryptographic assets across TLS, SSH, source code, binaries, package manifests, containers, and cloud. Produces CycloneDX 1.7 CBOM, SARIF 2.1, risk scores (NIST/CNSA 2.0/HNDL), compliance reports (NIST SP 800-131A, CNSA 2.0, FIPS 140-3, EU NIS2, FISMA, FedRAMP, CMMC), migration roadmaps, and hash-chained evidence ledgers."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
     { name = "Q-Trust Protocol", email = "dev@qtrust.dev" },
 ]
-keywords = ["cryptography", "scanner", "cbom", "tls", "ssh", "post-quantum", "pqc"]
+keywords = ["cryptography", "scanner", "cbom", "tls", "ssh", "post-quantum", "pqc", "cyclonedx", "sarif", "nist", "cnsa", "compliance", "risk", "migration"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Security :: Cryptography",
+    "Topic :: System :: Systems Administration",
 ]
 dependencies = [
     "cryptography>=41.0.0",
@@ -33,6 +36,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
     "ruff>=0.1.0",
 ]
 

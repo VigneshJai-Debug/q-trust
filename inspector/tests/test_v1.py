@@ -1,0 +1,622 @@
+"""Comprehensive tests for qtrust_inspector v1 modules."""
+from __future__ import annotations
+
+import json
+import tempfile
+from pathlib import Path
+
+import pytest
+
+from qtrust_inspector import AssetFinding, CryptoScanner, ScanResult
+from qtrust_inspector.compliance import ComplianceEngine, ComplianceFramework
+from qtrust_inspector.evidence import EvidenceLedger, compute_cbom_diff
+from qtrust_inspector.risk_engine import RiskScore, QuantumVulnerability, calculate_risk_score
+from qtrust_inspector.cyclonedx import generate_cyclonedx
+from qtrust_inspector.sarif import generate_sarif
+from qtrust_inspector.roadmap import generate_roadmap
+from qtrust_inspector.source_scanner import scan_source_file, scan_source_directory
+from qtrust_inspector.manifest_scanner import scan_manifest
+
+
+# ---------------------------------------------------------------------------
+# 1. AssetFinding and ScanResult basics
+# ---------------------------------------------------------------------------
+
+class TestAssetFinding:
+    def test_location_with_port(self):
+        f = AssetFinding(asset_type="tls_certificate", host="example.com", port=443)
+        assert f.location == "example.com:443"
+
+    def test_location_without_port(self):
+        f = AssetFinding(asset_type="file_key", host="/tmp/key.pem")
+        assert f.location == "/tmp/key.pem"
+
+    def test_defaults(self):
+        f = AssetFinding(asset_type="x", host="y")
+        assert f.criticality == "medium"
+        assert f.metadata == {}
+        assert f.expired is None
+
+    def test_model_dump_roundtrip(self):
+        f = AssetFinding(
+            asset_type="tls_certificate",
+            host="a.com",
+            port=443,
+            algorithm="RSA-2048",
+            key_size=2048,
+            criticality="high",
+        )
+        d = f.model_dump()
+        f2 = AssetFinding(**d)
+        assert f2.location == "a.com:443"
+        assert f2.key_size == 2048
+
+
+class TestScanResult:
+    def _make_result(self):
+        return ScanResult(
+            target="example.com",
+            findings=[
+                AssetFinding(asset_type="tls_certificate", host="a.com", port=443, algorithm="RSA-2048"),
+                AssetFinding(asset_type="tls_certificate", host="b.com", port=443, algorithm="ECC-P256"),
+                AssetFinding(asset_type="ssh_host_key", host="c.com", port=22, algorithm="ssh-ed25519"),
+            ],
+        )
+
+    def test_finding_count(self):
+        r = self._make_result()
+        assert r.finding_count == 3
+
+    def test_by_algorithm(self):
+        r = self._make_result()
+        assert r.by_algorithm == {"RSA-2048": 1, "ECC-P256": 1, "ssh-ed25519": 1}
+
+    def test_by_type(self):
+        r = self._make_result()
+        assert r.by_type == {"tls_certificate": 2, "ssh_host_key": 1}
+
+    def test_by_algorithm_unknown(self):
+        r = ScanResult(
+            target="x",
+            findings=[AssetFinding(asset_type="file_key", host="k", algorithm=None)],
+        )
+        assert r.by_algorithm == {"unknown": 1}
+
+    def test_to_cbom_structure(self):
+        r = self._make_result()
+        cbom = r.to_cbom()
+        assert cbom["schema_version"] == "qtrust.cbom.v1"
+        assert cbom["target"] == "example.com"
+        assert cbom["asset_count"] == 3
+        assert len(cbom["assets"]) == 3
+        assert cbom["assets"][0]["algorithm"] == "RSA-2048"
+
+    def test_to_cbom_json_serializable(self):
+        r = self._make_result()
+        serialized = json.dumps(r.to_cbom())
+        assert "RSA-2048" in serialized
+
+    def test_empty_findings(self):
+        r = ScanResult(target="empty.com")
+        assert r.finding_count == 0
+        assert r.by_algorithm == {}
+        assert r.by_type == {}
+        assert r.to_cbom()["asset_count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# 2. Risk engine
+# ---------------------------------------------------------------------------
+
+class TestRiskEngine:
+    def _finding(self, algorithm: str, key_type: str = "RSA", key_size: int = 2048, criticality: str = "medium"):
+        return AssetFinding(
+            asset_type="tls_certificate",
+            host="test.com",
+            port=443,
+            algorithm=algorithm,
+            key_type=key_type,
+            key_size=key_size,
+            criticality=criticality,
+        )
+
+    def test_broken_algorithm_high_risk(self):
+        score = calculate_risk_score(self._finding("RSA-1024", key_size=1024))
+        assert isinstance(score, RiskScore)
+        assert score.value > 0.7
+
+    def test_weakened_algorithm_medium_risk(self):
+        score = calculate_risk_score(self._finding("RSA-2048", key_size=2048))
+        assert 0.3 < score.value <= 0.7
+
+    def test_safe_algorithm_low_risk(self):
+        score = calculate_risk_score(self._finding("RSA-4096", key_size=4096))
+        assert score.value < 0.3
+
+    def test_pqc_ready_algorithm_very_low_risk(self):
+        score = calculate_risk_score(self._finding("ML-KEM-1024", key_type="ML-KEM", key_size=1024))
+        assert score.value < 0.1
+        assert score.quantum_vulnerability == QuantumVulnerability.PQC_READY
+
+    def test_broken_ecdsa(self):
+        score = calculate_risk_score(self._finding("ECDSA-SHA256", key_type="EC", key_size=192))
+        assert score.value > 0.7
+
+    def test_safe_ecdsa(self):
+        score = calculate_risk_score(self._finding("ECDSA-SHA384", key_type="EC", key_size=384))
+        assert score.value < 0.3
+
+    def test_risk_score_has_components(self):
+        score = calculate_risk_score(self._finding("RSA-2048", key_size=2048))
+        assert hasattr(score, "value")
+        assert hasattr(score, "quantum_vulnerability")
+        assert 0.0 <= score.value <= 1.0
+
+    def test_quantum_vulnerability_enum(self):
+        broken = calculate_risk_score(self._finding("RSA-1024", key_size=1024))
+        safe = calculate_risk_score(self._finding("ML-KEM-768", key_type="ML-KEM", key_size=768))
+        assert broken.quantum_vulnerability in (QuantumVulnerability.BROKEN, QuantumVulnerability.WEAKENED)
+        assert safe.quantum_vulnerability == QuantumVulnerability.PQC_READY
+
+
+# ---------------------------------------------------------------------------
+# 3. Compliance engine
+# ---------------------------------------------------------------------------
+
+class TestComplianceEngine:
+    def test_nist_sp_800_131a_rsa_2048_noncompliant(self):
+        engine = ComplianceEngine(frameworks=[ComplianceFramework.NIST_SP_800_131A])
+        finding = AssetFinding(
+            asset_type="tls_certificate", host="t.com", port=443,
+            algorithm="RSA-2048", key_type="RSA", key_size=2048,
+        )
+        report = engine.check(finding)
+        assert report.is_compliant is False
+        assert any("RSA" in v for v in report.violations)
+
+    def test_nist_sp_800_131a_rsa_3072_compliant(self):
+        engine = ComplianceEngine(frameworks=[ComplianceFramework.NIST_SP_800_131A])
+        finding = AssetFinding(
+            asset_type="tls_certificate", host="t.com", port=443,
+            algorithm="RSA-3072", key_type="RSA", key_size=3072,
+        )
+        report = engine.check(finding)
+        assert report.is_compliant is True
+
+    def test_cnsa_2_0_rsa_noncompliant(self):
+        engine = ComplianceEngine(frameworks=[ComplianceFramework.CNSA_2_0])
+        finding = AssetFinding(
+            asset_type="tls_certificate", host="t.com", port=443,
+            algorithm="RSA-4096", key_type="RSA", key_size=4096,
+        )
+        report = engine.check(finding)
+        assert report.is_compliant is False
+
+    def test_cnsa_2_0_ml_kem_compliant(self):
+        engine = ComplianceEngine(frameworks=[ComplianceFramework.CNSA_2_0])
+        finding = AssetFinding(
+            asset_type="tls_certificate", host="t.com", port=443,
+            algorithm="ML-KEM-1024", key_type="ML-KEM", key_size=1024,
+        )
+        report = engine.check(finding)
+        assert report.is_compliant is True
+
+    def test_multiple_frameworks(self):
+        engine = ComplianceEngine(frameworks=[
+            ComplianceFramework.NIST_SP_800_131A,
+            ComplianceFramework.CNSA_2_0,
+        ])
+        finding = AssetFinding(
+            asset_type="tls_certificate", host="t.com", port=443,
+            algorithm="RSA-2048", key_type="RSA", key_size=2048,
+        )
+        report = engine.check(finding)
+        assert report.is_compliant is False
+        assert len(report.violations) >= 1
+
+    def test_compliance_framework_enum(self):
+        assert hasattr(ComplianceFramework, "NIST_SP_800_131A")
+        assert hasattr(ComplianceFramework, "CNSA_2_0")
+
+    def test_report_has_framework_field(self):
+        engine = ComplianceEngine(frameworks=[ComplianceFramework.NIST_SP_800_131A])
+        finding = AssetFinding(
+            asset_type="tls_certificate", host="t.com", port=443,
+            key_type="RSA", key_size=2048,
+        )
+        report = engine.check(finding)
+        assert hasattr(report, "framework")
+        assert report.framework == ComplianceFramework.NIST_SP_800_131A
+
+
+# ---------------------------------------------------------------------------
+# 4. Evidence ledger
+# ---------------------------------------------------------------------------
+
+class TestEvidenceLedger:
+    def test_append_and_verify(self):
+        ledger = EvidenceLedger()
+        cbom = {"schema_version": "qtrust.cbom.v1", "assets": []}
+        entry = ledger.append(cbom)
+        assert entry.index == 0
+        assert ledger.verify_chain() is True
+
+    def test_tamper_detection(self):
+        ledger = EvidenceLedger()
+        ledger.append({"schema_version": "qtrust.cbom.v1", "assets": []})
+        ledger.append({"schema_version": "qtrust.cbom.v1", "assets": [{"x": 1}]})
+        assert ledger.verify_chain() is True
+        # Tamper with entry 0
+        ledger.entries[0].cbom_hash = "0xtampered"
+        assert ledger.verify_chain() is False
+
+    def test_save_and_load(self):
+        ledger = EvidenceLedger()
+        ledger.append({"schema_version": "qtrust.cbom.v1", "assets": [{"a": 1}]})
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            path = f.name
+        ledger.save(path)
+        loaded = EvidenceLedger.load(path)
+        assert loaded.verify_chain() is True
+        assert len(loaded.entries) == 1
+
+    def test_compute_cbom_diff_no_change(self):
+        a = {"schema_version": "qtrust.cbom.v1", "assets": [{"id": 1}]}
+        b = {"schema_version": "qtrust.cbom.v1", "assets": [{"id": 1}]}
+        diff = compute_cbom_diff(a, b)
+        assert diff.added == []
+        assert diff.removed == []
+        assert diff.modified == []
+
+    def test_compute_cbom_diff_additions(self):
+        a = {"schema_version": "qtrust.cbom.v1", "assets": [{"id": 1}]}
+        b = {"schema_version": "qtrust.cbom.v1", "assets": [{"id": 1}, {"id": 2}]}
+        diff = compute_cbom_diff(a, b)
+        assert len(diff.added) == 1
+        assert diff.added[0]["id"] == 2
+
+    def test_compute_cbom_diff_removals(self):
+        a = {"schema_version": "qtrust.cbom.v1", "assets": [{"id": 1}, {"id": 2}]}
+        b = {"schema_version": "qtrust.cbom.v1", "assets": [{"id": 1}]}
+        diff = compute_cbom_diff(a, b)
+        assert len(diff.removed) == 1
+        assert diff.removed[0]["id"] == 2
+
+    def test_compute_cbom_diff_modifications(self):
+        a = {"schema_version": "qtrust.cbom.v1", "assets": [{"id": 1, "criticality": "low"}]}
+        b = {"schema_version": "qtrust.cbom.v1", "assets": [{"id": 1, "criticality": "high"}]}
+        diff = compute_cbom_diff(a, b)
+        assert len(diff.modified) == 1
+
+
+# ---------------------------------------------------------------------------
+# 5. CycloneDX generation
+# ---------------------------------------------------------------------------
+
+class TestCycloneDX:
+    def _make_scan_result(self):
+        return ScanResult(
+            target="example.com",
+            findings=[
+                AssetFinding(
+                    asset_type="tls_certificate", host="example.com", port=443,
+                    algorithm="RSA-2048", key_type="RSA", key_size=2048,
+                    fingerprint_sha256="abc123",
+                ),
+            ],
+        )
+
+    def test_valid_structure(self):
+        result = self._make_scan_result()
+        cdx = generate_cyclonedx(result)
+        assert "bomFormat" in cdx
+        assert cdx["bomFormat"] == "CycloneDX"
+        assert "components" in cdx
+        assert "version" in cdx
+
+    def test_quantum_safe_field(self):
+        result = self._make_scan_result()
+        cdx = generate_cyclonedx(result)
+        components = cdx.get("components", [])
+        assert len(components) == 1
+        comp = components[0]
+        assert "quantumSafe" in comp
+        assert isinstance(comp["quantumSafe"], bool)
+
+    def test_pqc_component_is_quantum_safe(self):
+        result = ScanResult(
+            target="test.com",
+            findings=[
+                AssetFinding(
+                    asset_type="tls_certificate", host="test.com", port=443,
+                    algorithm="ML-KEM-1024", key_type="ML-KEM", key_size=1024,
+                ),
+            ],
+        )
+        cdx = generate_cyclonedx(result)
+        assert cdx["components"][0]["quantumSafe"] is True
+
+    def test_rsa_component_not_quantum_safe(self):
+        result = self._make_scan_result()
+        cdx = generate_cyclonedx(result)
+        assert cdx["components"][0]["quantumSafe"] is False
+
+    def test_empty_findings(self):
+        result = ScanResult(target="empty.com")
+        cdx = generate_cyclonedx(result)
+        assert cdx["components"] == []
+        assert cdx["metadata"]["componentCount"] == 0
+
+    def test_cyclonedx_json_serializable(self):
+        result = self._make_scan_result()
+        cdx = generate_cyclonedx(result)
+        serialized = json.dumps(cdx)
+        assert "CycloneDX" in serialized
+
+    def test_metadata_has_timestamp(self):
+        result = self._make_scan_result()
+        cdx = generate_cyclonedx(result)
+        assert "metadata" in cdx
+        assert "timestamp" in cdx["metadata"]
+
+
+# ---------------------------------------------------------------------------
+# 6. SARIF generation
+# ---------------------------------------------------------------------------
+
+class TestSarif:
+    def _make_scan_result(self):
+        return ScanResult(
+            target="example.com",
+            findings=[
+                AssetFinding(
+                    asset_type="tls_certificate", host="example.com", port=443,
+                    algorithm="RSA-2048", key_type="RSA", key_size=2048,
+                ),
+                AssetFinding(
+                    asset_type="tls_certificate", host="example.com", port=443,
+                    algorithm="ML-KEM-768", key_type="ML-KEM", key_size=768,
+                ),
+            ],
+        )
+
+    def test_valid_sarif_structure(self):
+        result = self._make_scan_result()
+        sarif = generate_sarif(result)
+        assert sarif["version"] == "2.1.0"
+        assert "$schema" in sarif
+        assert "runs" in sarif
+        assert len(sarif["runs"]) == 1
+
+    def test_rule_definitions_present(self):
+        result = self._make_scan_result()
+        sarif = generate_sarif(result)
+        run = sarif["runs"][0]
+        assert "tool" in run
+        assert "rules" in run["tool"]["driver"]
+        rules = run["tool"]["driver"]["rules"]
+        assert len(rules) >= 1
+        rule_ids = {r["id"] for r in rules}
+        assert any("QUANTUM" in rid or "CRYPTO" in rid or "WEAK" in rid for rid in rule_ids)
+
+    def test_results_match_findings(self):
+        result = self._make_scan_result()
+        sarif = generate_sarif(result)
+        run = sarif["runs"][0]
+        assert "results" in run
+        assert len(run["results"]) == 2
+
+    def test_sarif_result_has_level(self):
+        result = self._make_scan_result()
+        sarif = generate_sarif(result)
+        for r in sarif["runs"][0]["results"]:
+            assert "level" in r
+            assert r["level"] in ("error", "warning", "note")
+
+    def test_sarif_result_has_rule_id(self):
+        result = self._make_scan_result()
+        sarif = generate_sarif(result)
+        for r in sarif["runs"][0]["results"]:
+            assert "ruleId" in r
+
+    def test_empty_findings(self):
+        result = ScanResult(target="empty.com")
+        sarif = generate_sarif(result)
+        assert sarif["runs"][0]["results"] == []
+
+    def test_sarif_json_serializable(self):
+        result = self._make_scan_result()
+        sarif = generate_sarif(result)
+        serialized = json.dumps(sarif)
+        assert "2.1.0" in serialized
+
+
+# ---------------------------------------------------------------------------
+# 7. Roadmap generation
+# ---------------------------------------------------------------------------
+
+class TestRoadmap:
+    def test_generates_phases(self):
+        result = ScanResult(
+            target="example.com",
+            findings=[
+                AssetFinding(
+                    asset_type="tls_certificate", host="example.com", port=443,
+                    algorithm="RSA-2048", key_type="RSA", key_size=2048,
+                ),
+            ],
+        )
+        roadmap = generate_roadmap(result)
+        assert "phases" in roadmap
+        assert len(roadmap["phases"]) >= 1
+
+    def test_cost_estimation_present(self):
+        result = ScanResult(
+            target="example.com",
+            findings=[
+                AssetFinding(
+                    asset_type="tls_certificate", host="example.com", port=443,
+                    algorithm="RSA-2048", key_type="RSA", key_size=2048,
+                ),
+            ],
+        )
+        roadmap = generate_roadmap(result)
+        assert "estimated_cost" in roadmap
+        assert isinstance(roadmap["estimated_cost"], (int, float))
+        assert roadmap["estimated_cost"] > 0
+
+    def test_phases_have_names(self):
+        result = ScanResult(
+            target="example.com",
+            findings=[
+                AssetFinding(
+                    asset_type="tls_certificate", host="example.com", port=443,
+                    algorithm="RSA-2048", key_type="RSA", key_size=2048,
+                ),
+            ],
+        )
+        roadmap = generate_roadmap(result)
+        for phase in roadmap["phases"]:
+            assert "name" in phase
+            assert "tasks" in phase
+
+    def test_roadmap_json_serializable(self):
+        result = ScanResult(
+            target="example.com",
+            findings=[
+                AssetFinding(
+                    asset_type="tls_certificate", host="example.com", port=443,
+                    algorithm="RSA-2048", key_type="RSA", key_size=2048,
+                ),
+            ],
+        )
+        roadmap = generate_roadmap(result)
+        serialized = json.dumps(roadmap)
+        assert "phases" in serialized
+
+    def test_empty_findings_minimal_roadmap(self):
+        result = ScanResult(target="empty.com")
+        roadmap = generate_roadmap(result)
+        assert "phases" in roadmap
+        assert "estimated_cost" in roadmap
+
+    def test_pqc_ready_items_generate_lower_cost(self):
+        classic = ScanResult(
+            target="c.com",
+            findings=[
+                AssetFinding(
+                    asset_type="tls_certificate", host="c.com", port=443,
+                    algorithm="RSA-2048", key_type="RSA", key_size=2048,
+                ),
+            ],
+        )
+        pqc = ScanResult(
+            target="p.com",
+            findings=[
+                AssetFinding(
+                    asset_type="tls_certificate", host="p.com", port=443,
+                    algorithm="ML-KEM-1024", key_type="ML-KEM", key_size=1024,
+                ),
+            ],
+        )
+        roadmap_classic = generate_roadmap(classic)
+        roadmap_pqc = generate_roadmap(pqc)
+        assert roadmap_pqc["estimated_cost"] <= roadmap_classic["estimated_cost"]
+
+
+# ---------------------------------------------------------------------------
+# 8. Source scanner
+# ---------------------------------------------------------------------------
+
+class TestSourceScanner:
+    def test_find_crypto_in_python(self):
+        code = """
+import hashlib
+from cryptography.hazmat.primitives.asymmetric import rsa
+key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+h = hashlib.sha256(b"hello")
+"""
+        findings = scan_source_file(code, language="python")
+        assert len(findings) >= 1
+        algos = {f.algorithm for f in findings}
+        assert any("RSA" in a or "SHA" in a or "hash" in a.lower() for a in algos)
+
+    def test_find_crypto_in_javascript(self):
+        code = """
+const crypto = require('crypto');
+const key = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+const hash = crypto.createHash('sha256');
+"""
+        findings = scan_source_file(code, language="javascript")
+        assert len(findings) >= 1
+
+    def test_no_crypto_in_plain_text(self):
+        code = "print('hello world')"
+        findings = scan_source_file(code, language="python")
+        assert len(findings) == 0
+
+    def test_scan_source_directory(self, tmp_path: Path):
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "crypto_util.py").write_text(
+            "from cryptography.hazmat.primitives.asymmetric import rsa\n"
+            "key = rsa.generate_private_key(public_exponent=65537, key_size=2048)\n"
+        )
+        (src / "plain.py").write_text("x = 1\n")
+        findings = scan_source_directory(str(src))
+        assert len(findings) >= 1
+
+    def test_finding_has_host_as_file_path(self):
+        code = "from cryptography.hazmat.primitives.asymmetric import rsa\n"
+        findings = scan_source_file(code, language="python")
+        assert len(findings) >= 1
+        assert findings[0].asset_type == "source_crypto_usage"
+
+
+# ---------------------------------------------------------------------------
+# 9. Manifest scanner
+# ---------------------------------------------------------------------------
+
+class TestManifestScanner:
+    def test_find_crypto_deps_package_json(self):
+        manifest = {
+            "name": "test-app",
+            "dependencies": {
+                "crypto-js": "^4.1.1",
+                "express": "^4.18.0",
+                "node-forge": "^1.3.0",
+            }
+        }
+        findings = scan_manifest(manifest, manifest_type="package.json")
+        assert len(findings) >= 1
+        dep_names = {f.metadata.get("package_name", f.host) for f in findings}
+        assert any("crypto" in d.lower() or "forge" in d.lower() for d in dep_names)
+
+    def test_find_crypto_deps_requirements_txt(self):
+        manifest = "cryptography==41.0.0\nrequests==2.31.0\npycryptodome==3.19.0\n"
+        findings = scan_manifest(manifest, manifest_type="requirements.txt")
+        assert len(findings) >= 1
+        dep_names = {f.metadata.get("package_name", f.host) for f in findings}
+        assert any("crypto" in d.lower() for d in dep_names)
+
+    def test_no_crypto_deps(self):
+        manifest = {
+            "name": "safe-app",
+            "dependencies": {
+                "lodash": "^4.17.0",
+                "express": "^4.18.0",
+            }
+        }
+        findings = scan_manifest(manifest, manifest_type="package.json")
+        assert len(findings) == 0
+
+    def test_findings_have_asset_type(self):
+        manifest = {"dependencies": {"cryptography": "41.0.0"}}
+        findings = scan_manifest(manifest, manifest_type="package.json")
+        assert len(findings) >= 1
+        assert findings[0].asset_type == "dependency_crypto_library"
+
+    def test_requirements_txt_with_pyproject(self):
+        manifest = "[project]\ndependencies = [\n  'cryptography>=3.0',\n  'requests>=2.0',\n]\n"
+        findings = scan_manifest(manifest, manifest_type="requirements.txt")
+        assert len(findings) >= 1

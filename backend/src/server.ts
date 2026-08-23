@@ -57,6 +57,7 @@ import {
 } from "./services/attestation.js";
 import { startIndexer } from "./services/indexer.js";
 import { evaluate } from "./services/evaluate.js";
+import { registerScannerRoutes } from "./routes/scanner.js";
 import { CORS_ORIGINS, API_KEYS, API_KEY_REQUIRED, PLANNER_URL, CHAIN, CHAIN_ID, publicClient, CONTRACTS } from "./config.js";
 import {
   RevocationAnchorAbi,
@@ -732,6 +733,11 @@ server.get("/migration/progress/:org", async (request, reply) => {
   reply.header("Sunset", "2026-12-31");
   return getMigrationProgress((request.params as { org: string }).org as `0x${string}`);
 });
+
+// ------------------------------------------------------------------
+// Scanner, risk, compliance, evidence, and roadmap routes
+// ------------------------------------------------------------------
+registerScannerRoutes(server);
 
 // ------------------------------------------------------------------
 // Boot: start indexer, then listen

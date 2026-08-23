@@ -17,6 +17,7 @@ class AssetFinding(BaseModel):
     vendor: str | None = None
     criticality: str = Field("medium", description="low, medium, high, or critical")
     fingerprint_sha256: str | None = None
+    first_seen: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     # Optional TLS details (populated by the TLS scanner)
     issuer: str | None = None

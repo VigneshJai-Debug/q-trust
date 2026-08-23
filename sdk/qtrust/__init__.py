@@ -1,32 +1,75 @@
 # sdk/qtrust/__init__.py
-"""Q-Trust SDK — Post-Quantum Cryptography migration."""
+"""Q-Trust SDK -- Post-Quantum Cryptography migration."""
+from .cbom_models import (
+    CostEstimate,
+    CycloneDXBOM,
+    CycloneDXComponent,
+    EvidenceEntry,
+    EvidenceLedger,
+    MigrationPhase,
+    convert_to_cyclonedx,
+    generate_evidence_ledger,
+    generate_migration_roadmap,
+)
 from .client import QTrustClient
-from .ipfs import PinataClient
-from .schema import CBOM, AssetRecord, CBOMEntry, MigrationRecord, ProductAttestation, VendorInfo
 from .did import DIDResolver, DIDDocument
-from .vc import VCIssuer, VCPresenter, VCVerifier, VerifiableCredential, VerifiablePresentation, VCVerificationResult
+from .ipfs import PinataClient
+from .risk import (
+    ComplianceEngine,
+    ComplianceFramework,
+    ComplianceResult,
+    ComplianceRule,
+    QuantumVulnerability,
+    RiskScoringEngine,
+    RiskScore,
+)
+from .schema import CBOM, AssetRecord, CBOMEntry, MigrationRecord, ProductAttestation, VendorInfo
 from .trust import TrustAssessment, TrustEvaluator, EvidenceContribution, Conflict
+from .vc import (
+    VCIssuer,
+    VCPresenter,
+    VCVerifier,
+    VerifiableCredential,
+    VerifiablePresentation,
+    VCVerificationResult,
+)
 
-__version__ = "0.2.0"
+__version__ = "1.0.0"
 __all__ = [
-    "QTrustClient",
     "CBOM",
     "CBOMEntry",
     "AssetRecord",
-    "VendorInfo",
-    "ProductAttestation",
+    "CostEstimate",
+    "Conflict",
+    "ComplianceEngine",
+    "ComplianceFramework",
+    "ComplianceResult",
+    "ComplianceRule",
+    "CycloneDXBOM",
+    "CycloneDXComponent",
+    "DIDDocument",
+    "DIDResolver",
+    "EvidenceContribution",
+    "EvidenceEntry",
+    "EvidenceLedger",
+    "MigrationPhase",
     "MigrationRecord",
     "PinataClient",
-    "DIDResolver",
-    "DIDDocument",
+    "ProductAttestation",
+    "QTrustClient",
+    "QuantumVulnerability",
+    "RiskScoringEngine",
+    "RiskScore",
+    "TrustAssessment",
+    "TrustEvaluator",
     "VCIssuer",
     "VCPresenter",
     "VCVerifier",
+    "VCVerificationResult",
+    "VendorInfo",
     "VerifiableCredential",
     "VerifiablePresentation",
-    "VCVerificationResult",
-    "TrustAssessment",
-    "TrustEvaluator",
-    "EvidenceContribution",
-    "Conflict",
+    "convert_to_cyclonedx",
+    "generate_evidence_ledger",
+    "generate_migration_roadmap",
 ]
