@@ -72,6 +72,7 @@ import {
 import { startIndexer } from "./services/indexer.js";
 import { evaluate } from "./services/evaluate.js";
 import { registerScannerRoutes } from "./routes/scanner.js";
+import { registerGPURoutes } from "./services/gpu-service.js";
 import { initSentry, registerSentryHooks } from "./plugins/sentry.js";
 import { registerMetrics } from "./plugins/metrics.js";
 import { CredentialVerifySchema, RelayAuditBodySchema } from "./schemas/index.js";
@@ -853,6 +854,7 @@ server.get("/migration/progress/:org", async (request, reply) => {
 // Scanner, risk, compliance, evidence, and roadmap routes
 // ------------------------------------------------------------------
 registerScannerRoutes(server);
+await server.register(registerGPURoutes);
 
 // ------------------------------------------------------------------
 // Boot: start indexer, then listen

@@ -407,6 +407,192 @@ def plan_with_deadline(req: DeadlineRequest) -> dict[str, Any]:
     return plan(PlanRequest(cbom=req.cbom, deadline=req.deadline))
 
 
+_RL_BUDGET_SECONDS = 2.0
+_RL_MODEL_PATH = Path(__file__).resolve().parent / "rl_agent.pt"
+
+
+def _rl_migration_order(req: PlanRequest) -> tuple[list[dict[str, Any]], str] | None:
+    """Greedy-rollout decode with the trained RL agent.
+
+    Returns (migration_order, method) or None when the RL checkpoint is
+    missing or torch/PyG are unavailable.
+    """
+    if not _RL_MODEL_PATH.exists():
+        return None
+
+    try:
+        import torch
+        from qtrust_planner.rl_agent import MigrationAgent
+    except ImportError:
+        return None
+
+    assets = req.cbom.get("assets", [])
+    if not assets:
+        raise HTTPException(status_code=422, detail="CBOM has no assets")
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    agent = MigrationAgent(n_features=6, hidden_dim=128).to(device)
+    try:
+        agent.load_state_dict(
+            torch.load(str(_RL_MODEL_PATH), map_location=device, weights_only=True)
+        )
+    except Exception as exc:
+        logger.warning("rl_agent checkpoint unusable: %s", exc)
+        return None
+    agent.eval()
+
+    crit_map = {"low": 1, "medium": 2, "high": 3, "critical": 4}
+    from qtrust_planner.model_v3 import encode_algorithm_type
+
+    records = []
+    features = []
+    for i, a in enumerate(assets):
+        algorithm = a.get("algorithm", "unknown")
+        key_size = int(a.get("key_size", 0) or 0)
+        criticality = a.get("criticality", "Medium")
+        crit = crit_map.get(str(criticality).lower(), 2)
+        features.append([
+            encode_algorithm_type(algorithm) / 14.0,
+            min(key_size / 4096.0, 1.0),
+            1.0 if a.get("pqc_ready", False) else 0.0,
+            crit / 5.0,
+            365.0 / 3650.0,
+            0.5,
+        ])
+        records.append({
+            "asset_id": a.get("asset_id", f"asset-{i:04d}"),
+            "algorithm": algorithm,
+            "host": a.get("host", ""),
+            "port": a.get("port", 0),
+            "key_size": key_size,
+            "criticality": criticality,
+            "pqc_ready": bool(a.get("pqc_ready", False)),
+        })
+
+    n = len(records)
+    x = torch.tensor(features, dtype=torch.float32, device=device)
+
+    dep_pairs: list[tuple[int, int]] = []
+    deps = req.deps or {}
+    raw_edges = deps.get("edges", []) if isinstance(deps, dict) else []
+    for e in raw_edges:
+        try:
+            b, a_ = int(e[0]), int(e[1])
+            if 0 <= b < n and 0 <= a_ < n and b != a_:
+                dep_pairs.append((b, a_))
+        except (TypeError, ValueError, IndexError, KeyError):
+            continue
+    if dep_pairs:
+        edge_index = torch.tensor(dep_pairs, dtype=torch.long).t().contiguous().to(device)
+    else:
+        edge_index = torch.empty((2, 0), dtype=torch.long, device=device)
+
+    migrated: list[bool] = [False] * n
+    order_idx: list[int] = []
+    start = time.time()
+    with torch.no_grad():
+        while len(order_idx) < n:
+            if time.time() - start > _RL_BUDGET_SECONDS:
+                return None
+            policy_logits, _ = agent(x, edge_index)
+            mask = torch.full_like(policy_logits, float("-inf"))
+            for i in range(n):
+                if not migrated[i]:
+                    deps_ok = all(migrated[b] for b, tgt in dep_pairs if tgt == i)
+                    if deps_ok:
+                        mask[i] = 0.0
+            if not torch.isfinite(mask).any():
+                break
+            action = int(torch.argmax(policy_logits + mask).item())
+            migrated[action] = True
+            order_idx.append(action)
+
+    migration_order: list[dict[str, Any]] = []
+    for rank, idx in enumerate(order_idx):
+        asset = records[idx]
+        migration_order.append({
+            "rank": rank + 1,
+            **asset,
+            "priority_score": float(policy_logits[idx].item()),
+            "risk_score": float(_heuristic_risk({**asset, "index": idx})),
+            "migrate_days": _estimate_migrate_days(asset["algorithm"], asset["key_size"]),
+        })
+    return migration_order, "rl_policy"
+
+
+@app.post("/rl/plan")
+def rl_plan(req: PlanRequest) -> dict[str, Any]:
+    """Migration plan decoded by the trained RL agent.
+
+    Falls back to heuristic ordering with an honest method label whenever
+    the RL checkpoint is absent or inference fails.
+    """
+    if not _model_info:
+        _load_model()
+
+    result = None
+    try:
+        result = _rl_migration_order(req)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("RL decode failed (%s); falling back to heuristic", exc)
+
+    if result is not None:
+        migration_order, method = result
+    else:
+        assets = req.cbom.get("assets", [])
+        if not assets:
+            raise HTTPException(status_code=422, detail="CBOM has no assets")
+        records = [
+            {
+                "index": i,
+                "asset_id": a.get("asset_id", f"asset-{i:04d}"),
+                "algorithm": a.get("algorithm", "unknown"),
+                "host": a.get("host", ""),
+                "port": a.get("port", 0),
+                "key_size": int(a.get("key_size", 0) or 0),
+                "criticality": a.get("criticality", "Medium"),
+                "pqc_ready": bool(a.get("pqc_ready", False)),
+            }
+            for i, a in enumerate(assets)
+        ]
+        scores = [_heuristic_priority(a) for a in records]
+        sorted_indices = sorted(range(len(records)), key=lambda i: -scores[i])
+        migration_order = []
+        for rank, idx in enumerate(sorted_indices):
+            asset = records[idx]
+            migration_order.append({
+                "rank": rank + 1,
+                **{k: v for k, v in asset.items() if k != "index"},
+                "priority_score": float(scores[idx]),
+                "risk_score": float(_heuristic_risk(asset)),
+                "migrate_days": _estimate_migrate_days(asset["algorithm"], asset["key_size"]),
+            })
+        method = "heuristic_fallback"
+
+    deadline_date = None
+    if req.deadline:
+        try:
+            deadline_date = datetime.fromisoformat(req.deadline).date()
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="deadline must be ISO date YYYY-MM-DD") from exc
+
+    schedule = None
+    if deadline_date:
+        schedule = _build_schedule(migration_order, deadline_date)
+
+    return {
+        "planner": "qtrust-planner",
+        "model": _model_info,
+        "method": method,
+        "total_assets": len(migration_order),
+        "deadline": deadline_date.isoformat() if deadline_date else None,
+        "migration_order": migration_order,
+        "schedule": schedule,
+    }
+
+
 def _build_schedule(migration_order: list[dict[str, Any]], deadline: date) -> dict[str, Any]:
     """Greedy schedule: migrate in priority order, one asset at a time, backfilled
     from the deadline so the most critical assets finish first.

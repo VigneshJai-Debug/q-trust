@@ -108,3 +108,18 @@ export const RelayAuditBodySchema = Type.Object({
   nonce: Type.Integer({ minimum: 0 }),
   signature: HexSignature,
 });
+
+export const SideChannelAnalyzeSchema = Type.Object({
+  simulated: Type.Optional(Type.Boolean({ default: true })),
+  leakage_prob: Type.Optional(Type.Number({ minimum: 0, maximum: 1, default: 0 })),
+  implementation_cmd: Type.Optional(Type.Array(Type.String({ maxLength: 256 }), { maxItems: 8 })),
+  n_traces: Type.Optional(Type.Integer({ minimum: 100, maximum: 50_000, default: 10_000 })),
+});
+
+export const AnomalyScoreSchema = Type.Object({
+  cbom: FreeformObject,
+});
+
+export const RLPlanSchema = Type.Object({
+  cbom: FreeformObject,
+});

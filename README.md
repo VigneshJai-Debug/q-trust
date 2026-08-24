@@ -124,6 +124,16 @@ python -m qtrust_planner.predict /tmp/bank_cbom.json
 | SchemaRegistry | Schema registration |
 | QTrustGovernance | Timelock-controlled admin |
 
+## GPU-Accelerated Features (Optional)
+
+On CUDA hardware (A100-class), Q-Trust unlocks 6 GPU features — large-scale
+GNN training (100K graphs, BF16), timing side-channel analysis of PQC
+implementations, quantum threat simulation/estimation, an RL migration
+agent, parallel enterprise scanning with GPU-batch risk scoring, and CBOM
+anomaly detection. Exposed via REST when `QTRUST_GPU_ENABLED=true`
+(`/v1/gpu/*`). See [docs/GPU_FEATURES.md](docs/GPU_FEATURES.md) and
+`make -f Makefile.gpu help`.
+
 ## Environment Variables
 
 | Variable | Purpose |

@@ -1,0 +1,64 @@
+# Makefile.gpu — GPU-accelerated feature targets for Q-Trust
+#
+# Usage:
+#   make -f Makefile.gpu help            — show available targets
+#   make -f Makefile.gpu install         — install GPU dependencies
+#   make -f Makefile.gpu train-gnn       — train large-scale GNN (A100)
+#   make -f Makefile.gpu train-rl        — train RL migration agent
+#   make -f Makefile.gpu side-channel    — train + demo side-channel analysis
+#   make -f Makefile.gpu quantum         — run quantum threat estimator
+#   make -f Makefile.gpu anomaly         — train + test anomaly detector
+#   make -f Makefile.gpu parallel-scan   — run parallel enterprise scan demo
+
+.PHONY: help install train-gnn train-gnn-quick train-rl train-rl-quick side-channel-train side-channel quantum anomaly parallel-scan all
+
+help:
+	@echo "Q-Trust GPU Feature Targets:"
+	@echo ""
+	@echo "  make -f Makefile.gpu install          — install GPU dependencies"
+	@echo "  make -f Makefile.gpu train-gnn        — GNN on 100K graphs, BF16 (A100)"
+	@echo "  make -f Makefile.gpu train-gnn-quick  — quick GNN test (10K graphs)"
+	@echo "  make -f Makefile.gpu train-rl         — train RL migration agent"
+	@echo "  make -f Makefile.gpu train-rl-quick   — short RL smoke (100 episodes)"
+	@echo "  make -f Makefile.gpu side-channel     — train + analyze simulated traces"
+	@echo "  make -f Makefile.gpu quantum          — Shor/estimate threat report"
+	@echo "  make -f Makefile.gpu anomaly          — train VAE + score CBOMs"
+	@echo "  make -f Makefile.gpu parallel-scan    — parallel scan of demo hosts"
+
+install:
+	pip install -r requirements-gpu.txt
+	@echo "GPU dependencies installed."
+
+train-gnn:
+	cd planner && python -m qtrust_planner.train_gpu --epochs 200 --n-graphs 100000
+
+train-gnn-quick:
+	cd planner && python -m qtrust_planner.train_gpu --quick
+
+train-rl:
+	cd planner && python -m qtrust_planner.rl_agent --episodes 10000 --save-path rl_agent.pt
+
+train-rl-quick:
+	cd planner && python -m qtrust_planner.rl_agent --episodes 100 --save-path rl_agent.pt
+
+side-channel-train:
+	cd inspector && python -c "from qtrust_inspector.side_channel import SideChannelAnalyzer; a = SideChannelAnalyzer(); a.train_detector(n_clean=2000, n_leaking=2000, epochs=40, save_path='side_channel_model.pt')"
+
+side-channel: side-channel-train
+	cd inspector && python -c "from qtrust_inspector.side_channel import SideChannelAnalyzer; a = SideChannelAnalyzer(model_path='side_channel_model.pt'); r1 = a.analyze_simulated(leakage_prob=0.0); print('clean:', r1.leakage_probability, r1.verdict); r2 = a.analyze_simulated(leakage_prob=0.85); print('leaky:', r2.leakage_probability, r2.verdict)"
+
+quantum:
+	cd planner && python -m qtrust_planner.quantum_estimator
+
+anomaly:
+	cd inspector && python -c "from qtrust_inspector.anomaly_detector import CBOMAnomalyDetector; d = CBOMAnomalyDetector(); cboms = d.generate_synthetic_training_data(n_cboms=500); d.train(cboms, epochs=60, save_path='anomaly_model.pt'); r1 = d.score_cbom(cboms[0]); print('normal:', r1.anomaly_score, r1.is_anomalous)"
+
+parallel-scan:
+	cd inspector && python -m qtrust_inspector.parallel_scanner
+
+all: train-gnn-quick train-rl-quick quantum
+	@echo ""
+	@echo "============================================"
+	@echo "GPU feature smoke pass complete."
+	@echo "Run individual targets for full training."
+	@echo "============================================"

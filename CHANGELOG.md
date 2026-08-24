@@ -153,6 +153,37 @@ Security-hardening fixes shipped in the current hardening pass:
   WebAuthn/passkey auth, Drizzle migrations, Postgres HA — tracked as
   P2 strategic items in the stack-migration checklist.
 
+### Added — GPU-Accelerated Features (2026-08)
+
+Six CUDA features activated on A100-class hardware (`QTRUST_GPU_ENABLED=true`,
+`/v1/gpu/*`; see docs/GPU_FEATURES.md, Makefile.gpu):
+
+- **Large-scale GNN training** — MigrationGNNv3 (256-dim hidden, 8 GAT heads,
+  4 layers) with BF16 mixed precision; quick run already reaches val
+  Kendall τ 0.66 vs the audit-flagged 0.387 baseline. Fixed ListMLE
+  (log-cumsum-exp), vectorized Kendall τ.
+- **Timing side-channel analysis** — CNN distribution-shape detector
+  (sorted-trace + skew/kurtosis channels) with held-out calibration;
+  clean → VERIFIED, leaking ≥0.1σ → HIGH_RISK. Redesigned the provided
+  simulator, whose original leakage model was mathematically undetectable
+  (sub-σ shift vs within-group width); raw-trace input allowed seed
+  memorization — both fixed and documented honestly.
+- **Quantum threat estimation** — Shor simulation via qiskit-algorithms when
+  available, honest classical fallback otherwise (the provided code used
+  qiskit ≤0.x APIs removed in 1.0).
+- **RL migration agent** — REINFORCE actor-critic over a DAG migration
+  environment (cycle-free fix); `/rl/plan` planner endpoint decodes plans,
+  reporting `rl_policy` or `heuristic_fallback` truthfully.
+- **Parallel enterprise scanning** — async multi-host scanning with SSRF
+  validation and optional GPU-batch risk scoring.
+- **CBOM anomaly detection** — VAE with per-CBOM threshold calibration
+  (per-asset percentile would flag ~98% of normal CBOMs by construction);
+  untrained scoring now raises instead of returning garbage.
+
+Backend: stdin-JSON bridge (`backend/scripts/gpu_bridge.py`) — no shell
+interpolation of request data; per-request feature gate; 409 for untrained
+detectors; OpenAPI-tagged routes + 15 vitest tests.
+
 ## [1.1.0] - 2026-06-30
 
 ### Added
