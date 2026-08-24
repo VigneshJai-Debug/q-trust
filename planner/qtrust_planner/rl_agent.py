@@ -27,14 +27,12 @@ from __future__ import annotations
 import os
 import random
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 from torch.distributions import Categorical
-
 
 # ---------------------------------------------------------------------------
 # Migration Environment
@@ -275,7 +273,6 @@ def state_to_tensors(state: MigrationState, device: str | torch.device | None = 
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    n = len(state.assets)
     features = []
     for i, asset in enumerate(state.assets):
         alg_type = encode_algorithm_type(asset["algorithm"])
@@ -369,7 +366,7 @@ def train_agent(
 
         # Policy gradient loss
         log_probs = torch.stack(log_probs)
-        values = torch.stack(values)
+        values = torch.stack(values).reshape(-1)
 
         advantage = returns - values.detach()
         actor_loss = -(log_probs * advantage).sum()

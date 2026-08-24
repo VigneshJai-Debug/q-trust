@@ -21,10 +21,11 @@ Usage:
 from __future__ import annotations
 
 import json
+import random
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
+from fractions import Fraction
 from math import gcd
-from typing import Optional
 
 
 @dataclass
@@ -44,7 +45,7 @@ class QuantumEstimate:
     rsa_key_size: int
     logical_qubits_needed: int
     physical_qubits_needed: int
-    estimated_breakable_year: Optional[int]
+    estimated_breakable_year: int | None
     based_on: str
 
 
@@ -65,7 +66,7 @@ class QuantumThreatEstimator:
         """Estimate physical qubits (with error correction overhead ~1000x)."""
         return self.logical_qubits_for_rsa(n_bits) * 1000
 
-    def estimate_breakable_year(self, n_bits: int) -> Optional[int]:
+    def estimate_breakable_year(self, n_bits: int) -> int | None:
         """Estimate when RSA-n will be breakable based on quantum hardware roadmaps.
 
         Based on published roadmaps from IBM, Google, and IonQ (as of 2024).
@@ -127,63 +128,164 @@ class QuantumThreatEstimator:
             # or return an estimate
             return self._factor_estimate(N)
 
-    def _factor_simulation(self, N: int, use_gpu: bool) -> FactorResult:
-        """Run Shor's algorithm simulation.
+    def _factor_simulation(self, N: int, use_gpu: bool, seed: int = 42) -> FactorResult:
+        """Run Shor's algorithm simulation on an Aer simulator.
 
-        Tries qiskit_algorithms.Shor (the qiskit 1.0+ home of the algorithm)
-        with an Aer simulator (GPU if requested and available). If quantum
-        simulation is unavailable, falls back to classical Pollard's rho and
-        labels the result honestly via the method field.
+        Implements order finding via quantum phase estimation directly on
+        qiskit (no qiskit_algorithms dependency, compatible with qiskit 1.x/2.x):
+        the modular-multiplication unitary U: |x> -> |a*x mod N> is built as a
+        permutation matrix and phase-estimated with controlled-U^(2^j) gates.
+        Runs on the GPU Aer build when requested and available; otherwise CPU.
+        If qiskit-aer is entirely unavailable, falls back to classical
+        Pollard's rho and labels the result honestly via the method field.
         """
         start_time = time.time()
 
         n_bits = N.bit_length()
         qubits = 2 * n_bits + 3
 
-        shor_cls = None
         try:
-            from qiskit_algorithms import Shor as shor_cls  # type: ignore[no-redef]
+            from qiskit_aer import AerSimulator
         except ImportError:
+            return self._fallback_result(N, start_time, qubits)
+
+        rng = random.Random(seed)
+        factors: list[int] = []
+        method_used = "quantum phase estimation (no order found)"
+        r_found = False
+
+        for attempt in range(8):
+            a = rng.randint(2, N - 2)
+            g = gcd(a, N)
+            if 1 < g < N:
+                factors = [g, N // g]
+                method_used = "classical gcd shortcut"
+                break
+
+            order = self._quantum_order(a, N, AerSimulator, use_gpu, attempt_seed=seed + attempt)
+            if order is None:
+                continue
+            r, device_used = order
+            r_found = True
+            if r % 2 != 0:
+                continue
+            half = pow(a, r // 2, N)
+            if half == N - 1 or half == 1:
+                continue
+            f1, f2 = gcd(half - 1, N), gcd(half + 1, N)
+            if 1 < f1 < N and f1 * f2 == N:
+                factors = [f1, f2]
+                break
+            if 1 < f1 < N:
+                factors = [f1, N // f1]
+                break
+            if 1 < f2 < N:
+                factors = [f2, N // f2]
+                break
+
+        elapsed = time.time() - start_time
+        success = len(factors) == 2 and factors[0] * factors[1] == N
+        if success and not method_used.startswith("classical"):
+            method_used = f"shor ({device_used} aer simulation)" if r_found else method_used
+        return FactorResult(
+            number=N,
+            factors=sorted(factors),
+            elapsed_seconds=elapsed,
+            success=success,
+            method=method_used,
+            quantum_circuit_qubits=qubits,
+        )
+
+    def _quantum_order(
+        self,
+        a: int,
+        N: int,
+        aer_cls,
+        use_gpu: bool,
+        attempt_seed: int = 0,
+    ) -> tuple[int, str] | None:
+        """Find the multiplicative order of a mod N via quantum phase estimation.
+
+        Returns (r, device_used) such that a^r ≡ 1 (mod N), or None on failure.
+        """
+        import numpy as np
+        from qiskit import QuantumCircuit
+        from qiskit.circuit.library import UnitaryGate
+
+        n = N.bit_length()
+        m = 2 * n  # counting qubits — precision ≥ 1/N² guarantees exact recovery
+        dim = 1 << n
+
+        # Base permutation as a function array f(x) = a*x mod N for x < N,
+        # identity elsewhere. Powers computed by repeated squaring on arrays.
+        f = np.arange(dim)
+        f[:N] = (np.arange(N) * a) % N
+
+        def _matrix_from_fn(fn: np.ndarray) -> np.ndarray:
+            mat = np.zeros((dim, dim), dtype=np.complex128)
+            mat[fn, np.arange(dim)] = 1  # column x -> row fn[x]
+            return mat
+
+        qc = QuantumCircuit(m + n, m)
+        qc.h(range(m))
+        qc.x(m)  # work register in |1>
+
+        # Controlled-U^(2^j): embedded directly as a single (2*dim x 2*dim)
+        # block unitary over [*work, control] qubits (qiskit little-endian:
+        # the LAST qarg is the most significant bit, so the control sits in
+        # the top block row). Aer executes plain `unitary` instructions
+        # natively, so no transpilation synthesis is needed — this keeps
+        # N=77 tractable on CPU-class simulators.
+        eye = np.eye(dim, dtype=np.complex128)
+        cur = f.copy()
+        for j in range(m):
+            cu = np.zeros((2 * dim, 2 * dim), dtype=np.complex128)
+            cu[:dim, :dim] = eye                   # control = |0>: identity
+            cu[dim:, dim:] = _matrix_from_fn(cur)  # control = |1>: U^(2^j)
+            gate = UnitaryGate(cu, label=f"cU^{2**j}")
+            qc.append(gate, list(range(m, m + n)) + [j])
+            cur = cur[cur]  # square the function: f^(2k) = f^k ∘ f^k
+
+        # Inverse QFT on the counting register.
+        for i in range(m // 2):
+            qc.swap(i, m - 1 - i)
+        for j in range(m - 1, -1, -1):
+            for k in range(j + 1, m):
+                qc.cp(-np.pi / float(2 ** (k - j)), k, j)
+            qc.h(j)
+        qc.measure(range(m), range(m))
+
+        shots = 512
+        for device in (("GPU", "CPU") if use_gpu else ("CPU",)):
             try:
-                from qiskit.algorithms import Shor as shor_cls  # type: ignore[no-redef]
-            except ImportError:
-                shor_cls = None
-
-        if shor_cls is not None:
-            try:
-                from qiskit_aer import AerSimulator
-
-                backend = None
-                method = "cpu"
-                if use_gpu:
-                    try:
-                        backend = AerSimulator(method="statevector", device="GPU")
-                        method = "gpu"
-                    except Exception:
-                        backend = None
-                if backend is None:
-                    backend = AerSimulator(method="statevector")
-                    method = method if use_gpu else "cpu"
-
-                shor = shor_cls(quantum_instance=backend)
-                result = shor.factor(N)
-
-                elapsed = time.time() - start_time
-                factors = [int(f) for f in result.factors[0]] if result.factors else []
-                success = len(factors) == 2 and factors[0] * factors[1] == N
-
-                return FactorResult(
-                    number=N,
-                    factors=factors,
-                    elapsed_seconds=elapsed,
-                    success=success,
-                    method=method,
-                    quantum_circuit_qubits=qubits,
+                backend = (
+                    aer_cls(method="statevector", device=device)
+                    if device == "GPU"
+                    else aer_cls(method="statevector")
                 )
-            except Exception as e:
-                print(f"Quantum simulation failed ({str(e)[:100]}); using classical fallback.")
+                counts = backend.run(qc, shots=shots, seed_simulator=attempt_seed).result().get_counts()
+            except Exception as exc:  # noqa: BLE001 — any Aer/run failure falls back to next device
+                print(f"Quantum order-finding on {device} failed ({str(exc)[:100]}); trying next device.")
+                continue
 
-        # Classical fallback (Pollard's rho) — deterministic, honest labeling.
+            # Post-process: continued fractions over measured phases.
+            candidates: dict[int, int] = {}
+            for bitstr, count in counts.items():
+                y = int(bitstr.replace(" ", ""), 2)
+                if y == 0:
+                    continue
+                frac = Fraction(y, 1 << m).limit_denominator(N)
+                r_cand = frac.denominator
+                if r_cand > 0 and pow(a, r_cand, N) == 1:
+                    candidates[r_cand] = candidates.get(r_cand, 0) + count
+            if candidates:
+                best_r = max(candidates.items(), key=lambda kv: kv[1])[0]
+                return best_r, ("gpu" if device == "GPU" else "cpu")
+            return None
+        return None
+
+    def _fallback_result(self, N: int, start_time: float, qubits: int) -> FactorResult:
+        """Pollard's rho fallback when qiskit-aer is not installed."""
         factors = self._pollard_rho(N)
         elapsed = time.time() - start_time
         success = len(factors) == 2 and factors[0] * factors[1] == N
@@ -224,7 +326,7 @@ class QuantumThreatEstimator:
             quantum_circuit_qubits=2 * N.bit_length() + 3,
         )
 
-    def generate_threat_report(self, key_sizes: list[int] = None) -> dict:
+    def generate_threat_report(self, key_sizes: list[int] | None = None) -> dict:
         """Generate a full quantum threat report for multiple RSA key sizes.
 
         Args:
@@ -247,7 +349,7 @@ class QuantumThreatEstimator:
 
         return report
 
-    def save_report(self, path: str, key_sizes: list[int] = None):
+    def save_report(self, path: str, key_sizes: list[int] | None = None):
         """Save a quantum threat report to a JSON file."""
         report = self.generate_threat_report(key_sizes)
         with open(path, "w") as f:

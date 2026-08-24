@@ -14,6 +14,7 @@ import { useState } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import { API_BASE_URL } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import SideChannelPanel from "@/components/side-channel-panel";
 import { ShieldCheckIcon, XCircleIcon, ClockIcon } from "@/app/icons";
 
 /* -------------------------------------------------------------------------- */
@@ -119,7 +120,7 @@ interface EvidenceVerifyResult {
 /*  Tab configuration                                                          */
 /* -------------------------------------------------------------------------- */
 
-type TabId = "scan" | "risk" | "compliance" | "roadmap" | "evidence";
+type TabId = "scan" | "risk" | "compliance" | "roadmap" | "evidence" | "sidechannel";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "scan", label: "Scan" },
@@ -127,6 +128,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "compliance", label: "Compliance" },
   { id: "roadmap", label: "Roadmap" },
   { id: "evidence", label: "Evidence" },
+  { id: "sidechannel", label: "Side Channel" },
 ];
 
 const COMPLIANCE_FRAMEWORKS = [
@@ -1148,6 +1150,13 @@ export function ScannerDashboard() {
               No evidence record yet. Run a scan to create one.
             </p>
           )}
+        </div>
+      </Tabs.Content>
+
+      {/* ==================== SIDE CHANNEL TAB ==================== */}
+      <Tabs.Content value="sidechannel">
+        <div className="max-w-xl">
+          <SideChannelPanel />
         </div>
       </Tabs.Content>
     </Tabs.Root>

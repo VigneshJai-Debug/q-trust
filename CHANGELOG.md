@@ -5,6 +5,44 @@ All notable changes to Q-Trust are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **RL agent critic/advantage broadcasting bug** — stacked per-step values had
+  shape `(T, 1)` against `(T,)` returns, silently broadcasting the advantage
+  and critic loss to `(T, T)` and corrupting policy gradients; values are now
+  flattened before the loss computation (`planner/qtrust_planner/rl_agent.py`).
+- **Anomaly VAE threshold persistence** — training calibrates a data-derived
+  decision threshold but checkpoints only stored weights, so reloaded
+  detectors silently fell back to the 0.8 default; checkpoints now persist
+  `{state_dict, threshold}` with legacy raw state-dict loading still
+  supported (`inspector/qtrust_inspector/anomaly_detector.py`).
+
+### Changed
+
+- **Shor factoring no longer depends on `qiskit_algorithms`** — order finding
+  is implemented directly via quantum phase estimation on the modular
+  multiplication permutation unitary, compatible with qiskit 1.x/2.x and any
+  Aer backend (GPU when available, CPU otherwise, classical Pollard's rho as
+  labeled last resort). Controlled-U powers are executed natively by Aer as
+  block unitaries (no transpilation synthesis), making the demo ~20x faster:
+  N=35 factors via the full quantum path in <1s and order finding for
+  N=77 completes in ~3s.
+- **requirements-gpu.txt** — drop unused gymnasium pin and document that the
+  legacy `qiskit-aer-gpu` PyPI package stops at Python 3.12 (use a GPU-built
+  Aer on newer Pythons).
+
+### Added
+
+- **Quantum estimator test suite** (`planner/tests/test_quantum_estimator.py`)
+  and **parallel scanner test suite**
+  (`inspector/tests/test_parallel_scanner.py`, mocked network) — every GPU
+  feature now has coverage.
+- **Frontend side-channel panel** — `SideChannelPanel` component (demo +
+  real-binary analysis modes) wired into the scanner dashboard's new
+  "Side Channel" tab, with component tests.
+
 ## [2.0.0] — 2026-08-24
 
 Master-audit remediation release. Breaking changes are pre-deployment

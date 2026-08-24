@@ -35,7 +35,13 @@ sdk/qtrust/contracts.py
 
 # ─── Planner models (large binaries) ─────────────────────────────────────────
 planner/model.pt
+planner/model_gpu_v3.pt
+planner/rl_agent.pt
 planner/results/*.pt
+
+# ─── Inspector GPU model checkpoints ─────────────────────────────────────────
+inspector/side_channel_model.pt
+inspector/anomaly_model.pt
 
 # ─── OS & IDE ─────────────────────────────────────────────────────────────────
 .DS_Store

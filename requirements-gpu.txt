@@ -5,16 +5,21 @@
 torch>=2.5,<3.0
 torch-geometric>=2.5.0
 
-# Quantum simulation (GPU-accelerated)
-qiskit-aer-gpu>=0.13.3
+# Quantum simulation
+# NOTE: the legacy `qiskit-aer-gpu` package stopped at Python 3.12 wheels.
+# On newer Pythons install a GPU-capable Aer build (conda-forge `qiskit-aer-gpu`
+# or build qiskit-aer from source with AER_THRUST_BACKEND=CUDA). The estimator
+# auto-detects GPU Aer and falls back to CPU Aer / classical factoring with
+# honest method labels when unavailable.
 qiskit>=1.0.0
+qiskit-aer>=0.13.3
 
 # Side-channel analysis
 numpy>=1.26.0
 scipy>=1.12.0
 
-# RL agent
-gymnasium>=0.29.0
+# RL agent — uses a self-contained simulation environment (MigrationEnvironment);
+# no gymnasium dependency required.
 
 # Anomaly detection
 scikit-learn>=1.4.0

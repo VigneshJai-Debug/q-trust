@@ -248,3 +248,25 @@ QTRUST_GPU_ENABLED=true
   pre-trained checkpoint paths in the backend environment.
 - The RL plan endpoint reports `"method": "rl_policy"` when a trained
   checkpoint exists, otherwise `"method": "heuristic_fallback"`.
+
+## Frontend
+
+`frontend/src/components/side-channel-panel.tsx` exposes the side-channel
+analyzer in the scanner dashboard ("Side Channel" tab): run a simulated
+analysis with an adjustable leakage slider or analyze a real binary, and
+see the calibrated verdict, leakage probability, trace count, accelerator,
+and evidence hash. Untrained-detector (409) responses surface a hint
+pointing at `make -f Makefile.gpu side-channel-train`.
+
+## Model checkpoints
+
+| Checkpoint | Produced by | Consumed by |
+|---|---|---|
+| `planner/model_gpu_v3.pt` | `make -f Makefile.gpu train-gnn[-quick]` | parallel scanner risk scoring, planner server |
+| `planner/rl_agent.pt` | `make -f Makefile.gpu train-rl[-quick]` | planner `/rl/plan` (`rl_policy`) |
+| `inspector/side_channel_model.pt` | `make -f Makefile.gpu side-channel-train` | bridge `side-channel` via `QTRUST_SIDE_CHANNEL_MODEL` |
+| `inspector/anomaly_model.pt` | `make -f Makefile.gpu anomaly-train` | bridge `anomaly` via `QTRUST_ANOMALY_MODEL` |
+
+Checkpoints are `.gitignore`d artifacts — train them on the target GPU host.
+The anomaly VAE checkpoint stores its calibrated decision threshold alongside
+the weights; legacy raw state-dict files still load with the default threshold.

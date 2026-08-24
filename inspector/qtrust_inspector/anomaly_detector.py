@@ -23,7 +23,6 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
 
 import numpy as np
 import torch
@@ -127,9 +126,9 @@ class CBOMAnomalyDetector:
 
     def __init__(
         self,
-        model_path: Optional[str] = None,
+        model_path: str | None = None,
         threshold: float = 0.8,
-        device: Optional[str] = None,
+        device: str | None = None,
     ):
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
         self.model = CBOMVariationalAutoencoder(
@@ -140,9 +139,16 @@ class CBOMAnomalyDetector:
 
         if model_path:
             try:
-                self.model.load_state_dict(
-                    torch.load(model_path, map_location=self.device, weights_only=True)
-                )
+                payload = torch.load(model_path, map_location=self.device, weights_only=True)
+                if isinstance(payload, dict) and "state_dict" in payload:
+                    # Checkpoint format: weights + calibrated threshold.
+                    self.model.load_state_dict(payload["state_dict"])
+                    saved_threshold = payload.get("threshold")
+                    if isinstance(saved_threshold, (int, float)) and saved_threshold > 0:
+                        self.threshold = float(saved_threshold)
+                else:
+                    # Legacy raw state_dict.
+                    self.model.load_state_dict(payload)
                 self.trained = True
                 self.model.eval()
             except FileNotFoundError:
@@ -219,7 +225,7 @@ class CBOMAnomalyDetector:
         training_cboms: list[dict],
         epochs: int = 100,
         learning_rate: float = 1e-3,
-        save_path: Optional[str] = None,
+        save_path: str | None = None,
     ):
         """Train the VAE on a set of normal CBOMs.
 
@@ -285,7 +291,13 @@ class CBOMAnomalyDetector:
             print(f"Anomaly threshold set to {self.threshold:.4f} (95th pct of per-CBOM maxima)")
 
         if save_path:
-            torch.save(self.model.state_dict(), save_path)
+            torch.save(
+                {
+                    "state_dict": self.model.state_dict(),
+                    "threshold": float(self.threshold),
+                },
+                save_path,
+            )
             print(f"Model saved to {save_path}")
 
     def score_cbom(self, cbom: dict) -> AnomalyResult:
