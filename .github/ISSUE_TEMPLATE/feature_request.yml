@@ -1,0 +1,52 @@
+name: Feature request
+description: Propose an enhancement or new capability for Q-Trust.
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea? Check existing issues first, then describe the problem
+        you're trying to solve — not just the solution you have in mind.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - contracts (Solidity)
+        - backend (Fastify API)
+        - frontend (Next.js)
+        - sdk (Python qtrust)
+        - inspector (qtrust_inspector)
+        - planner (GNN microservice)
+        - ops/infra (docker compose, prometheus)
+        - docs
+      default: 1
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What are you trying to achieve? What's blocking you today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should happen? Include API shapes or contract interfaces if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints
+      options:
+        - label: This change keeps on-chain data backward-compatible
+        - label: This change does not require a contract upgrade (or documents the UUPS path)
+        - label: I am willing to help implement/test this

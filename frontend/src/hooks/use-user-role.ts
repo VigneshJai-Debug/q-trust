@@ -7,11 +7,21 @@
  * It must never be treated as authorization; admin controls are only rendered
  * when role === "admin" (via isPrivileged). Real authorization happens
  * server-side / on-chain.
+ *
+ * Detection:
+ *   - org:    address has registered assets (backend read model)
+ *   - vendor: address has issued attestations (backend read model)
+ *   - admin:  address holds DEFAULT_ADMIN_ROLE (bytes32 zero) on VendorRegistry,
+ *             read on-chain via the wagmi public client. Runs alongside the
+ *             org/vendor queries and takes precedence, since admins act across
+ *             registries regardless of their own assets or attestations.
  */
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useAccount } from "wagmi";
+import { useAccount, usePublicClient } from "wagmi";
+import type { Address } from "viem";
 import { fetchOrgAssets, fetchVendorAttestations } from "@/lib/api";
+import { CONTRACTS } from "@/lib/config";
 
 export type UserRole = "org" | "vendor" | "auditor" | "admin" | "none";
 
@@ -24,8 +34,50 @@ export interface UserRoleInfo {
   isLoading: boolean;
 }
 
+/** OpenZeppelin AccessControl DEFAULT_ADMIN_ROLE — bytes32(0). */
+export const DEFAULT_ADMIN_ROLE =
+  "0x0000000000000000000000000000000000000000000000000000000000000000" as const;
+
+const VENDOR_REGISTRY_ABI = [
+  {
+    inputs: [
+      { name: "role", type: "bytes32" },
+      { name: "account", type: "address" },
+    ],
+    name: "hasRole",
+    outputs: [{ internalType: "bool", name: "", type: "bool" }],
+    stateMutability: "view",
+    type: "function",
+  },
+] as const;
+
+export function isAdminRole(candidate: UserRole): boolean {
+  return candidate === "admin";
+}
+
+async function hasDefaultAdminRole(
+  client: ReturnType<typeof usePublicClient>,
+  address: Address,
+): Promise<boolean> {
+  const registry = CONTRACTS.vendorRegistry;
+  if (!client || !registry || registry === "0x0") {
+    return false;
+  }
+  try {
+    return await client.readContract({
+      address: registry,
+      abi: VENDOR_REGISTRY_ABI,
+      functionName: "hasRole",
+      args: [DEFAULT_ADMIN_ROLE, address],
+    });
+  } catch {
+    return false;
+  }
+}
+
 export function useUserRole(): UserRoleInfo {
   const { address, isConnecting, isReconnecting } = useAccount();
+  const publicClient = usePublicClient();
   const walletLoading = isConnecting || isReconnecting;
 
   const orgAssets = useQuery({
@@ -44,9 +96,13 @@ export function useUserRole(): UserRoleInfo {
     retry: false,
   });
 
-  function isAdminRole(candidate: UserRole): boolean {
-    return candidate === "admin";
-  }
+  const adminRole = useQuery({
+    queryKey: ["admin-role", address],
+    queryFn: () => hasDefaultAdminRole(publicClient, address!),
+    enabled: Boolean(address),
+    staleTime: 60_000,
+    retry: false,
+  });
 
   return useMemo(() => {
     if (walletLoading || !address) {
@@ -65,6 +121,7 @@ export function useUserRole(): UserRoleInfo {
     let role: UserRole = "none";
     if (isOrg) role = "org";
     else if (isVendor) role = "vendor";
+    if (adminRole.data === true) role = "admin";
 
     return {
       role,
@@ -72,7 +129,7 @@ export function useUserRole(): UserRoleInfo {
       isVendor,
       isAuditor: false,
       isPrivileged: isAdminRole(role),
-      isLoading: orgAssets.isLoading || vendorAttestations.isLoading,
+      isLoading: orgAssets.isLoading || vendorAttestations.isLoading || adminRole.isLoading,
     };
-  }, [address, walletLoading, orgAssets.data, vendorAttestations.data, orgAssets.isLoading, vendorAttestations.isLoading]);
+  }, [address, walletLoading, orgAssets.data, vendorAttestations.data, orgAssets.isLoading, vendorAttestations.isLoading, adminRole.data, adminRole.isLoading]);
 }

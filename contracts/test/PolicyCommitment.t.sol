@@ -3,6 +3,7 @@ pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
 import "../src/PolicyCommitment.sol";
+import "../src/lib/StringBounds.sol";
 
 contract PolicyCommitmentTest is Test {
     PolicyCommitment public policy;
@@ -140,5 +141,12 @@ contract PolicyCommitmentTest is Test {
         policy.unpause();
         policy.commitPolicy("test", 1, keccak256("v1"), "ipfs://v1");
         assertTrue(true);
+    }
+    function test_RevertWhen_PolicyURITooLong() public {
+        string memory longURI = string(new bytes(513));
+        vm.expectRevert(
+            abi.encodeWithSelector(StringBounds.StringTooLong.selector, 513, 512)
+        );
+        policy.commitPolicy("ncua_part_748_pqc", 1, keccak256("p"), longURI);
     }
 }

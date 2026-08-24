@@ -5,7 +5,22 @@ All notable changes to Q-Trust are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.0] — 2026-08-24
+
+Master-audit remediation release. Breaking changes are pre-deployment
+(nothing has shipped to a public chain yet).
+
+### Breaking
+
+- **EIP-712 domain separators are now chainid-defensive** — cached per
+  `block.chainid` and recomputed on mismatch (EIP-712 "defensive copies"
+  pattern) across all six EIP-712 contracts, enabling safe multi-chain
+  redeployment. One extra cold SLOAD on signed paths.
+- **Deterministic content-addressed IDs verified contract-wide** —
+  `computeAssetId()` / `computeAttestationId()` getters exposed;
+  duplicates revert with explicit errors.
+- **String-length bounds enforced on all contracts** (URI ≤512,
+  DID ≤128, IDs ≤64, reason ≤256) via shared `StringBounds` lib.
 
 ### Security
 
@@ -33,6 +48,38 @@ Security-hardening fixes shipped in the current hardening pass:
   relayer credentials must be provided explicitly or operations abort.
 - **Indexer reorg handling** — chain reorganizations are detected and replayed
   instead of persisting orphaned events into indexed state.
+
+### Added (2.0.0)
+
+- **AuditRegistry `postAuditSigned`** — EIP-712 gasless path for auditors,
+  closing the last trust-model gap; backend relay route `/v1/relay/audit`
+  (+ nonce endpoint) with TypeBox schema and tests.
+- **Solidity invariant + upgrade tests** — handler-based invariants (nonce
+  monotonicity, ID uniqueness, paused-rejects-writes at 256×128 depth) and
+  UUPS upgrade state-preservation tests; 189 contract tests total.
+- **Configurable `MAX_ATTESTATIONS_PER_PRODUCT`** — governor-settable within
+  [16, 4096], default 256, with change event.
+- **Frontend wallet gating** — /dashboard and /vendors require a connected
+  wallet with a recognized role; real admin detection via on-chain
+  `hasRole(DEFAULT_ADMIN_ROLE)` read (UI hint only).
+- **Mobile + accessibility E2E** — Playwright desktop/mobile projects,
+  axe-core wcag2a/2aa assertions on public pages.
+- **Code splitting** — provenance graph client-isolated via `next/dynamic`
+  (ssr:false), planning panel lazy-loaded on dashboard.
+- **Multi-provider IPFS pinning** — Pinata + Kubo + web3.storage behind
+  `QTRUST_IPFS_PROVIDERS`, best-effort replication, CID-mismatch warnings.
+- **Property-based tests** — 19 hypothesis tests: CBOM-hash determinism,
+  VC round-trip/tamper, DID grammar, risk monotonicity, evidence-chain
+  tamper detection (found + fixed a head-truncation bug in `verify_chain`).
+- **Alerting** — Prometheus alert rules (API errors/p99, indexer lag,
+  RPC-pool health, relay 429 surge) + AlertManager service.
+- **Observability gauges** — `indexer_lag_blocks`,
+  `rpc_pool_unhealthy_endpoints`.
+- **Operations docs** — incident-response runbook (incl. pause + relayer-
+  compromise playbooks), backup/restore drill, step-by-step Base Sepolia
+  deployment guide, k6 smoke/stress load-test scripts.
+- **Engineering hygiene** — CODEOWNERS, PR/issue templates, ADRs 0000–0006,
+  CBOM↔CycloneDX conformance mapping doc, inspector dependency graph.
 
 ### Added
 
@@ -148,6 +195,7 @@ Enterprise-grade release of the Q-Trust platform.
 - **Roadmap** — published forward plan covering AST analysis, network probes,
   remediation automation, and expanded governance integrations.
 
-[Unreleased]: https://github.com/q-trust/q-trust/compare/v1.1.0...HEAD
-[1.1.0]: https://github.com/q-trust/q-trust/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/q-trust/q-trust/releases/tag/v1.0.0
+[Unreleased]: https://github.com/humoge7502/q-trust/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/humoge7502/q-trust/compare/v1.1.0...v2.0.0
+[1.1.0]: https://github.com/humoge7502/q-trust/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/humoge7502/q-trust/releases/tag/v1.0.0

@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useUserRole } from "@/hooks/use-user-role";
+import { GateLoading, WalletGate, useMounted } from "@/components/wallet-gate";
 import { AttestationForm } from "@/components/attestation-form";
 import { ShieldCheckIcon, XCircleIcon } from "@/app/icons";
 import { fetchVendorAttestations, checkProductSupport, type VendorAttestationInfo } from "@/lib/api";
@@ -185,6 +186,26 @@ function VendorsInner() {
 }
 
 export default function VendorsPage() {
+  const mounted = useMounted();
+  const { address, isConnecting, isReconnecting } = useAccount();
+  const { role, isLoading: roleLoading } = useUserRole();
+
+  if (!mounted || isConnecting || isReconnecting || roleLoading) {
+    return (
+      <main className="min-h-screen bg-slate-50 text-slate-900">
+        <GateLoading />
+      </main>
+    );
+  }
+
+  if (!address || role === "none") {
+    return (
+      <main className="min-h-screen bg-slate-50 text-slate-900">
+        <WalletGate description="Connect a wallet to view your attestations and check product PQC support as a vendor." />
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
       <VendorsInner />

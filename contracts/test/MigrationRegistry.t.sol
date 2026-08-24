@@ -4,6 +4,7 @@ pragma solidity 0.8.24;
 import "forge-std/Test.sol";
 import "../src/MigrationRegistry.sol";
 import "../src/AssetRegistry.sol";
+import "../src/lib/StringBounds.sol";
 
 contract MigrationRegistryTest is Test {
     MigrationRegistry public registry;
@@ -12,11 +13,52 @@ contract MigrationRegistryTest is Test {
     address admin = address(0xAD0F);
     address migrator = address(0xB0B);
     address nonAuditor = address(0xDEADBEEF);
+    address relayer = address(0xAE1A73);
+
+    uint256 orgKey = 0x0A6C3;
+    address orgSigner;
 
     bytes32 ASSET_ID;
     bytes32 constant EVIDENCE_HASH = keccak256("evidence-1");
 
+    bytes32 private constant _MIGRATION_RECORDING_TYPEHASH =
+        keccak256(
+            "MigrationRecording(bytes32 migrationId,bytes32 assetId,string fromAlgorithm,"
+            "string toAlgorithm,bytes32 evidenceHash,string evidenceURI,uint256 nonce)"
+        );
+
+    function _sign(
+        address signer,
+        uint256 sk,
+        bytes32 migrationId,
+        bytes32 assetId,
+        string memory fromAlgorithm,
+        string memory toAlgorithm,
+        bytes32 evidenceHash,
+        string memory evidenceURI,
+        uint256 nonce
+    ) internal view returns (bytes memory) {
+        bytes32 structHash = keccak256(
+            abi.encode(
+                _MIGRATION_RECORDING_TYPEHASH,
+                migrationId,
+                assetId,
+                keccak256(abi.encodePacked(fromAlgorithm)),
+                keccak256(abi.encodePacked(toAlgorithm)),
+                evidenceHash,
+                keccak256(abi.encodePacked(evidenceURI)),
+                nonce
+            )
+        );
+        bytes32 digest = keccak256(
+            abi.encodePacked("\x19\x01", registry.domainSeparator(), structHash)
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(sk, digest);
+        return abi.encodePacked(r, s, v);
+    }
+
     function setUp() public {
+        orgSigner = vm.addr(orgKey);
         assets = new AssetRegistry();
         assets.initialize();
         assets.grantRole(assets.REGISTRAR_ROLE(), migrator);
@@ -202,5 +244,53 @@ contract MigrationRegistryTest is Test {
             "ipfs://QmEvidence"
         );
         assertTrue(true);
+    }
+
+    function test_DomainSeparator_ChainFork_SignedStillVerifies() public {
+        bytes32 sepBefore = registry.domainSeparator();
+
+        // Simulate a chain fork: the separator must re-derive for chain 999.
+        vm.chainId(999);
+        assertFalse(registry.domainSeparator() == sepBefore, "separator must re-derive on new chainid");
+
+        bytes32 migrationId = keccak256("fork-migration");
+        bytes memory sig = _sign(
+            orgSigner, orgKey, migrationId, ASSET_ID, "RSA-2048", "ML-DSA-441", EVIDENCE_HASH, "ipfs://QmEv", 0
+        );
+        vm.prank(relayer);
+        bytes32 recorded = registry.recordMigrationSigned(
+            migrationId, ASSET_ID, "RSA-2048", "ML-DSA-441", EVIDENCE_HASH, "ipfs://QmEv", 0, sig
+        );
+
+        assertEq(recorded, migrationId, "signed migration must verify on the forked chain");
+        assertEq(registry.nonces(orgSigner), 1);
+    }
+
+    function test_RevertWhen_AlgorithmTooLong() public {
+        vm.startPrank(migrator);
+        string memory longAlgo = string(new bytes(65));
+        vm.expectRevert(
+            abi.encodeWithSelector(StringBounds.StringTooLong.selector, 65, 64)
+        );
+        registry.recordMigration(
+            keccak256("m-long"), ASSET_ID,
+            longAlgo, "ML-DSA-441",
+            EVIDENCE_HASH, "ipfs://QmEvidence"
+        );
+        vm.stopPrank();
+    }
+
+    function test_RevertWhen_EvidenceURITooLong() public {
+        vm.startPrank(migrator);
+        string memory longURI = string(new bytes(513));
+        vm.expectRevert(
+            abi.encodeWithSelector(StringBounds.StringTooLong.selector, 513, 512)
+        );
+        registry.recordMigration(
+            keccak256("m-long-uri"), ASSET_ID,
+            "RSA-2048", "ML-DSA-441",
+            EVIDENCE_HASH, longURI
+        );
+        vm.stopPrank();
     }
 }

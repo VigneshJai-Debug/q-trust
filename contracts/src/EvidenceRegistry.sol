@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "./lib/StringBounds.sol";
 
 /// @title EvidenceRegistry — hash-chained evidence ledger roots
 /// @notice Organizations post the Merkle root of a tamper-evident evidence
@@ -71,6 +72,7 @@ contract EvidenceRegistry is AccessControl, ReentrancyGuard, Pausable, Initializ
     mapping(address => uint256) public nonces;
 
     bool private _initialized;
+    uint256 private _cachedChainId;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {}
@@ -80,6 +82,7 @@ contract EvidenceRegistry is AccessControl, ReentrancyGuard, Pausable, Initializ
         _initialized = true;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(REGISTRAR_ROLE, msg.sender);
+        _cachedChainId = block.chainid;
         _domainSeparator = keccak256(
             abi.encode(
                 _DOMAIN_TYPEHASH,
@@ -95,7 +98,33 @@ contract EvidenceRegistry is AccessControl, ReentrancyGuard, Pausable, Initializ
 
     /// @notice Domain separator for EIP-712 typed data signing.
     function domainSeparator() external view returns (bytes32) {
-        return _domainSeparator;
+        return _currentDomainSeparator();
+    }
+
+    /// @dev Build the domain separator for the currently executing chain.
+    function _buildDomainSeparator() internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                _DOMAIN_TYPEHASH,
+                keccak256("QTrustEvidenceRegistry"),
+                EIP712_VERSION_HASH,
+                block.chainid,
+                address(this)
+            )
+        );
+    }
+
+    /// @dev Cached separator when the chain matches, else a freshly built one.
+    function _currentDomainSeparator() internal view returns (bytes32) {
+        return block.chainid == _cachedChainId ? _domainSeparator : _buildDomainSeparator();
+    }
+
+    /// @dev Cache the separator for the current chain (EIP-712 defensive copy).
+    function _cacheDomainSeparator() internal {
+        if (_cachedChainId != block.chainid) {
+            _cachedChainId = block.chainid;
+            _domainSeparator = _buildDomainSeparator();
+        }
     }
 
     /// @notice Hash the typed Evidence Registration data for EIP-712 signing.
@@ -110,7 +139,7 @@ contract EvidenceRegistry is AccessControl, ReentrancyGuard, Pausable, Initializ
         return keccak256(
             abi.encodePacked(
                 "\x19\x01",
-                _domainSeparator,
+                _currentDomainSeparator(),
                 keccak256(
                     abi.encode(
                         _EVIDENCE_REGISTRATION_TYPEHASH,
@@ -160,7 +189,8 @@ contract EvidenceRegistry is AccessControl, ReentrancyGuard, Pausable, Initializ
         bytes32 riskSummaryHash,
         uint256 nonce,
         bytes calldata signature
-    ) internal view returns (address) {
+    ) internal returns (address) {
+        _cacheDomainSeparator();
         bytes32 digest = keccak256(
             abi.encodePacked(
                 "\x19\x01",
@@ -208,6 +238,7 @@ contract EvidenceRegistry is AccessControl, ReentrancyGuard, Pausable, Initializ
         bytes32 riskSummaryHash
     ) internal returns (bytes32 evidenceId) {
         if (evidenceRoot == bytes32(0)) revert EmptyEvidenceRoot();
+        StringBounds.checkDID(scanTarget);
 
         evidenceId = keccak256(abi.encode(owner_, evidenceRoot, entryCount));
 
@@ -268,6 +299,7 @@ contract EvidenceRegistry is AccessControl, ReentrancyGuard, Pausable, Initializ
         bytes32 evidenceId,
         string calldata reason
     ) external nonReentrant whenNotPaused {
+        StringBounds.checkLen(reason, StringBounds.REASON_MAX);
         EvidenceRecord storage record = _evidence[evidenceId];
         if (record.owner == address(0)) revert EvidenceNotFound(evidenceId);
         if (!record.active) revert AlreadyRevoked(evidenceId);

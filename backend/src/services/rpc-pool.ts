@@ -10,6 +10,7 @@ import {
 } from "viem";
 import type { Chain } from "viem";
 import { CHAIN } from "../config.js";
+import { setRpcPoolHealth } from "../plugins/metrics.js";
 
 const COOLDOWN_MS = 60_000;
 
@@ -27,6 +28,13 @@ function loadRpcUrls(): string[] {
 const endpoints = loadRpcUrls().map((url) => ({ url, downUntil: 0 }));
 
 let cursor = 0;
+
+function updateHealthGauge(): void {
+  setRpcPoolHealth(
+    endpoints.filter((e) => e.downUntil > Date.now()).length,
+    endpoints.length,
+  );
+}
 
 const publicClients = new Map<string, PooledPublicClient>();
 const walletClients = new Map<string, PooledWalletClient>();
@@ -80,11 +88,13 @@ async function withFailover<T>(run: (url: string) => Promise<T>): Promise<T> {
       const result = await run(endpoint.url);
       endpoint.downUntil = 0;
       cursor = index;
+      updateHealthGauge();
       return result;
     } catch (err) {
       if (!isTransportFailure(err)) throw err;
       lastError = err;
       endpoint.downUntil = Date.now() + COOLDOWN_MS;
+      updateHealthGauge();
     }
   }
   throw lastError ?? new Error(`No RPC endpoints available (${endpoints.map((e) => e.url).join(", ")})`);

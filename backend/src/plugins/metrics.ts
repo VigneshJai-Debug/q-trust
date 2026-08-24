@@ -16,6 +16,9 @@ const registry = new client.Registry();
 const REQUEST_START = Symbol("qtrust.requestStart");
 
 let httpDuration: client.Histogram<string> | null = null;
+let indexerLag: client.Gauge<string> | null = null;
+let rpcPoolUnhealthy: client.Gauge<string> | null = null;
+let rpcPoolTotal: client.Gauge<string> | null = null;
 let initialized = false;
 
 function ensureCollectors(): void {
@@ -31,6 +34,37 @@ function ensureCollectors(): void {
     buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
     registers: [registry],
   });
+
+  indexerLag = new client.Gauge({
+    name: "indexer_lag_blocks",
+    help: "Blocks the indexer cursor is behind chain head (-1 when disabled)",
+    registers: [registry],
+  });
+
+  rpcPoolUnhealthy = new client.Gauge({
+    name: "rpc_pool_unhealthy_endpoints",
+    help: "RPC pool endpoints currently in cooldown after transport failures",
+    registers: [registry],
+  });
+
+  rpcPoolTotal = new client.Gauge({
+    name: "rpc_pool_endpoints_total",
+    help: "Total configured RPC pool endpoints",
+    registers: [registry],
+  });
+}
+
+/** Report indexer cursor lag in blocks (call each indexing loop). */
+export function setIndexerLag(blocks: number): void {
+  ensureCollectors();
+  indexerLag?.set(blocks);
+}
+
+/** Report RPC pool health (unhealthy endpoint count vs total). */
+export function setRpcPoolHealth(unhealthy: number, total: number): void {
+  ensureCollectors();
+  rpcPoolUnhealthy?.set(unhealthy);
+  rpcPoolTotal?.set(total);
 }
 
 /** Wire process + HTTP metrics collection and the /metrics endpoint. */

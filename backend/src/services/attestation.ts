@@ -15,8 +15,9 @@ import {
   AssetRegistryAbi,
   VendorRegistryAbi,
   MigrationRegistryAbi,
+  AuditRegistryAbi,
 } from "../lib/abis.js";
-import { CHAIN_ID } from "../config.js";
+import { CHAIN_ID, isValidAddress, isValidBytes32 } from "../config.js";
 import { getPublicClient, getWalletClient as getPooledWalletClient } from "./rpc-pool.js";
 
 dotenv.config();
@@ -25,6 +26,7 @@ const RELAYER_KEY = process.env.QTRUST_RELAYER_PRIVATE_KEY;
 const ASSET_REGISTRY = process.env.QTRUST_ASSET_REGISTRY_ADDRESS as Address;
 const VENDOR_REGISTRY = process.env.QTRUST_VENDOR_REGISTRY_ADDRESS as Address;
 const MIGRATION_REGISTRY = process.env.QTRUST_MIGRATION_REGISTRY_ADDRESS as Address;
+const AUDIT_REGISTRY = process.env.QTRUST_AUDIT_REGISTRY_ADDRESS as Address;
 
 // Fail fast in production: a relayer key is mandatory at boot.
 if (process.env.NODE_ENV === "production" && !RELAYER_KEY) {
@@ -444,4 +446,131 @@ export async function relaySignedMigration(
   const migrationId = migrationRecordedLog && "args" in migrationRecordedLog ? (migrationRecordedLog.args as Record<string, unknown>)?.migrationId as string | undefined : undefined;
 
   return { txHash, orgDid: signer, migrationId: migrationId ?? "" };
+}
+
+// ------------------------------------------------------------------
+// EIP-712 gasless audit posting
+// ------------------------------------------------------------------
+export const EIP712_AUDIT_DOMAIN = {
+  name: "QTrustAuditRegistry",
+  version: "1",
+  chainId: CHAIN_ID,
+  verifyingContract: AUDIT_REGISTRY as Address,
+};
+
+export const EIP712_AUDIT_TYPES = {
+  Audit: [
+    { name: "orgDid", type: "address" },
+    { name: "result", type: "uint8" },
+    { name: "assetsReviewed", type: "uint256" },
+    { name: "assetsMigrated", type: "uint256" },
+    { name: "reportHash", type: "bytes32" },
+    { name: "reportURI", type: "string" },
+    { name: "nonce", type: "uint256" },
+  ],
+};
+
+export interface SignedAuditPayload {
+  orgDid: string;
+  result: number; // AuditRegistry.AuditResult enum (0 Pending, 1 Passed, 2 Failed, 3 Conditional)
+  assetsReviewed: number;
+  assetsMigrated: number;
+  reportHash: string; // 0x-prefixed bytes32
+  reportURI: string;
+  nonce: number;
+  signature: string;
+}
+
+export interface RelayAuditResult {
+  txHash: string;
+  auditorDid: string;
+  orgDid: string;
+  auditId: string;
+}
+
+/**
+ * Verify an auditor's EIP-712 signature and submit the audit attestation via
+ * the relayer. The signer must hold AUDITOR_ROLE on-chain (checked by the
+ * contract); the recorded auditorDid is the SIGNER.
+ */
+export async function relaySignedAudit(
+  payload: SignedAuditPayload,
+): Promise<RelayAuditResult> {
+  if (!isValidBytes32(payload.reportHash)) {
+    throw new Error("reportHash must be a 0x-prefixed 66-char hex string");
+  }
+  if (!isValidAddress(payload.orgDid)) {
+    throw new Error("orgDid must be a valid address");
+  }
+  const message = {
+    orgDid: payload.orgDid as Address,
+    result: payload.result,
+    assetsReviewed: payload.assetsReviewed,
+    assetsMigrated: payload.assetsMigrated,
+    reportHash: payload.reportHash as `0x${string}`,
+    reportURI: payload.reportURI,
+    nonce: payload.nonce,
+  };
+
+  let signer: Address;
+  try {
+    signer = await recoverTypedDataAddress({
+      domain: EIP712_AUDIT_DOMAIN,
+      types: EIP712_AUDIT_TYPES,
+      primaryType: "Audit",
+      message,
+      signature: payload.signature as `0x${string}`,
+    });
+  } catch {
+    throw new Error("EIP-712 signature verification failed: invalid signature");
+  }
+
+  const onChainNonce = await publicClient.readContract({
+    address: AUDIT_REGISTRY,
+    abi: AuditRegistryAbi,
+    functionName: "nonces",
+    args: [signer],
+  });
+  if (BigInt(onChainNonce) !== BigInt(payload.nonce)) {
+    throw new Error(
+      `Nonce mismatch: signed ${payload.nonce}, on-chain ${onChainNonce}`,
+    );
+  }
+
+  const txHash = await getWalletClient().writeContract({
+    address: AUDIT_REGISTRY,
+    abi: AuditRegistryAbi,
+    functionName: "postAuditSigned",
+    args: [
+      payload.orgDid as Address,
+      payload.result,
+      BigInt(payload.assetsReviewed),
+      BigInt(payload.assetsMigrated),
+      payload.reportHash as `0x${string}`,
+      payload.reportURI,
+      BigInt(payload.nonce),
+      payload.signature as `0x${string}`,
+    ],
+  });
+
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
+  const auditPostedLog = receipt.logs.find(
+    (log) => (log as any).eventName === "AuditPosted",
+  );
+  const auditId = auditPostedLog && "args" in auditPostedLog
+    ? (auditPostedLog.args as Record<string, unknown>)?.auditId as string | undefined
+    : undefined;
+
+  return { txHash, auditorDid: signer, orgDid: payload.orgDid, auditId: auditId ?? "" };
+}
+
+/** Fetch an auditor's current EIP-712 nonce for audit posting. */
+export async function getAuditNonce(auditor: Address): Promise<bigint> {
+  const nonce = await publicClient.readContract({
+    address: AUDIT_REGISTRY,
+    abi: AuditRegistryAbi,
+    functionName: "nonces",
+    args: [auditor],
+  });
+  return BigInt(nonce as bigint | number | string);
 }

@@ -1,0 +1,9 @@
+# Default ownership
+* @humoge7502
+
+# Per-directory ownership
+/contracts @humoge7502
+/backend @humoge7502
+/frontend @humoge7502
+/sdk @humoge7502
+/inspector @humoge7502

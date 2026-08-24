@@ -115,6 +115,8 @@ contract VendorRegistrySecurityTest is Test {
         public
     {
         uint256 n = bound(count, 1, 24);
+        // Keep generated product ids within the on-chain length bounds.
+        seed = bound(seed, 0, 1e12);
 
         for (uint256 i = 0; i < n; i++) {
             string memory pid = string.concat("Prod-", vm.toString(seed), "-", vm.toString(i));

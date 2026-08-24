@@ -1,0 +1,25 @@
+# Q-Trust Alertmanager configuration.
+# Mounted read-only into the alertmanager container; the compose entrypoint
+# substitutes ${QTRUST_ALERT_WEBHOOK} from the container environment before
+# the config is loaded (see docker-compose.yml).
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: qtrust-webhook
+  group_by: ["alertname", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - severity = "critical"
+      receiver: qtrust-webhook
+      repeat_interval: 1h
+
+receivers:
+  - name: qtrust-webhook
+    webhook_configs:
+      - url: "${QTRUST_ALERT_WEBHOOK}"
+        send_resolved: true

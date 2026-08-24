@@ -1,0 +1,86 @@
+# Q-Trust Prometheus alert rules.
+# Mounted read-only into the prometheus container (see docker-compose.yml)
+# and referenced from rule_files in prometheus.yml.
+#
+# Metric sources:
+#   qtrust_http_request_duration_seconds_{count,bucket} — backend/src/plugins/metrics.ts
+#   indexer_lag_blocks                                  — updated by services/indexer.ts each backfill loop
+#   rpc_pool_unhealthy_endpoints / rpc_pool_endpoints_total — services/rpc-pool.ts failover path
+
+groups:
+  - name: api
+    rules:
+      - alert: ApiHighErrorRate
+        expr: |
+          sum(rate(qtrust_http_request_duration_seconds_count{status=~"5.."}[5m]))
+            /
+          sum(rate(qtrust_http_request_duration_seconds_count[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API 5xx error ratio above 5% for 5m"
+          description: "More than 5% of requests to the Q-Trust API returned 5xx over the last 5 minutes ({{ $value | humanizePercentage }})."
+          runbook: "docs/runbook/incident-response.md (SEV3 degraded)"
+
+      - alert: ApiHighP99Latency
+        expr: |
+          histogram_quantile(0.99,
+            sum by (le) (rate(qtrust_http_request_duration_seconds_bucket[10m]))
+          ) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p99 latency above 1s for 10m"
+          description: "p99 request latency is {{ $value | humanizeDuration }} — check RPC pool health and Postgres lag."
+          runbook: "docs/runbook/incident-response.md (SEV3 degraded)"
+
+      - alert: ApiProcessDown
+        expr: up{job="qtrust-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Q-Trust API unreachable for 2m"
+          description: "Prometheus cannot scrape {{ $labels.instance }}. The API container may be down or crash-looping."
+          runbook: "docs/runbook/incident-response.md (SEV2 service down)"
+
+  - name: indexer
+    rules:
+      - alert: IndexerLagHigh
+        expr: indexer_lag_blocks > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Indexer is more than 50 blocks behind chain head"
+          description: "The Postgres read model cursor is {{ $value }} blocks behind head; read endpoints may serve stale data."
+          runbook: "docs/runbook/incident-response.md (indexer replay procedure)"
+
+  - name: rpc-pool
+    rules:
+      - alert: RpcPoolExhausted
+        expr: |
+          rpc_pool_unhealthy_endpoints >= rpc_pool_endpoints_total
+            and rpc_pool_endpoints_total > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "All RPC pool endpoints unhealthy"
+          description: "{{ $value }} endpoints are in cooldown and none are available — all reads/writes are failing until one recovers."
+          runbook: "docs/runbook/incident-response.md (SEV2 relayer/RPC down)"
+
+  - name: relay
+    rules:
+      - alert: RelayRateLimitSurge
+        expr: |
+          sum(rate(qtrust_http_request_duration_seconds_count{route=~"/v1/relay.*",status="429"}[1m])) * 60 > 20
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Relay rate-limit surge (>20 429s/min)"
+          description: "Gasless relay endpoints returned more than 20 HTTP 429s per minute — possible abuse or a misbehaving SDK retry loop."
+          runbook: "docs/runbook/incident-response.md (SEV3 degraded)"

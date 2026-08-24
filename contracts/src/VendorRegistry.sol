@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "./lib/StringBounds.sol";
 
 /// @title VendorRegistry — vendors post PQC readiness attestations
 /// @notice Vendors (DigiCert, Thales, AWS, etc.) attest which products
@@ -20,12 +21,20 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
     error NotVendor(address caller);
     error DuplicateAttestation(bytes32 attestationId);
     error AttestationLimitExceeded(bytes32 productIdHash);
+    error InvalidAttestationLimit(uint256 provided);
     error InvalidSignature();
     error InvalidNonce(address signer, uint256 provided, uint256 expected);
     error NotInitialized();
 
-    /// @notice Maximum number of attestations per product
-    uint256 public constant MAX_ATTESTATIONS_PER_PRODUCT = 256;
+    /// @notice Default, minimum, and maximum bounds for the configurable
+    ///         per-product attestation cap.
+    uint16 public constant DEFAULT_MAX_ATTESTATIONS_PER_PRODUCT = 256;
+    uint16 public constant MIN_ATTESTATIONS_PER_PRODUCT = 16;
+    uint16 public constant MAX_ATTESTATIONS_PER_PRODUCT_BOUND = 4096;
+
+    /// @notice Maximum number of attestations allowed per product
+    ///         (governance-configurable via setMaxAttestationsPerProduct).
+    uint16 public maxAttestationsPerProduct;
 
     bytes32 public constant VENDOR_ADMIN_ROLE = keccak256("VENDOR_ADMIN_ROLE");
 
@@ -42,6 +51,7 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
         uint256 timestamp
     );
     event AttestationRevoked(bytes32 indexed attestationId, uint256 timestamp);
+    event MaxAttestationsPerProductChanged(uint256 oldLimit, uint256 newLimit);
 
     struct VendorInfo {
         string name;
@@ -84,6 +94,7 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
     mapping(address => uint256) public nonces;
 
     bool private _initialized;
+    uint256 private _cachedChainId;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {}
@@ -93,6 +104,8 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
         _initialized = true;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(VENDOR_ADMIN_ROLE, msg.sender);
+        maxAttestationsPerProduct = DEFAULT_MAX_ATTESTATIONS_PER_PRODUCT;
+        _cachedChainId = block.chainid;
         _domainSeparator = keccak256(
             abi.encode(
                 _DOMAIN_TYPEHASH,
@@ -108,7 +121,33 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
 
     /// @notice Domain separator for EIP-712 typed data signing.
     function domainSeparator() external view returns (bytes32) {
-        return _domainSeparator;
+        return _currentDomainSeparator();
+    }
+
+    /// @dev Build the domain separator for the currently executing chain.
+    function _buildDomainSeparator() internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                _DOMAIN_TYPEHASH,
+                keccak256("QTrustVendorRegistry"),
+                EIP712_VERSION_HASH,
+                block.chainid,
+                address(this)
+            )
+        );
+    }
+
+    /// @dev Cached separator when the chain matches, else a freshly built one.
+    function _currentDomainSeparator() internal view returns (bytes32) {
+        return block.chainid == _cachedChainId ? _domainSeparator : _buildDomainSeparator();
+    }
+
+    /// @dev Cache the separator for the current chain (EIP-712 defensive copy).
+    function _cacheDomainSeparator() internal {
+        if (_cachedChainId != block.chainid) {
+            _cachedChainId = block.chainid;
+            _domainSeparator = _buildDomainSeparator();
+        }
     }
 
     /// @notice Hash the typed ProductAttestation data for EIP-712 signing.
@@ -123,7 +162,7 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
         return keccak256(
             abi.encodePacked(
                 "\x19\x01",
-                _domainSeparator,
+                _currentDomainSeparator(),
                 keccak256(
                     abi.encode(
                         _PRODUCT_ATTESTATION_TYPEHASH,
@@ -174,7 +213,8 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
         string calldata evidenceURI,
         uint256 nonce,
         bytes calldata signature
-    ) internal view returns (address) {
+    ) internal returns (address) {
+        _cacheDomainSeparator();
         bytes32 digest = keccak256(
             abi.encodePacked(
                 "\x19\x01",
@@ -195,6 +235,17 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
         return ECDSA.recover(digest, signature);
     }
 
+    /// @notice Governance-configurable per-product attestation cap. Bounded to
+    ///         [MIN_ATTESTATIONS_PER_PRODUCT, MAX_ATTESTATIONS_PER_PRODUCT_BOUND].
+    function setMaxAttestationsPerProduct(uint16 newLimit) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (newLimit < MIN_ATTESTATIONS_PER_PRODUCT || newLimit > MAX_ATTESTATIONS_PER_PRODUCT_BOUND) {
+            revert InvalidAttestationLimit(newLimit);
+        }
+        uint256 oldLimit = maxAttestationsPerProduct;
+        maxAttestationsPerProduct = newLimit;
+        emit MaxAttestationsPerProductChanged(oldLimit, newLimit);
+    }
+
     /// @dev Shared storage write for product attestations.
     function _storeAttestation(
         address vendorDid,
@@ -204,8 +255,13 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
         bool supported,
         string calldata evidenceURI
     ) internal returns (bytes32 attestationId) {
+        StringBounds.checkID(productId);
+        StringBounds.checkID(version);
+        StringBounds.checkID(algorithm);
+        StringBounds.checkURI(evidenceURI);
+
         bytes32 productIdHash = keccak256(abi.encodePacked(productId, version, algorithm));
-        if (_attestationsByProduct[productIdHash].length >= MAX_ATTESTATIONS_PER_PRODUCT) {
+        if (_attestationsByProduct[productIdHash].length >= maxAttestationsPerProduct) {
             revert AttestationLimitExceeded(productIdHash);
         }
         attestationId = keccak256(abi.encode(vendorDid, productIdHash));
@@ -240,6 +296,8 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
         string calldata name,
         string calldata metadataURI
     ) external onlyRole(VENDOR_ADMIN_ROLE) whenNotPaused {
+        StringBounds.checkDID(name);
+        StringBounds.checkURI(metadataURI);
         if (_vendors[vendorDid].registeredAt != 0) revert VendorAlreadyRegistered(vendorDid);
         _vendors[vendorDid] = VendorInfo({
             name: name,
@@ -264,6 +322,19 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
         return _vendors[vendorDid].registeredAt != 0 && _vendors[vendorDid].active;
     }
 
+    /// @notice Deterministically compute the attestation ID for a vendor/product
+    ///         triple without attesting. Pair with getAttestation() to find an
+    ///         existing attestation.
+    function computeAttestationId(
+        address vendorDid,
+        string calldata productId,
+        string calldata version,
+        string calldata algorithm
+    ) external pure returns (bytes32) {
+        bytes32 productIdHash = keccak256(abi.encodePacked(productId, version, algorithm));
+        return keccak256(abi.encode(vendorDid, productIdHash));
+    }
+
     /// @notice Vendor posts a product PQC attestation (direct, requires VENDOR_ROLE)
     function attestProduct(
         string calldata productId,
@@ -274,37 +345,8 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
     ) external onlyRole(VENDOR_ROLE) whenNotPaused returns (bytes32 attestationId) {
         if (!_vendors[msg.sender].active) revert VendorInactive(msg.sender);
 
-        bytes32 productIdHash = keccak256(abi.encodePacked(productId, version, algorithm));
-
-        if (_attestationsByProduct[productIdHash].length >= MAX_ATTESTATIONS_PER_PRODUCT) {
-            revert AttestationLimitExceeded(productIdHash);
-        }
-
-        attestationId = keccak256(abi.encode(
-            msg.sender, productIdHash
-        ));
-
-        if (_attestations[attestationId].vendorDid != address(0)) {
-            revert DuplicateAttestation(attestationId);
-        }
-
-        _attestations[attestationId] = ProductAttestation({
-            vendorDid: msg.sender,
-            productId: productId,
-            version: version,
-            algorithm: algorithm,
-            supported: supported,
-            evidenceURI: evidenceURI,
-            timestamp: block.timestamp,
-            revoked: false
-        });
-
-        _attestationsByVendor[msg.sender].push(attestationId);
-        _attestationsByProduct[productIdHash].push(attestationId);
-
-        emit ProductAttested(
-            attestationId, msg.sender, productId, version,
-            algorithm, supported, evidenceURI, block.timestamp
+        return _storeAttestation(
+            msg.sender, productId, version, algorithm, supported, evidenceURI
         );
     }
 

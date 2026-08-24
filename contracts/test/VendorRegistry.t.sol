@@ -2,7 +2,9 @@
 pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
+import "@openzeppelin/contracts/access/IAccessControl.sol";
 import "../src/VendorRegistry.sol";
+import "../src/lib/StringBounds.sol";
 
 contract VendorRegistryTest is Test {
     VendorRegistry public registry;
@@ -148,7 +150,9 @@ contract VendorRegistryTest is Test {
     }
 
     function test_AttestationLimitEnforced() public {
-        uint256 limit = registry.MAX_ATTESTATIONS_PER_PRODUCT();
+        // Lower the cap through governance so the loop stays cheap.
+        registry.setMaxAttestationsPerProduct(16);
+        uint256 limit = registry.maxAttestationsPerProduct();
 
         // Register vendors and have each attest to the same product
         for (uint256 i = 0; i < limit; i++) {
@@ -171,10 +175,49 @@ contract VendorRegistryTest is Test {
         registry.attestProduct("Prod", "1.0", "ML-KEM-512", true, "ipfs://QmE");
     }
 
+    function test_SetAttestationLimit_Unauthorized() public {
+        vm.prank(address(0xC0FFEE));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                address(0xC0FFEE),
+                bytes32(0)
+            )
+        );
+        registry.setMaxAttestationsPerProduct(64);
+    }
+
+    function test_RevertWhen_AttestationLimitBelowMin() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(VendorRegistry.InvalidAttestationLimit.selector, 15)
+        );
+        registry.setMaxAttestationsPerProduct(15);
+    }
+
+    function test_RevertWhen_AttestationLimitAboveMax() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(VendorRegistry.InvalidAttestationLimit.selector, 4097)
+        );
+        registry.setMaxAttestationsPerProduct(4097);
+    }
+
+    function test_SetAttestationLimit_GovernorPath() public {
+        assertEq(registry.maxAttestationsPerProduct(), 256);
+
+        vm.expectEmit(true, true, true, true);
+        emit VendorRegistry.MaxAttestationsPerProductChanged(256, 16);
+        registry.setMaxAttestationsPerProduct(16);
+        assertEq(registry.maxAttestationsPerProduct(), 16);
+
+        registry.setMaxAttestationsPerProduct(4096);
+        assertEq(registry.maxAttestationsPerProduct(), 4096);
+    }
+
     function test_CheckProductSupport_BoundedAfterLimit() public {
         registry.registerVendor(vendor, "DigiCert", "ipfs://QmDigiCert");
+        registry.setMaxAttestationsPerProduct(16);
         vm.startPrank(vendor);
-        uint256 limit = registry.MAX_ATTESTATIONS_PER_PRODUCT();
+        uint256 limit = registry.maxAttestationsPerProduct();
         for (uint256 i = 0; i < limit; i++) {
             // Vary version to produce unique deterministic IDs
             registry.attestProduct("Prod", string(abi.encodePacked("1.0-", bytes6(uint48(i)))), "ML-KEM-512", false, "ipfs://QmE");
@@ -272,5 +315,55 @@ contract VendorRegistryTest is Test {
             )
         );
         assertEq(registry.domainSeparator(), expected);
+    }
+
+    function test_DomainSeparator_ChainFork_SignedStillVerifies() public {
+        uint256 vendorSk = 0xABCDEF01;
+        address signer = vm.addr(vendorSk);
+        registry.registerVendor(signer, "SignerCorp", "ipfs://QmS");
+        bytes32 sepBefore = registry.domainSeparator();
+
+        // Simulate a chain fork: the separator must re-derive for chain 999.
+        vm.chainId(999);
+        assertFalse(registry.domainSeparator() == sepBefore, "separator must re-derive on new chainid");
+
+        // A signature produced against the forked-chain separator must verify.
+        bytes memory sig = _sign(signer, vendorSk, "Prod-Fork", "1.0", "ML-KEM-768", true, "ipfs://QmE", 0);
+        vm.prank(relayer);
+        bytes32 attId = registry.attestProductSigned("Prod-Fork", "1.0", "ML-KEM-768", true, "ipfs://QmE", 0, sig);
+
+        assertTrue(attId != bytes32(0), "signed attestation must verify on the forked chain");
+        assertEq(registry.nonces(signer), 1);
+        assertEq(registry.getAttestation(attId).vendorDid, signer);
+    }
+
+    function test_ComputeAttestationId_MatchesStoredId() public {
+        registry.registerVendor(vendor, "DigiCert", "ipfs://QmDigiCert");
+        vm.prank(vendor);
+        bytes32 attId = registry.attestProduct("DigiCert-TLS", "5.2.1", "ML-DSA-441", true, "ipfs://QmEvidence");
+        assertEq(
+            attId,
+            registry.computeAttestationId(vendor, "DigiCert-TLS", "5.2.1", "ML-DSA-441")
+        );
+    }
+
+    function test_RevertWhen_ProductIdTooLong() public {
+        registry.registerVendor(vendor, "DigiCert", "ipfs://QmDigiCert");
+        string memory longId = string(new bytes(65));
+        vm.prank(vendor);
+        vm.expectRevert(
+            abi.encodeWithSelector(StringBounds.StringTooLong.selector, 65, 64)
+        );
+        registry.attestProduct(longId, "1.0", "ML-DSA-441", true, "ipfs://QmEvidence");
+    }
+
+    function test_RevertWhen_EvidenceURITooLong() public {
+        registry.registerVendor(vendor, "DigiCert", "ipfs://QmDigiCert");
+        string memory longURI = string(new bytes(513));
+        vm.prank(vendor);
+        vm.expectRevert(
+            abi.encodeWithSelector(StringBounds.StringTooLong.selector, 513, 512)
+        );
+        registry.attestProduct("DigiCert-TLS", "5.2.1", "ML-DSA-441", true, longURI);
     }
 }

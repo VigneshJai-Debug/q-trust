@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "./lib/StringBounds.sol";
 
 /// @title RevocationAnchor — on-chain Merkle root for credential revocation
 /// @notice Issuers maintain a Merkle tree of revoked credential IDs off-chain.
@@ -62,6 +63,7 @@ contract RevocationAnchor is AccessControl, ReentrancyGuard, Pausable, Initializ
     mapping(address => uint256) public nonces;
 
     bool private _initialized;
+    uint256 private _cachedChainId;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {}
@@ -71,6 +73,7 @@ contract RevocationAnchor is AccessControl, ReentrancyGuard, Pausable, Initializ
         _initialized = true;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(ISSUER_ADMIN_ROLE, msg.sender);
+        _cachedChainId = block.chainid;
         _domainSeparator = keccak256(
             abi.encode(
                 _DOMAIN_TYPEHASH,
@@ -86,7 +89,33 @@ contract RevocationAnchor is AccessControl, ReentrancyGuard, Pausable, Initializ
 
     /// @notice Domain separator for EIP-712 typed data signing.
     function domainSeparator() external view returns (bytes32) {
-        return _domainSeparator;
+        return _currentDomainSeparator();
+    }
+
+    /// @dev Build the domain separator for the currently executing chain.
+    function _buildDomainSeparator() internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                _DOMAIN_TYPEHASH,
+                keccak256("QTrustRevocationAnchor"),
+                EIP712_VERSION_HASH,
+                block.chainid,
+                address(this)
+            )
+        );
+    }
+
+    /// @dev Cached separator when the chain matches, else a freshly built one.
+    function _currentDomainSeparator() internal view returns (bytes32) {
+        return block.chainid == _cachedChainId ? _domainSeparator : _buildDomainSeparator();
+    }
+
+    /// @dev Cache the separator for the current chain (EIP-712 defensive copy).
+    function _cacheDomainSeparator() internal {
+        if (_cachedChainId != block.chainid) {
+            _cachedChainId = block.chainid;
+            _domainSeparator = _buildDomainSeparator();
+        }
     }
 
     /// @notice Hash the typed Revocation Root Update data for EIP-712 signing.
@@ -98,7 +127,7 @@ contract RevocationAnchor is AccessControl, ReentrancyGuard, Pausable, Initializ
         return keccak256(
             abi.encodePacked(
                 "\x19\x01",
-                _domainSeparator,
+                _currentDomainSeparator(),
                 keccak256(
                     abi.encode(
                         _ROOT_UPDATE_TYPEHASH,
@@ -137,6 +166,7 @@ contract RevocationAnchor is AccessControl, ReentrancyGuard, Pausable, Initializ
         address issuer,
         string calldata issuerDid
     ) external onlyRole(DEFAULT_ADMIN_ROLE) whenNotPaused {
+        StringBounds.checkDID(issuerDid);
         _issuers[issuer] = IssuerInfo({
             issuerDid: issuerDid,
             currentRoot: bytes32(0),

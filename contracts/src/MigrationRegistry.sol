@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "./AssetRegistry.sol";
+import "./lib/StringBounds.sol";
 
 /// @title MigrationRegistry — records each PQC migration step
 /// @notice Each step is one asset migrating from one algorithm to another.
@@ -75,6 +76,7 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard, Pausable, Initiali
     mapping(address => uint256) public nonces;
 
     bool private _initialized;
+    uint256 private _cachedChainId;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {}
@@ -87,6 +89,7 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard, Pausable, Initiali
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(MIGRATOR_ROLE, msg.sender);
         _grantRole(AUDITOR_ROLE, msg.sender);
+        _cachedChainId = block.chainid;
         _domainSeparator = keccak256(
             abi.encode(
                 _DOMAIN_TYPEHASH,
@@ -102,7 +105,33 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard, Pausable, Initiali
 
     /// @notice Domain separator for EIP-712 typed data signing.
     function domainSeparator() external view returns (bytes32) {
-        return _domainSeparator;
+        return _currentDomainSeparator();
+    }
+
+    /// @dev Build the domain separator for the currently executing chain.
+    function _buildDomainSeparator() internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                _DOMAIN_TYPEHASH,
+                keccak256("QTrustMigrationRegistry"),
+                EIP712_VERSION_HASH,
+                block.chainid,
+                address(this)
+            )
+        );
+    }
+
+    /// @dev Cached separator when the chain matches, else a freshly built one.
+    function _currentDomainSeparator() internal view returns (bytes32) {
+        return block.chainid == _cachedChainId ? _domainSeparator : _buildDomainSeparator();
+    }
+
+    /// @dev Cache the separator for the current chain (EIP-712 defensive copy).
+    function _cacheDomainSeparator() internal {
+        if (_cachedChainId != block.chainid) {
+            _cachedChainId = block.chainid;
+            _domainSeparator = _buildDomainSeparator();
+        }
     }
 
     /// @notice Hash the typed Migration Recording data for EIP-712 signing.
@@ -118,7 +147,7 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard, Pausable, Initiali
         return keccak256(
             abi.encodePacked(
                 "\x19\x01",
-                _domainSeparator,
+                _currentDomainSeparator(),
                 keccak256(
                     abi.encode(
                         _MIGRATION_RECORDING_TYPEHASH,
@@ -172,7 +201,8 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard, Pausable, Initiali
         string calldata evidenceURI,
         uint256 nonce,
         bytes calldata signature
-    ) internal view returns (address) {
+    ) internal returns (address) {
+        _cacheDomainSeparator();
         bytes32 digest = keccak256(
             abi.encodePacked(
                 "\x19\x01",
@@ -216,6 +246,10 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard, Pausable, Initiali
         bytes32 evidenceHash,
         string calldata evidenceURI
     ) internal returns (bytes32 recordedMigrationId) {
+        StringBounds.checkID(fromAlgorithm);
+        StringBounds.checkID(toAlgorithm);
+        StringBounds.checkURI(evidenceURI);
+
         if (_migrations[migrationId].orgDid != address(0)) revert DuplicateMigration(migrationId);
 
         // Cross-contract integrity: the asset must exist and be active.

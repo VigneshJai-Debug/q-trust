@@ -3,6 +3,7 @@ pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
 import "../src/RevocationAnchor.sol";
+import "../src/lib/StringBounds.sol";
 
 contract RevocationAnchorTest is Test {
     RevocationAnchor public anchor;
@@ -162,5 +163,31 @@ contract RevocationAnchorTest is Test {
     function test_GetIssuer_Revert_NotRegistered() public {
         vm.expectRevert(abi.encodeWithSelector(RevocationAnchor.IssuerNotRegistered.selector, nonIssuer));
         anchor.getIssuer(nonIssuer);
+    }
+
+    // ======== TD8/L1 regression ========
+
+    function test_RevertWhen_IssuerDidTooLong() public {
+        string memory longDid = string(new bytes(129));
+        vm.expectRevert(
+            abi.encodeWithSelector(StringBounds.StringTooLong.selector, 129, 128)
+        );
+        anchor.registerIssuer(address(0xFACE), longDid);
+    }
+
+    function test_DomainSeparator_ChainFork_SignedStillVerifies() public {
+        bytes32 sepBefore = anchor.domainSeparator();
+
+        // Simulate a chain fork: the separator must re-derive for chain 999.
+        vm.chainId(999);
+        assertFalse(anchor.domainSeparator() == sepBefore, "separator must re-derive on new chainid");
+
+        // A signature produced against the forked-chain separator must verify.
+        bytes32 root = keccak256("fork-root");
+        bytes memory sig = _signRootUpdate(issuer1, issuerKey1, issuer1, root, 0);
+        bytes32 prev = anchor.updateRootSigned(issuer1, root, 0, sig);
+
+        assertEq(prev, bytes32(0));
+        assertEq(anchor.getRevocationRoot(issuer1), root);
     }
 }

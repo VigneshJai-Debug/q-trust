@@ -33,7 +33,10 @@ class EvidenceLedger:
         return hashlib.sha256(canonical.encode()).hexdigest()
 
     def _compute_entry_hash(self, entry: EvidenceEntry) -> str:
-        data = f"{entry.index}:{entry.cbom_hash}:{entry.prev_hash}:{entry.timestamp}:{entry.batch_id}"
+        data = (
+            f"{entry.index}:{entry.cbom_hash}:{entry.prev_hash}:"
+            f"{entry.timestamp}:{entry.batch_id}"
+        )
         return hashlib.sha256(data.encode()).hexdigest()
 
     def append(self, cbom: dict[str, Any], metadata: dict[str, Any] | None = None) -> EvidenceEntry:
@@ -53,6 +56,8 @@ class EvidenceLedger:
     def verify_chain(self) -> bool:
         if not self._entries:
             return True
+        if self._entries[0].prev_hash != "0" * 64:
+            return False
         for i, entry in enumerate(self._entries):
             expected = self._compute_entry_hash(entry)
             if entry.entry_hash != expected:

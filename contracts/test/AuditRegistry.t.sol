@@ -2,9 +2,11 @@
 pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "../src/AuditRegistry.sol";
 import "../src/MigrationRegistry.sol";
 import "../src/AssetRegistry.sol";
+import "../src/lib/StringBounds.sol";
 
 contract AuditRegistryTest is Test {
     AuditRegistry public registry;
@@ -15,11 +17,52 @@ contract AuditRegistryTest is Test {
     address auditor = address(0xA11CE);
     address org = address(0x0A6);
     address nonAuditor = address(0xBAD);
+    address relayer = address(0xAE1A73);
+
+    uint256 auditorKey = 0xA11CEC;
+    address signerAuditor;
 
     bytes32 ORG_ASSET_ID;
     bytes32 constant EVIDENCE_HASH = keccak256("evidence");
 
+    bytes32 private constant _AUDIT_TYPEHASH =
+        keccak256(
+            "Audit(address orgDid,uint8 result,uint256 assetsReviewed,uint256 assetsMigrated,"
+            "bytes32 reportHash,string reportURI,uint256 nonce)"
+        );
+
+    function _sign(
+        address signer,
+        uint256 sk,
+        address orgDid,
+        AuditRegistry.AuditResult result,
+        uint256 assetsReviewed,
+        uint256 assetsMigrated,
+        bytes32 reportHash,
+        string memory reportURI,
+        uint256 nonce
+    ) internal view returns (bytes memory) {
+        bytes32 structHash = keccak256(
+            abi.encode(
+                _AUDIT_TYPEHASH,
+                orgDid,
+                result,
+                assetsReviewed,
+                assetsMigrated,
+                reportHash,
+                keccak256(abi.encodePacked(reportURI)),
+                nonce
+            )
+        );
+        bytes32 digest = keccak256(
+            abi.encodePacked("\x19\x01", registry.domainSeparator(), structHash)
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(sk, digest);
+        return abi.encodePacked(r, s, v);
+    }
+
     function setUp() public {
+        signerAuditor = vm.addr(auditorKey);
         assets = new AssetRegistry();
         assets.initialize();
         assets.grantRole(assets.REGISTRAR_ROLE(), org);
@@ -29,6 +72,7 @@ contract AuditRegistryTest is Test {
         registry = new AuditRegistry();
         registry.initialize(address(migrations));
         registry.grantRole(registry.AUDITOR_ROLE(), auditor);
+        registry.grantRole(registry.AUDITOR_ROLE(), signerAuditor);
 
         vm.startPrank(org);
         ORG_ASSET_ID = assets.registerCBOM(keccak256("cbom"), "ipfs://QmCBOM");
@@ -122,5 +166,151 @@ contract AuditRegistryTest is Test {
 
         bytes32[] memory ids = registry.getAuditsByAuditor(auditor);
         assertEq(ids.length, 1, "one audit expected");
+    }
+
+    // ==================== EIP-712 gasless path ====================
+
+    function test_DomainSeparator_MatchEIP712() public {
+        bytes32 expected = keccak256(
+            abi.encode(
+                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256("QTrustAuditRegistry"),
+                keccak256("1"),
+                block.chainid,
+                address(registry)
+            )
+        );
+        assertEq(registry.domainSeparator(), expected);
+    }
+
+    function test_PostAuditSigned_RecordsSignerAsAuditor() public {
+        bytes memory sig = _sign(
+            signerAuditor, auditorKey,
+            org, AuditRegistry.AuditResult.Passed, 10, 1, keccak256("report"), "ipfs://QmReport", 0
+        );
+
+        vm.prank(relayer);
+        bytes32 auditId = registry.postAuditSigned(
+            org, AuditRegistry.AuditResult.Passed, 10, 1, keccak256("report"), "ipfs://QmReport", 0, sig
+        );
+
+        AuditRegistry.AuditAttestation memory att = registry.getAudit(auditId);
+        assertEq(att.auditorDid, signerAuditor, "signer must be recorded as the auditor");
+        assertEq(att.orgDid, org);
+        assertEq(uint8(att.result), uint8(AuditRegistry.AuditResult.Passed));
+        assertEq(att.assetsReviewed, 10);
+        assertEq(att.assetsMigrated, 1);
+        assertEq(registry.nonces(signerAuditor), 1, "nonce must increment");
+        assertEq(registry.getAuditsByAuditor(signerAuditor).length, 1);
+    }
+
+    function test_RevertWhen_SignedReplay() public {
+        bytes memory sig = _sign(
+            signerAuditor, auditorKey,
+            org, AuditRegistry.AuditResult.Passed, 10, 1, keccak256("report"), "ipfs://QmReport", 0
+        );
+
+        vm.prank(relayer);
+        registry.postAuditSigned(
+            org, AuditRegistry.AuditResult.Passed, 10, 1, keccak256("report"), "ipfs://QmReport", 0, sig
+        );
+
+        vm.prank(relayer);
+        vm.expectRevert(
+            abi.encodeWithSelector(AuditRegistry.InvalidNonce.selector, signerAuditor, 0, 1)
+        );
+        registry.postAuditSigned(
+            org, AuditRegistry.AuditResult.Passed, 10, 1, keccak256("report"), "ipfs://QmReport", 0, sig
+        );
+    }
+
+    function test_RevertWhen_SignedSignerLacksAuditorRole() public {
+        uint256 outsiderSk = 0xBAD60D;
+        address outsider = vm.addr(outsiderSk);
+
+        bytes memory sig = _sign(
+            outsider, outsiderSk,
+            org, AuditRegistry.AuditResult.Passed, 10, 1, keccak256("report"), "ipfs://QmReport", 0
+        );
+
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(AuditRegistry.NotAuditor.selector, outsider));
+        registry.postAuditSigned(
+            org, AuditRegistry.AuditResult.Passed, 10, 1, keccak256("report"), "ipfs://QmReport", 0, sig
+        );
+        assertEq(registry.nonces(outsider), 0, "nonce must not advance on rejection");
+    }
+
+    function test_RevertWhen_TamperedSignature() public {
+        bytes memory sig = _sign(
+            signerAuditor, auditorKey,
+            org, AuditRegistry.AuditResult.Passed, 10, 1, keccak256("report"), "ipfs://QmReport", 0
+        );
+        sig[0] ^= 0x01;
+
+        vm.prank(relayer);
+        vm.expectRevert(ECDSA.ECDSAInvalidSignature.selector);
+        registry.postAuditSigned(
+            org, AuditRegistry.AuditResult.Passed, 10, 1, keccak256("report"), "ipfs://QmReport", 0, sig
+        );
+    }
+
+    function test_RevertWhen_WrongNonce() public {
+        bytes memory sig = _sign(
+            signerAuditor, auditorKey,
+            org, AuditRegistry.AuditResult.Passed, 10, 1, keccak256("report"), "ipfs://QmReport", 5
+        );
+
+        vm.prank(relayer);
+        vm.expectRevert(
+            abi.encodeWithSelector(AuditRegistry.InvalidNonce.selector, signerAuditor, 5, 0)
+        );
+        registry.postAuditSigned(
+            org, AuditRegistry.AuditResult.Passed, 10, 1, keccak256("report"), "ipfs://QmReport", 5, sig
+        );
+    }
+
+    function test_RevertWhen_Paused_SignedPath() public {
+        registry.pause();
+
+        bytes memory sig = _sign(
+            signerAuditor, auditorKey,
+            org, AuditRegistry.AuditResult.Passed, 10, 1, keccak256("report"), "ipfs://QmReport", 0
+        );
+
+        vm.prank(relayer);
+        vm.expectRevert();
+        registry.postAuditSigned(
+            org, AuditRegistry.AuditResult.Passed, 10, 1, keccak256("report"), "ipfs://QmReport", 0, sig
+        );
+    }
+
+    function test_DomainSeparator_ChainFork_SignedStillVerifies() public {
+        bytes32 sepBefore = registry.domainSeparator();
+
+        // Simulate a chain fork: the separator must re-derive for chain 999.
+        vm.chainId(999);
+        assertFalse(registry.domainSeparator() == sepBefore, "separator must re-derive on new chainid");
+
+        bytes memory sig = _sign(
+            signerAuditor, auditorKey,
+            org, AuditRegistry.AuditResult.Conditional, 5, 1, keccak256("fork-report"), "", 0
+        );
+        vm.prank(relayer);
+        bytes32 auditId = registry.postAuditSigned(
+            org, AuditRegistry.AuditResult.Conditional, 5, 1, keccak256("fork-report"), "", 0, sig
+        );
+
+        assertTrue(auditId != bytes32(0), "signed attestation must verify on the forked chain");
+        assertEq(registry.getAudit(auditId).auditorDid, signerAuditor);
+    }
+
+    function test_RevertWhen_ReportURITooLong() public {
+        string memory longURI = string(new bytes(513));
+        vm.prank(auditor);
+        vm.expectRevert(
+            abi.encodeWithSelector(StringBounds.StringTooLong.selector, 513, 512)
+        );
+        registry.postAudit(org, AuditRegistry.AuditResult.Passed, 1, 0, keccak256("r"), longURI);
     }
 }

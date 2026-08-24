@@ -1,0 +1,71 @@
+name: Bug report
+description: Report a defect in Q-Trust contracts, backend, SDK, frontend, or inspector.
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Please fill in the details
+        below so we can reproduce and fix it quickly.
+        **Security vulnerabilities must NOT be reported here** — see our
+        [security disclosure policy](../../SECURITY.md) for private reporting.
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How badly does this affect you? Security disclosures go through SECURITY.md instead.
+      options:
+        - "security-disclosure (use SECURITY.md, do not file here)"
+        - critical (data loss / funds at risk / service down)
+        - major (core feature broken, workaround exists)
+        - minor (annoyance, limited impact)
+        - docs-only
+      default: 2
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - contracts (Solidity)
+        - backend (Fastify API)
+        - frontend (Next.js)
+        - sdk (Python qtrust)
+        - inspector (qtrust_inspector)
+        - planner (GNN microservice)
+        - ops/infra (docker compose, prometheus)
+        - docs
+      default: 1
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Expected vs actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. `forge test --match-contract AuditRegistry`
+        2. ...
+      render: bash
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: OS, node/foundry/python versions, commit SHA, chain (anvil/Base Sepolia/Base)
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      render: shell

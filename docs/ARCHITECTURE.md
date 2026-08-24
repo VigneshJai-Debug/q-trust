@@ -46,6 +46,79 @@ All nine contracts are Solidity 0.8.24, UUPS-proxy upgradeable via OpenZeppelin 
 - **Output:** `ScanResult` containing `AssetFinding` objects serialized as CBOM JSON conforming to schema `qtrust.cbom.v1`.
 - **PQC awareness:** Recognizes ML-KEM, ML-DSA, SLH-DSA, HQC, FALCON, SPHINCS+ and maps legacy algorithms (RSA, ECC, DSA) with criticality scoring.
 
+Module dependencies (derived from actual imports):
+
+```mermaid
+graph TD
+    cli[cli]
+    mcp[mcp_server]
+    scanner[scanner]
+    subgraph probes["scanners / probes"]
+        ast[ast_scanner]
+        binary[binary_scanner]
+        pcap[pcap_scanner]
+        source[source_scanner]
+        manifest[manifest_scanner]
+        tlsp[tls_probe]
+        pem[file_scanner]
+    end
+    risk[risk_engine]
+    comp[compliance]
+    conf[conformance]
+    cdx[cyclonedx]
+    sarif[sarif]
+    ev[evidence]
+    road[roadmap]
+    rem[remediation]
+    k8s[k8s_policy]
+    models{{models}}
+
+    cli --> scanner
+    cli --> risk
+    cli --> comp
+    cli --> conf
+    cli --> cdx
+    cli --> sarif
+    cli --> ev
+    cli --> road
+    cli --> rem
+    cli --> k8s
+
+    mcp -.-> source
+    mcp -.-> ast
+    mcp -.-> scanner
+    mcp -.-> pcap
+    mcp -.-> binary
+    mcp -.-> risk
+    mcp -.-> comp
+    mcp -.-> rem
+
+    scanner --> pem
+    ast --> source
+    binary --> source
+    pcap --> tlsp
+
+    risk --> models
+    comp --> models
+    ast --> models
+    binary --> models
+    source --> models
+    manifest --> models
+    pem --> models
+    cdx --> models
+    sarif --> models
+    cli --> models
+```
+
+Dataflow: `cli` drives `scanner`, which fans out to the format-specific
+probes (`ast_scanner`/`binary_scanner` reuse `source_scanner`'s skip rules;
+`pcap_scanner` reuses `tls_probe`'s codepoint tables); every probe emits
+`models.AssetFinding`. Those findings flow through `risk_engine`,
+`compliance`/`conformance` scoring into the output layers — `cyclonedx`
+(CBOM), `sarif`, `evidence`, `roadmap`, `remediation`, and `k8s_policy`.
+`mcp_server` wraps the same scan/risk/compliance surface as JSON-RPC tools for
+AI coding agents.
+
 ## Planner
 
 - **Runtime:** FastAPI microservice (port 8080) with rate limiting (60 req/min per IP).

@@ -3,6 +3,7 @@ pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
 import "../src/SchemaRegistry.sol";
+import "../src/lib/StringBounds.sol";
 
 contract SchemaRegistryTest is Test {
     SchemaRegistry public registry;
@@ -140,5 +141,12 @@ contract SchemaRegistryTest is Test {
         registry.unpause();
         registry.registerSchema("test", 1, keccak256("v1"), "ipfs://v1", "test");
         assertTrue(true);
+    }
+    function test_RevertWhen_SchemaIdTooLong() public {
+        string memory longId = string(new bytes(129));
+        vm.expectRevert(
+            abi.encodeWithSelector(StringBounds.StringTooLong.selector, 129, 128)
+        );
+        registry.registerSchema(longId, 1, keccak256("s"), "ipfs://QmS", "pqc-readiness");
     }
 }

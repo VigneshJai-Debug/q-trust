@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "./lib/StringBounds.sol";
 
 /// @title ComplianceAttestation — compliance attestation results from scanner evaluations
 /// @notice Organizations post compliance scores against standard frameworks (e.g.,
@@ -76,6 +77,7 @@ contract ComplianceAttestation is AccessControl, ReentrancyGuard, Pausable, Init
     mapping(address => uint256) public nonces;
 
     bool private _initialized;
+    uint256 private _cachedChainId;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {}
@@ -85,6 +87,7 @@ contract ComplianceAttestation is AccessControl, ReentrancyGuard, Pausable, Init
         _initialized = true;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(ATTESTER_ROLE, msg.sender);
+        _cachedChainId = block.chainid;
         _domainSeparator = keccak256(
             abi.encode(
                 _DOMAIN_TYPEHASH,
@@ -100,7 +103,33 @@ contract ComplianceAttestation is AccessControl, ReentrancyGuard, Pausable, Init
 
     /// @notice Domain separator for EIP-712 typed data signing.
     function domainSeparator() external view returns (bytes32) {
-        return _domainSeparator;
+        return _currentDomainSeparator();
+    }
+
+    /// @dev Build the domain separator for the currently executing chain.
+    function _buildDomainSeparator() internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                _DOMAIN_TYPEHASH,
+                keccak256("QTrustComplianceAttestation"),
+                EIP712_VERSION_HASH,
+                block.chainid,
+                address(this)
+            )
+        );
+    }
+
+    /// @dev Cached separator when the chain matches, else a freshly built one.
+    function _currentDomainSeparator() internal view returns (bytes32) {
+        return block.chainid == _cachedChainId ? _domainSeparator : _buildDomainSeparator();
+    }
+
+    /// @dev Cache the separator for the current chain (EIP-712 defensive copy).
+    function _cacheDomainSeparator() internal {
+        if (_cachedChainId != block.chainid) {
+            _cachedChainId = block.chainid;
+            _domainSeparator = _buildDomainSeparator();
+        }
     }
 
     /// @notice Hash the typed Attest Compliance data for EIP-712 signing.
@@ -117,7 +146,7 @@ contract ComplianceAttestation is AccessControl, ReentrancyGuard, Pausable, Init
         return keccak256(
             abi.encodePacked(
                 "\x19\x01",
-                _domainSeparator,
+                _currentDomainSeparator(),
                 keccak256(
                     abi.encode(
                         _ATTESTATION_TYPEHASH,
@@ -177,7 +206,8 @@ contract ComplianceAttestation is AccessControl, ReentrancyGuard, Pausable, Init
         uint256 validityDays,
         uint256 nonce,
         bytes calldata signature
-    ) internal view returns (address) {
+    ) internal returns (address) {
+        _cacheDomainSeparator();
         bytes32 digest = keccak256(
             abi.encodePacked(
                 "\x19\x01",
@@ -235,6 +265,7 @@ contract ComplianceAttestation is AccessControl, ReentrancyGuard, Pausable, Init
         bytes32 evidenceHash,
         uint256 validityDays
     ) internal returns (bytes32 attestationId) {
+        StringBounds.checkID(framework);
         if (bytes(framework).length == 0) revert EmptyFramework();
         if (score > 100) revert ScoreOutOfBounds(score);
         if (compliantCount + nonCompliantCount != totalRules) {
@@ -278,6 +309,7 @@ contract ComplianceAttestation is AccessControl, ReentrancyGuard, Pausable, Init
         bytes32 attestationId,
         string calldata reason
     ) external nonReentrant whenNotPaused {
+        StringBounds.checkLen(reason, StringBounds.REASON_MAX);
         Attestation storage att = _attestations[attestationId];
         if (att.orgDid == address(0)) revert AttestationNotFound(attestationId);
         if (att.revoked) revert AlreadyRevoked(attestationId);
@@ -293,6 +325,7 @@ contract ComplianceAttestation is AccessControl, ReentrancyGuard, Pausable, Init
         bytes32 attestationId,
         string calldata reason
     ) external nonReentrant whenNotPaused onlyRole(DEFAULT_ADMIN_ROLE) {
+        StringBounds.checkLen(reason, StringBounds.REASON_MAX);
         Attestation storage att = _attestations[attestationId];
         if (att.orgDid == address(0)) revert AttestationNotFound(attestationId);
         if (att.revoked) revert AlreadyRevoked(attestationId);

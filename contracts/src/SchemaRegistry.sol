@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "./lib/StringBounds.sol";
 
 /// @title SchemaRegistry — register and query credential schemas
 /// @notice Issuers and verifiers reference schemas by URN. The registry resolves
@@ -96,6 +97,9 @@ contract SchemaRegistry is AccessControl, ReentrancyGuard, Pausable, Initializab
         string calldata schemaURI,
         string calldata schemaType
     ) external nonReentrant whenNotPaused onlyRole(SCHEMA_AUTHORITY_ROLE) {
+        StringBounds.checkDID(schemaId);
+        StringBounds.checkURI(schemaURI);
+        StringBounds.checkID(schemaType);
         if (schemaHash == bytes32(0)) revert EmptySchemaHash();
 
         SchemaEntry storage entry = _schemas[schemaId];
@@ -134,6 +138,9 @@ contract SchemaRegistry is AccessControl, ReentrancyGuard, Pausable, Initializab
         string calldata toSchemaId,
         string calldata equivalenceType
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        StringBounds.checkDID(fromSchemaId);
+        StringBounds.checkDID(toSchemaId);
+        StringBounds.checkID(equivalenceType);
         _equivalences[fromSchemaId].push(EquivalenceMapping({
             fromSchemaId: fromSchemaId,
             toSchemaId: toSchemaId,

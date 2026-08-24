@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "./lib/StringBounds.sol";
 
 /// @title AssetRegistry — registers Cryptographic Bills of Materials (CBOMs)
 /// @notice Organizations post the hash of their CBOM (asset inventory) on-chain.
@@ -18,7 +19,6 @@ contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
     error AssetAlreadyExists(bytes32 assetId);
     error NotRegistrar(address caller);
     error EmptyHash();
-    error MetadataTooLong();
     error InvalidCBOMHash();
     error InvalidMetadataURI();
     error AssetAlreadyRetired(bytes32 assetId);
@@ -76,6 +76,7 @@ contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
     mapping(address => uint256) public nonces;
 
     bool private _initialized;
+    uint256 private _cachedChainId;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {}
@@ -85,6 +86,7 @@ contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
         _initialized = true;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(REGISTRAR_ROLE, msg.sender);
+        _cachedChainId = block.chainid;
         _domainSeparator = keccak256(
             abi.encode(
                 _DOMAIN_TYPEHASH,
@@ -100,7 +102,33 @@ contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
 
     /// @notice Domain separator for EIP-712 typed data signing.
     function domainSeparator() external view returns (bytes32) {
-        return _domainSeparator;
+        return _currentDomainSeparator();
+    }
+
+    /// @dev Build the domain separator for the currently executing chain.
+    function _buildDomainSeparator() internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                _DOMAIN_TYPEHASH,
+                keccak256("QTrustAssetRegistry"),
+                EIP712_VERSION_HASH,
+                block.chainid,
+                address(this)
+            )
+        );
+    }
+
+    /// @dev Cached separator when the chain matches, else a freshly built one.
+    function _currentDomainSeparator() internal view returns (bytes32) {
+        return block.chainid == _cachedChainId ? _domainSeparator : _buildDomainSeparator();
+    }
+
+    /// @dev Cache the separator for the current chain (EIP-712 defensive copy).
+    function _cacheDomainSeparator() internal {
+        if (_cachedChainId != block.chainid) {
+            _cachedChainId = block.chainid;
+            _domainSeparator = _buildDomainSeparator();
+        }
     }
 
     /// @notice Hash the typed CBOM Registration data for EIP-712 signing.
@@ -112,7 +140,7 @@ contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
         return keccak256(
             abi.encodePacked(
                 "\x19\x01",
-                _domainSeparator,
+                _currentDomainSeparator(),
                 keccak256(
                     abi.encode(
                         _CBOM_REGISTRATION_TYPEHASH,
@@ -151,7 +179,8 @@ contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
         string calldata metadataURI,
         uint256 nonce,
         bytes calldata signature
-    ) internal view returns (address) {
+    ) internal returns (address) {
+        _cacheDomainSeparator();
         bytes32 digest = keccak256(
             abi.encodePacked(
                 "\x19\x01",
@@ -188,7 +217,7 @@ contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
     ) internal returns (bytes32 assetId) {
         if (cbomHash == bytes32(0)) revert EmptyHash();
         if (bytes(metadataURI).length == 0) revert InvalidMetadataURI();
-        if (bytes(metadataURI).length > 512) revert MetadataTooLong();
+        StringBounds.checkURI(metadataURI);
 
         assetId = keccak256(abi.encode(orgDid, cbomHash));
 
@@ -223,7 +252,8 @@ contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
             revert NotRegistrar(msg.sender);
         }
         if (newCbomHash == bytes32(0)) revert InvalidCBOMHash();
-        if (bytes(newMetadataURI).length == 0 || bytes(newMetadataURI).length > 512) revert InvalidMetadataURI();
+        if (bytes(newMetadataURI).length == 0) revert InvalidMetadataURI();
+        StringBounds.checkURI(newMetadataURI);
         asset.cbomHash = newCbomHash;
         asset.metadataURI = newMetadataURI;
         asset.lastUpdated = block.timestamp;
@@ -253,6 +283,13 @@ contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
     /// @notice Unpause the contract
     function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _unpause();
+    }
+
+    /// @notice Deterministically compute the asset ID for an org/CBOM pair
+    ///         without registering. Pair with verifyAsset() to find an existing
+    ///         registration.
+    function computeAssetId(address orgDid, bytes32 cbomHash) external pure returns (bytes32) {
+        return keccak256(abi.encode(orgDid, cbomHash));
     }
 
     /// @notice Get a CBOM by ID

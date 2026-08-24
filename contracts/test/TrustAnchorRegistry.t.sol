@@ -3,6 +3,7 @@ pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
 import "../src/TrustAnchorRegistry.sol";
+import "../src/lib/StringBounds.sol";
 
 contract TrustAnchorRegistryTest is Test {
     TrustAnchorRegistry public registry;
@@ -143,5 +144,12 @@ contract TrustAnchorRegistryTest is Test {
         registry.unpause();
         registry.accreditIssuer(issuer1, "did:web:a.com", "scope", 365 days);
         assertTrue(true);
+    }
+    function test_RevertWhen_ScopeTooLong() public {
+        string memory longScope = string(new bytes(65));
+        vm.expectRevert(
+            abi.encodeWithSelector(StringBounds.StringTooLong.selector, 65, 64)
+        );
+        registry.accreditIssuer(address(0xFACE), "did:web:example.com", longScope, 30 days);
     }
 }

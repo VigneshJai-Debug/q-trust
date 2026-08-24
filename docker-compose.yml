@@ -140,9 +140,32 @@ services:
       - "127.0.0.1:9090:9090"
     volumes:
       - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./ops/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
       - prometheus-data:/prometheus
     depends_on:
       - api
+      - alertmanager
+    networks:
+      - qtrust-net
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: qtrust-alertmanager
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9093:9093"
+    environment:
+      # Substitute ${QTRUST_ALERT_WEBHOOK} inside the config template.
+      - QTRUST_ALERT_WEBHOOK=${QTRUST_ALERT_WEBHOOK:-http://127.0.0.1:5001/alerts}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        sed 's|$${QTRUST_ALERT_WEBHOOK}|'"$${QTRUST_ALERT_WEBHOOK}"'|g'
+        /etc/alertmanager/alertmanager.yml.tpl > /etc/alertmanager/alertmanager.yml
+        && exec /bin/alertmanager --config.file=/etc/alertmanager/alertmanager.yml --storage.path=/alertmanager
+    volumes:
+      - ./ops/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml.tpl:ro
+      - alertmanager-data:/alertmanager
     networks:
       - qtrust-net
 
@@ -168,6 +191,8 @@ volumes:
   postgres-data:
     driver: local
   prometheus-data:
+    driver: local
+  alertmanager-data:
     driver: local
   grafana-data:
     driver: local

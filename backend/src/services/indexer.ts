@@ -14,6 +14,7 @@ import pg from "pg";
 import { getContract, parseAbiItem, type AbiEvent, type Address, type Log } from "viem";
 import { CONTRACTS, PG_URL } from "../config.js";
 import { getPublicClient } from "./rpc-pool.js";
+import { setIndexerLag } from "../plugins/metrics.js";
 import {
   AssetRegistryAbi,
   VendorRegistryAbi,
@@ -271,7 +272,10 @@ async function backfill(spec: EventSpec): Promise<void> {
   if (from === 0n) from = BigInt(process.env.QTRUST_INDEXER_FROM_BLOCK ?? 0);
   const head = await getPublicClient().getBlockNumber();
 
-  if (from >= head) return;
+  if (from >= head) {
+    setIndexerLag(0);
+    return;
+  }
 
   const eventItem = parseAbiItem(spec.event) as AbiEvent;
   const step = 2000n;
@@ -290,7 +294,9 @@ async function backfill(spec: EventSpec): Promise<void> {
       }
     }
     await setCursor(spec.key, end);
+    setIndexerLag(Number(head - end));
   }
+  setIndexerLag(0);
   console.log(`Indexer: ${spec.key} caught up to block ${head}`);
 }
 

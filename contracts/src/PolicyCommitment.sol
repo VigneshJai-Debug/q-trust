@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "./lib/StringBounds.sol";
 
 /// @title PolicyCommitment — on-chain anchor for versioned policy hashes
 /// @notice Each policy version has its hash committed on-chain. Trust assessments
@@ -83,6 +84,8 @@ contract PolicyCommitment is AccessControl, ReentrancyGuard, Pausable, Initializ
         bytes32 policyHash,
         string calldata policyURI
     ) external nonReentrant whenNotPaused onlyRole(POLICY_AUTHORITY_ROLE) {
+        StringBounds.checkDID(policyId);
+        StringBounds.checkURI(policyURI);
         if (policyHash == bytes32(0)) revert EmptyPolicyHash();
 
         PolicyInfo storage info = _policyInfos[policyId];

@@ -1,5 +1,17 @@
 # sdk/qtrust/client.py
-"""Q-Trust SDK client — talks to the Q-Trust smart contracts on Base."""
+"""Q-Trust SDK client — talks to the Q-Trust smart contracts on Base.
+
+Relay nonce management (condensed; full guide in sdk/README.md):
+
+- EIP-712 nonces are per-signer and per-registry; each registry increments
+  its `nonces[signer]` mapping on-chain for every accepted signed submission.
+- Fetch the signer's current nonce immediately before signing
+  (`GET /v1/relay/cbom-nonce/:did` / `/v1/relay/nonce/:did`, or pass
+  nonce=None to the sign_* helpers to fetch on-chain state).
+- Concurrent submissions from the same signer race on one nonce: the second
+  transaction reverts with InvalidNonce/InvalidSignature. On such a failure,
+  refetch the nonce, re-sign, and resubmit — never reuse a stale signature.
+"""
 from __future__ import annotations
 
 import hashlib

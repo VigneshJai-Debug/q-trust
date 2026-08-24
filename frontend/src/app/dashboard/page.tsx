@@ -6,13 +6,28 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useQuery } from "@tanstack/react-query";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useUserRole } from "@/hooks/use-user-role";
-import { PlanningPanel } from "@/components/planning-panel";
+import { GateLoading, WalletGate, useMounted } from "@/components/wallet-gate";
 import { ShieldCheckIcon, XCircleIcon, ClockIcon } from "@/app/icons";
 import { fetchOrgMigrations, fetchOrgAssets, fetchAssetVerification } from "@/lib/api";
+
+const PlanningPanel = dynamic(
+  () => import("@/components/planning-panel").then((m) => m.PlanningPanel),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="mt-3 space-y-2" aria-hidden="true">
+        <div className="h-4 w-1/3 animate-pulse rounded bg-slate-100" />
+        <div className="h-8 w-full animate-pulse rounded bg-slate-100" />
+        <div className="h-8 w-full animate-pulse rounded bg-slate-100" />
+      </div>
+    ),
+  },
+);
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -204,6 +219,26 @@ function VerifyButton({ assetId }: { assetId: string }) {
 }
 
 export default function DashboardPage() {
+  const mounted = useMounted();
+  const { address, isConnecting, isReconnecting } = useAccount();
+  const { role, isLoading: roleLoading } = useUserRole();
+
+  if (!mounted || isConnecting || isReconnecting || roleLoading) {
+    return (
+      <main className="min-h-screen bg-slate-50 text-slate-900">
+        <GateLoading />
+      </main>
+    );
+  }
+
+  if (!address || role === "none") {
+    return (
+      <main className="min-h-screen bg-slate-50 text-slate-900">
+        <WalletGate description="Connect a wallet to view your organization's migration progress, audit status, and registered assets." />
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
       <DashboardInner />

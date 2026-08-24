@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "./lib/StringBounds.sol";
 
 /// @title TrustAnchorRegistry — issuer accreditation and trust anchor management
 /// @notice Trust anchors (governance multisig) accredit issuers. VCs issued by
@@ -85,6 +86,8 @@ contract TrustAnchorRegistry is AccessControl, ReentrancyGuard, Pausable, Initia
         string calldata scope,
         uint256 validFor
     ) external nonReentrant whenNotPaused onlyRole(GOVERNANCE_ROLE) {
+        StringBounds.checkDID(issuerDid);
+        StringBounds.checkID(scope);
         if (issuer == address(0) || bytes(issuerDid).length == 0) revert EmptyIssuerDid();
         if (_isAccredited[issuer]) revert IssuerAlreadyAccredited(issuer);
 
@@ -111,6 +114,7 @@ contract TrustAnchorRegistry is AccessControl, ReentrancyGuard, Pausable, Initia
         address issuer,
         string calldata reason
     ) external onlyRole(GOVERNANCE_ROLE) {
+        StringBounds.checkLen(reason, StringBounds.REASON_MAX);
         if (!_isAccredited[issuer]) revert IssuerNotAccredited(issuer);
 
         _accreditations[issuer].active = false;

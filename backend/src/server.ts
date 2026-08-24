@@ -16,6 +16,9 @@
  *   POST /v1/write/assets              — admin: register CBOM
  *   POST /v1/write/attestations        — admin: direct attestation (relayer)
  *   POST /v1/relay/attestation         — EIP-712 gasless attestation
+ *   POST /v1/relay/cbom                — EIP-712 gasless CBOM registration
+ *   POST /v1/relay/migration           — EIP-712 gasless migration recording
+ *   POST /v1/relay/audit               — EIP-712 gasless audit attestation
  *   POST /v1/write/migrations          — admin: record migration
  *   POST /v1/webhooks/subscribe        — webhook subscription (Redis)
  *   POST /v1/webhooks/unsubscribe
@@ -57,9 +60,11 @@ import {
   relaySignedAttestation,
   relaySignedCBOMRegistration,
   relaySignedMigration,
+  relaySignedAudit,
   relayerAddress,
   getVendorNonce,
   getOrgNonce,
+  getAuditNonce,
   type SignedAttestationPayload,
   type SignedCBOMRegistrationPayload,
   type SignedMigrationPayload,
@@ -69,7 +74,7 @@ import { evaluate } from "./services/evaluate.js";
 import { registerScannerRoutes } from "./routes/scanner.js";
 import { initSentry, registerSentryHooks } from "./plugins/sentry.js";
 import { registerMetrics } from "./plugins/metrics.js";
-import { CredentialVerifySchema } from "./schemas/index.js";
+import { CredentialVerifySchema, RelayAuditBodySchema } from "./schemas/index.js";
 import { CORS_ORIGINS, API_KEYS, API_KEY_REQUIRED, PLANNER_URL, CHAIN, CHAIN_ID, publicClient, CONTRACTS } from "./config.js";
 import {
   RevocationAnchorAbi,
@@ -483,6 +488,39 @@ server.get("/v1/relay/nonce/:did", async (request, reply) => {
 server.get("/v1/relay/cbom-nonce/:did", async (request, reply) => {
   try {
     const nonce = await getOrgNonce((request.params as { did: string }).did as `0x${string}`);
+    return { did: (request.params as { did: string }).did, nonce: nonce.toString() };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return reply.status(400).send({ error: msg });
+  }
+});
+
+  // EIP-712 gasless audit posting
+  server.post("/v1/relay/audit", {
+    config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+    schema: {
+      body: RelayAuditBodySchema,
+      tags: ["relay"],
+      summary: "Relay an EIP-712-signed audit attestation",
+      description:
+        "Verifies the auditor's signature against AuditRegistry's domain, checks the on-chain nonce, and submits postAuditSigned via the relayer. The signer must hold AUDITOR_ROLE; the recorded auditor is the signer.",
+    },
+  }, async (request, reply) => {
+  const body = request.body;
+  try {
+    const result = await relaySignedAudit(body);
+    return { ...result, relayer: relayerAddress(), chain_id: CHAIN.id };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const code = msg.includes("signature") || msg.includes("Nonce") || msg.includes("must be") ? 400 : 422;
+    return reply.status(code).send({ error: msg });
+  }
+});
+
+// Fetch auditor nonce for audit posting
+server.get("/v1/relay/audit-nonce/:did", async (request, reply) => {
+  try {
+    const nonce = await getAuditNonce((request.params as { did: string }).did as `0x${string}`);
     return { did: (request.params as { did: string }).did, nonce: nonce.toString() };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

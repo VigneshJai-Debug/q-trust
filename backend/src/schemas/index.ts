@@ -90,3 +90,21 @@ export const CredentialVerifySchema = Type.Object({
   presentation: FreeformObject,
   verifier_did: Type.Optional(Type.String()),
 });
+
+const HexAddress = Type.String({ pattern: "^0x[0-9a-fA-F]{40}$" });
+const HexBytes32 = Type.String({ pattern: "^0x[0-9a-fA-F]{64}$" });
+const HexSignature = Type.String({ pattern: "^0x[0-9a-fA-F]{130}$" });
+
+// Mirrors AuditRegistry.postAuditSigned(address orgDid, uint8 result,
+// uint256 assetsReviewed, uint256 assetsMigrated, bytes32 reportHash,
+// string reportURI, uint256 nonce, bytes signature)
+export const RelayAuditBodySchema = Type.Object({
+  orgDid: HexAddress,
+  result: Type.Integer({ minimum: 0, maximum: 3, description: "AuditResult enum: 0 Pending, 1 Passed, 2 Failed, 3 Conditional" }),
+  assetsReviewed: Type.Integer({ minimum: 0 }),
+  assetsMigrated: Type.Integer({ minimum: 0 }),
+  reportHash: HexBytes32,
+  reportURI: Type.String({ minLength: 1, maxLength: 2048 }),
+  nonce: Type.Integer({ minimum: 0 }),
+  signature: HexSignature,
+});

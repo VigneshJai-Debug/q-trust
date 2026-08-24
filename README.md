@@ -134,6 +134,11 @@ python -m qtrust_planner.predict /tmp/bank_cbom.json
 | `QTRUST_VENDOR_REGISTRY_ADDRESS` | Deployed VendorRegistry |
 | `QTRUST_MIGRATION_REGISTRY_ADDRESS` | Deployed MigrationRegistry |
 | `QTRUST_AUDIT_REGISTRY_ADDRESS` | Deployed AuditRegistry |
+| `QTRUST_IPFS_PROVIDERS` | IPFS pinning providers, comma-separated in priority order (default `pinata`; supports `pinata`, `kubo`, `web3`) |
+| `QTRUST_PINATA_API_KEY` / `QTRUST_PINATA_API_SECRET` | Pinata credentials |
+| `QTRUST_IPFS_KUBO_API` | Kubo node HTTP API endpoint (default `http://127.0.0.1:5001`) |
+| `QTRUST_IPFS_KUBO_USER` / `QTRUST_IPFS_KUBO_PASS` | Optional basic auth for Kubo |
+| `QTRUST_WEB3_STORAGE_TOKEN` | Bearer token for web3.storage uploads |
 | `QTRUST_REDIS_URL` | Redis for webhook service |
 | `NEXT_PUBLIC_QTRUST_API_URL` | Frontend → backend base URL |
 
