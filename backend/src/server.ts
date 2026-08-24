@@ -129,11 +129,19 @@ server.register(cors, {
   methods: ["GET", "POST", "OPTIONS"],
 });
 
-server.register(rateLimit, {
-  max: 120,
-  timeWindow: "1 minute",
-  // Allow generous bursts for paginated reads; strict per-IP by default.
-});
+// Per-IP ceiling. QTRUST_RATE_LIMIT_MAX=0 disables the global limiter
+// entirely (for load tests or when fronted by an edge proxy that already
+// rate-limits); any other value overrides the ceiling; default 120/min
+// protects against single-IP abusive clients.
+if (process.env.QTRUST_RATE_LIMIT_MAX === "0") {
+  server.register(rateLimit, { global: false });
+} else {
+  server.register(rateLimit, {
+    max: Number(process.env.QTRUST_RATE_LIMIT_MAX) || 120,
+    timeWindow: "1 minute",
+    // Allow generous bursts for paginated reads; strict per-IP by default.
+  });
+}
 
 // ------------------------------------------------------------------
 // Observability — Sentry error hook + Prometheus /metrics endpoint.

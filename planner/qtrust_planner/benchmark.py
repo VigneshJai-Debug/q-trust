@@ -34,11 +34,11 @@ if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from data_generator import _is_pqc_algorithm, generate_dataset
     from model import MigrationGNN
-    from train import evaluate_order, train
+    from train import train
 else:
     from .data_generator import _is_pqc_algorithm, generate_dataset
     from .model import MigrationGNN
-    from .train import evaluate_order, train
+    from .train import train
 
 BENCH_DIR = Path(__file__).resolve().parents[1] / "results"
 METRIC_KEYS = ["exact_rank", "top5", "top10", "kendall", "node_rank"]
@@ -76,9 +76,25 @@ def random_order(graph) -> list[int]:
 
 
 def score_order(pred_order: list[int], graph) -> dict[str, float]:
+    """Kendall tau between the predicted and true rankings, compared
+    per node.
+
+    NOTE: both orders must be reduced to *ranks* before pairing — calling
+    ``kendalltau(pred_sequence, true_sequence)`` directly would correlate
+    node IDs at each list position instead of measuring ranking agreement,
+    which silently understates tau for any imperfect model (this bug shaped
+    results/benchmark.json before v2.1; see CHANGELOG).
+    """
     true_order = torch.argsort(graph.y_order).tolist()
     n = len(pred_order)
-    kt = kendalltau(pred_order, true_order).statistic if n > 1 else 1.0
+    pred_rank = [0] * n
+    for pos, node in enumerate(pred_order):
+        pred_rank[node] = pos
+    true_rank = [0] * n
+    for pos, node in enumerate(true_order):
+        true_rank[node] = pos
+
+    kt = kendalltau(pred_rank, true_rank).statistic if n > 1 else 1.0
     return {
         "exact_rank": float(pred_order == true_order),
         "top5": float(set(pred_order[:5]) == set(true_order[:5])),

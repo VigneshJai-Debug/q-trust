@@ -18,7 +18,15 @@ vs 64-dim) with 4 GCN layers + GAT attention.
 
 **Why it matters:** Addresses the biggest technical risk identified in the
 master audit — the GNN has not been validated at scale. 100K graphs +
-larger model should improve τ from 0.387 to 0.55+.
+larger model target τ ≥ 0.55 under the original (since-corrected) metric
+convention.
+
+**Measured outcome (v2.1):** trained at 100K-graph scale with continuous
+best-val checkpointing; own-split val τ reached **0.703** (plateaued from
+epoch ~130 of 200). Under the corrected per-node-rank canonical protocol
+(`benchmark_v3.py`), v2 scores τ 0.961 and v3 τ 0.898 — see
+`results/benchmark_v3.json`. The earlier "τ 0.387" figure was an artifact
+of a sequence-correlation bug in `benchmark.score_order`, fixed in v2.1.
 
 **Usage:**
 ```bash

@@ -1,6 +1,8 @@
-# Q-Trust v1.0.0 — Enterprise PQC Migration Protocol
+# Q-Trust v2.0.0 — Enterprise PQC Migration Protocol
 
 [![CI](https://github.com/humoge7502/q-trust/actions/workflows/ci.yml/badge.svg)](https://github.com/humoge7502/q-trust/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/humoge7502/q-trust)](https://github.com/humoge7502/q-trust/releases/tag/v2.0.0)
+[![Documentation](https://img.shields.io/badge/docs-mkdocs%20material-blue)](https://humoge7502.github.io/q-trust)
 
 **The world's most comprehensive post-quantum cryptography migration protocol.** Enterprise-grade scanning, risk scoring, compliance verification, AI-powered planning, and blockchain-anchored attestation on Base L2.
 
@@ -131,7 +133,28 @@ GNN training (100K graphs, BF16), timing side-channel analysis of PQC
 implementations, quantum threat simulation/estimation, an RL migration
 agent, parallel enterprise scanning with GPU-batch risk scoring, and CBOM
 anomaly detection. Exposed via REST when `QTRUST_GPU_ENABLED=true`
-(`/v1/gpu/*`). See [docs/GPU_FEATURES.md](docs/GPU_FEATURES.md) and
+(`/v1/gpu/*`) and surfaced in the dashboard's **Side Channel** tab and GPU
+analysis panels.
+
+**Trained checkpoints & measured results** (A100-SXM4-80GB):
+
+| Model | Result |
+|---|---|
+| GNN v2 (`planner/model.pt`) | canonical held-out Kendall τ **0.961** |
+| GNN v3 (`planner/model_gpu_v3.pt`) | trained at 100K-graph / BF16 scale (best-val checkpoint); own-split val τ 0.703 · canonical held-out τ 0.898 |
+| RL agent (`planner/rl_agent.pt`) | 10K episodes; best mean reward **+6.24** (untrained: −8.6) |
+| Side-channel detector | clean → 0.05 `VERIFIED`, leaky → 0.95 `HIGH_RISK` (calibrated) |
+| Anomaly VAE | flags weak-key inventories; calibrated threshold persisted in checkpoint |
+
+> Ranking metrics use the corrected per-node-rank Kendall protocol (a
+> sequence-correlation bug previously understated every GNN τ by ~0.5;
+> fixed in v2.1 with regression tests — see CHANGELOG). Canonical numbers:
+> heuristic upper bound τ 1.00, ListMLE-trained v2-family models
+> τ 0.94 ± 0.01 (`results/benchmark.json`).
+
+Run the v2-vs-v3 comparison yourself: `python -m qtrust_planner.benchmark_v3`.
+See [docs/GPU_FEATURES.md](docs/GPU_FEATURES.md),
+[docs/PERFORMANCE.md](docs/PERFORMANCE.md), and
 `make -f Makefile.gpu help`.
 
 ## Environment Variables
@@ -184,10 +207,15 @@ cd backend && npm test
 
 ## Documentation
 
+- [Documentation site](https://humoge7502.github.io/q-trust) — rendered MkDocs Material (source: `mkdocs.yml` + `docs/`)
 - [Whitepaper](docs/WHITEPAPER.md) — Technical specification
 - [Architecture](docs/ARCHITECTURE.md) — System design
+- [GPU Features](docs/GPU_FEATURES.md) — The six A100-accelerated features
+- [Performance Benchmarks](docs/PERFORMANCE.md) — k6 load tests + GPU latencies
+- [Case Study: example.com TLS](docs/case-studies/CASE_STUDY_EXAMPLE_COM.md) — scan → CBOM → on-chain → verify
+- [Release v2.0.0](https://github.com/humoge7502/q-trust/releases/tag/v2.0.0) — release notes + audit PDF
 - [Contributing](CONTRIBUTING.md) — Development guide
-- [Phase Docs](docs/) — Implementation history
+- [ADRs & Runbooks](docs/) — Decision records, operations, patent disclosures
 
 ## License
 

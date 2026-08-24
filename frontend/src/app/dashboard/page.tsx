@@ -29,6 +29,11 @@ const PlanningPanel = dynamic(
   },
 );
 
+const SideChannelPanel = dynamic(() => import("@/components/side-channel-panel"), { ssr: false });
+const QuantumThreatPanel = dynamic(() => import("@/components/quantum-threat-panel"), { ssr: false });
+const AnomalyPanel = dynamic(() => import("@/components/anomaly-panel"), { ssr: false });
+const RLPlanViewer = dynamic(() => import("@/components/rl-plan-viewer"), { ssr: false });
+
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -197,6 +202,22 @@ function DashboardInner() {
         {assets.slice(0, 3).map((a) => (
           <VerifyButton key={a.asset_id} assetId={a.asset_id} />
         ))}
+      </div>
+
+      <h2 className="mt-10 text-sm font-semibold uppercase tracking-wider text-slate-500">
+        GPU-accelerated analysis
+      </h2>
+      <p className="mt-1 text-xs text-slate-500">
+        Live A100-backed tools: side-channel verification of PQC binaries,
+        Shor-based quantum threat estimates, VAE anomaly scoring, and the RL
+        migration planner. Requires <code className="rounded bg-slate-100 px-1">QTRUST_GPU_ENABLED=true</code> on
+        the API.
+      </p>
+      <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <SideChannelPanel />
+        <QuantumThreatPanel />
+        <AnomalyPanel />
+        <RLPlanViewer />
       </div>
     </div>
   );

@@ -1,0 +1,64 @@
+name: Publish to PyPI
+
+# Publishes qtrust-sdk and qtrust-inspector to PyPI when a release is
+# published, via PyPI Trusted Publishing (no API token secret required).
+#
+# One-time setup per package on pypi.org:
+#   Account settings → Publishing → Add a new pending publisher
+#     owner: <github-owner>  repository: q-trust
+#     workflow: publish-pypi.yml  environment: pypi
+#     project name: qtrust-sdk / qtrust-inspector
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  publish-sdk:
+    name: Build & publish qtrust-sdk
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install build
+      - run: python -m build
+        working-directory: sdk
+      - name: Check metadata
+        run: |
+          pip install twine
+          twine check --strict sdk/dist/*
+      - name: Publish qtrust-sdk
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: sdk/dist
+
+  publish-inspector:
+    name: Build & publish qtrust-inspector
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install build
+      - run: python -m build
+        working-directory: inspector
+      - name: Check metadata
+        run: |
+          pip install twine
+          twine check --strict inspector/dist/*
+      - name: Publish qtrust-inspector
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: inspector/dist

@@ -24,6 +24,13 @@ contract RegistryHandler is Test {
     bytes32[] internal _createdAttestationIds;
     mapping(bytes32 => bool) public seenAttestationId;
 
+    // Ghost dedup keys: content-addressed IDs are deterministic, and the v2
+    // registries revert on duplicates — the handler must not replay them.
+    mapping(bytes32 => bool) internal _seenCbomHash;
+    mapping(bytes32 => bool) internal _seenProductKey; // keccak(actor, productId)
+    mapping(bytes32 => bool) internal _seenMigrationId;
+    mapping(address => bool) internal _seenVendor;
+
     mapping(address => uint256) internal _lastNonceAssets;
     mapping(address => uint256) internal _lastNonceVendors;
     mapping(address => uint256) internal _lastNonceMigrations;
@@ -42,21 +49,36 @@ contract RegistryHandler is Test {
         migrations = new MigrationRegistry();
         migrations.initialize(address(assets));
 
-        for (uint256 i = 0; i < 3; i++) {
-            uint256 key = 0xA1100 + i * 0x111;
-            address actor = vm.addr(key);
-            actors.push(actor);
-            _keyOfActor[actor] = key;
+        // Three actors, unrolled: Halmos treats loops as symbolic path joins
+        // ("Multiple paths were found in setUp()"), so setup must be
+        // straight-line code.
+        _addActor(0xA1100);
+        _addActor(0xA1100 + 0x111);
+        _addActor(0xA1100 + 2 * 0x111);
 
-            assets.grantRole(assets.REGISTRAR_ROLE(), actor);
-            vendors.registerVendor(actor, _shortName(i), "ipfs://QmVendor");
-            migrations.grantRole(migrations.MIGRATOR_ROLE(), actor);
-        }
+        // The handler toggles pause states directly, so it needs each
+        // registry's admin role (pause()/unpause() are DEFAULT_ADMIN-gated).
+        // Without this the toggles silently reverted under
+        // fail_on_revert = false — and failed runs under true.
+        bytes32 adminRole = assets.DEFAULT_ADMIN_ROLE();
+        assets.grantRole(adminRole, address(this));
+        vendors.grantRole(adminRole, address(this));
+        migrations.grantRole(adminRole, address(this));
 
         vm.prank(actors[0]);
         _seedAssetId = assets.registerCBOM(keccak256("seed-cbom"), "ipfs://QmSeed");
         seenAssetId[_seedAssetId] = true;
         _createdAssetIds.push(_seedAssetId);
+    }
+
+    function _addActor(uint256 key_) internal {
+        address actor = vm.addr(key_);
+        actors.push(actor);
+        _keyOfActor[actor] = key_;
+
+        assets.grantRole(assets.REGISTRAR_ROLE(), actor);
+        vendors.registerVendor(actor, _shortName(actors.length - 1), "ipfs://QmVendor");
+        migrations.grantRole(migrations.MIGRATOR_ROLE(), actor);
     }
 
     // ==================== Write entrypoints ====================
@@ -66,14 +88,18 @@ contract RegistryHandler is Test {
         bytes32 cbomHash = keccak256(abi.encode("cbom", salt));
         string memory uri = _uri(salt);
 
+        if (_seenCbomHash[cbomHash]) return;
+
         if (assets.paused()) {
             vm.expectRevert();
             assets.registerCBOM(cbomHash, uri);
+            _seenCbomHash[cbomHash] = true;
             return;
         }
 
         vm.prank(actor);
         bytes32 assetId = assets.registerCBOM(cbomHash, uri);
+        _seenCbomHash[cbomHash] = true;
         if (!seenAssetId[assetId]) {
             seenAssetId[assetId] = true;
             _createdAssetIds.push(assetId);
@@ -84,6 +110,9 @@ contract RegistryHandler is Test {
         address actor = _actor(actorSeed);
         bytes32 cbomHash = keccak256(abi.encode("signed-cbom", salt));
         string memory uri = _uri(salt);
+
+        if (_seenCbomHash[cbomHash]) return;
+
         uint256 nonce = assets.nonces(actor);
         bytes memory sig = _signCBOM(actor, cbomHash, uri, nonce);
 
@@ -94,6 +123,7 @@ contract RegistryHandler is Test {
         }
 
         bytes32 assetId = assets.registerCBOMSigned(cbomHash, uri, nonce, sig);
+        _seenCbomHash[cbomHash] = true;
         _lastNonceAssets[actor] = assets.nonces(actor);
         if (!seenAssetId[assetId]) {
             seenAssetId[assetId] = true;
@@ -104,6 +134,9 @@ contract RegistryHandler is Test {
     function attestProductDirect(uint256 actorSeed, uint256 salt) external {
         address actor = _actor(actorSeed);
         string memory pid = _productId(salt);
+        bytes32 dedupKey = keccak256(abi.encode(actor, pid));
+
+        if (_seenProductKey[dedupKey]) return;
 
         if (vendors.paused()) {
             vm.expectRevert();
@@ -114,6 +147,7 @@ contract RegistryHandler is Test {
 
         vm.prank(actor);
         bytes32 attestationId = vendors.attestProduct(pid, "1.0", "ML-KEM-512", true, "ipfs://QmE");
+        _seenProductKey[dedupKey] = true;
         if (!seenAttestationId[attestationId]) {
             seenAttestationId[attestationId] = true;
             _createdAttestationIds.push(attestationId);
@@ -123,6 +157,10 @@ contract RegistryHandler is Test {
     function attestProductSigned(uint256 actorSeed, uint256 salt) external {
         address actor = _actor(actorSeed);
         string memory pid = _productId(salt);
+        bytes32 dedupKey = keccak256(abi.encode(actor, pid));
+
+        if (_seenProductKey[dedupKey]) return;
+
         uint256 nonce = vendors.nonces(actor);
         bytes memory sig = _signAttestation(actor, pid, "1.0", "ML-KEM-512", true, "ipfs://QmE", nonce);
 
@@ -134,6 +172,7 @@ contract RegistryHandler is Test {
 
         bytes32 attestationId =
             vendors.attestProductSigned(pid, "1.0", "ML-KEM-512", true, "ipfs://QmE", nonce, sig);
+        _seenProductKey[dedupKey] = true;
         _lastNonceVendors[actor] = vendors.nonces(actor);
         if (!seenAttestationId[attestationId]) {
             seenAttestationId[attestationId] = true;
@@ -145,6 +184,8 @@ contract RegistryHandler is Test {
         address actor = _actor(actorSeed);
         bytes32 migrationId = keccak256(abi.encode("migration", salt));
 
+        if (_seenMigrationId[migrationId]) return;
+
         if (migrations.paused()) {
             vm.expectRevert();
             vm.prank(actor);
@@ -152,6 +193,7 @@ contract RegistryHandler is Test {
                 migrationId, _seedAssetId, "RSA-2048", "ML-DSA-441",
                 keccak256("evd"), "ipfs://QmEv"
             );
+            _seenMigrationId[migrationId] = true;
             return;
         }
 
@@ -160,11 +202,15 @@ contract RegistryHandler is Test {
             migrationId, _seedAssetId, "RSA-2048", "ML-DSA-441",
             keccak256("evd"), "ipfs://QmEv"
         );
+        _seenMigrationId[migrationId] = true;
     }
 
     function recordMigrationSigned(uint256 actorSeed, uint256 salt) external {
         address actor = _actor(actorSeed);
         bytes32 migrationId = keccak256(abi.encode("signed-migration", salt));
+
+        if (_seenMigrationId[migrationId]) return;
+
         uint256 nonce = migrations.nonces(actor);
         bytes memory sig = _signMigration(
             actor, migrationId, _seedAssetId, "RSA-2048", "SLH-DSA-128s",
@@ -184,6 +230,7 @@ contract RegistryHandler is Test {
             migrationId, _seedAssetId, "RSA-2048", "SLH-DSA-128s",
             keccak256("evd-signed"), "ipfs://QmEvS", nonce, sig
         );
+        _seenMigrationId[migrationId] = true;
         _lastNonceMigrations[actor] = migrations.nonces(actor);
     }
 

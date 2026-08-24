@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 
 import base58
 import pytest
@@ -18,6 +19,12 @@ from qtrust.did import DIDDocument, DIDResolver
 from qtrust.risk import QuantumVulnerability, RiskScoringEngine
 from qtrust.schema import CBOM, CBOMEntry
 from qtrust.vc import VCIssuer, VCVerifier, VerifiableCredential
+
+# Hypothesis profiles: CI runs the "ci" profile (1000 examples, no per-case
+# deadline) via HYPOTHESIS_PROFILE=ci; local default stays fast.
+settings.register_profile("ci", max_examples=1000, deadline=None)
+if os.environ.get("HYPOTHESIS_PROFILE"):
+    settings.load_profile(os.environ["HYPOTHESIS_PROFILE"])
 
 # ---------------------------------------------------------------------------
 # Strategies

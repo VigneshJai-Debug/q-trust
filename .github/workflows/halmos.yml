@@ -1,0 +1,43 @@
+name: Formal Verification (Halmos)
+
+# Symbolically executes contract properties with Halmos.
+#
+# STATUS: experimental / non-blocking. The full RegistryHandler setUp
+# currently trips Halmos' concretize-paths pass ("Multiple paths were found
+# in setUp()" — the OZ initializer stack contains internal branching that
+# halmos 0.3 cannot flatten). This job therefore runs in report-only mode;
+# flip continue-on-error to false once the setup is halmos-clean.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "contracts/src/**"
+      - "contracts/test/**"
+      - ".github/workflows/halmos.yml"
+  pull_request:
+    paths:
+      - "contracts/src/**"
+      - "contracts/test/**"
+      - ".github/workflows/halmos.yml"
+
+jobs:
+  halmos:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Halmos
+        run: pip install halmos
+      - name: Build contracts
+        run: forge build
+        working-directory: contracts
+      - name: Run Halmos (report-only)
+        run: halmos --match-contract "RegistryInvariant" --loop 1 --invariant-depth 2
+        working-directory: contracts

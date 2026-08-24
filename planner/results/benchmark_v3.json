@@ -1,0 +1,24 @@
+{
+  "v2 (1.2K graphs, 64-dim)": {
+    "exact_rank": 0.0,
+    "top5": 0.6733333333333333,
+    "top10": 0.52,
+    "kendall": 0.9606702074411669,
+    "node_rank": 0.43568273941393965,
+    "params": 9282,
+    "eval_seconds": 3.57,
+    "n_graphs": 150,
+    "meta_epochs": 80,
+    "meta_n_graphs": 1200
+  },
+  "v3 (GPU-trained, 256-dim)": {
+    "exact_rank": 0.0,
+    "top5": 0.52,
+    "top10": 0.2733333333333333,
+    "kendall": 0.8982254246510997,
+    "node_rank": 0.2269920306863125,
+    "params": 237070,
+    "eval_seconds": 1.36,
+    "n_graphs": 150
+  }
+}

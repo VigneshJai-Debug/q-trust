@@ -14,9 +14,14 @@ export const options = {
     { duration: "1m", target: 100 },
     { duration: "1m", target: 100 },
   ],
+  // Thresholds are scoped per request tag: the `assets` probe intentionally
+  // targets a nonexistent asset (404 fast path), so a global
+  // http_req_failed threshold would fail by construction.
   thresholds: {
-    http_req_duration: ["p(95)<800"],
-    http_req_failed: ["rate<0.02"],
+    "http_req_duration": ["p(95)<800"],
+    "http_req_duration{name:health}": ["p(95)<100"],
+    "http_req_failed{name:health}": ["rate<0.02"],
+    "http_req_failed{name:org-assets}": ["rate<0.02"],
     checks: ["rate>0.98"],
   },
 };
@@ -29,7 +34,9 @@ export default function () {
   });
 
   // Mixed read workload: unknown asset (404 fast path) + org query params.
-  http.get(`${BASE_URL}/v1/assets/0x${"0".repeat(64)}`, { tags: { name: "assets" } });
+  http.get(`${BASE_URL}/v1/assets/0x${"0".repeat(64)}`, {
+    tags: { name: "assets" },
+  });
   http.get(
     `${BASE_URL}/v1/orgs/0x${"0".repeat(40)}/assets?offset=0&limit=10`,
     { tags: { name: "org-assets" } },

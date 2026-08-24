@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Benchmark Kendall-tau protocol bug (`benchmark.score_order`)** — tau was
+  computed by index-correlating the two *order sequences* (node IDs at each
+  list position) instead of comparing per-node ranks. Any imperfect model
+  was silently understated; the repo's historical GNN τ ≈ 0.27–0.39 grew to
+  **τ ≈ 0.78–0.96** under the corrected per-node-rank protocol while the
+  heuristic upper bound stays 1.00. `train_gpu.compute_metrics` already used
+  the correct formulation and is now cross-validated by a regression test
+  suite (`planner/tests/test_benchmark_protocol.py`). `results/benchmark.json`
+  regenerated at canonical scale.
 - **RL agent critic/advantage broadcasting bug** — stacked per-step values had
   shape `(T, 1)` against `(T,)` returns, silently broadcasting the advantage
   and critic loss to `(T, T)` and corrupting policy gradients; values are now
@@ -18,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   detectors silently fell back to the 0.8 default; checkpoints now persist
   `{state_dict, threshold}` with legacy raw state-dict loading still
   supported (`inspector/qtrust_inspector/anomaly_detector.py`).
+- **Invariant-handler bugs surfaced by `fail_on_revert = true`** — pause
+  toggles in `RegistryHandler` lacked admin roles (silently reverting since
+  inception) and bounded salts replayed duplicate content-addressed IDs;
+  fixed via role grants and ghost-set dedup.
 
 ### Changed
 
@@ -32,16 +45,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **requirements-gpu.txt** — drop unused gymnasium pin and document that the
   legacy `qiskit-aer-gpu` PyPI package stops at Python 3.12 (use a GPU-built
   Aer on newer Pythons).
+- **Invariant testing strengthened** — foundry `[invariant]` raised to
+  runs=1000, depth=100 with `fail_on_revert = true`; all 189 contract tests
+  pass under the strict config.
+- **Rate limiter configurable** — `QTRUST_RATE_LIMIT_MAX` env override
+  (`0` disables globally, e.g. behind an edge proxy or for load tests);
+  default unchanged at 120/min per IP.
+- **k6 stress thresholds scoped per tag** so intentional 404 probes don't
+  fail the global budget; measured results published in PERFORMANCE.md
+  (147.8 req/s @ 100 VUs, p95 = 11.3 ms).
 
 ### Added
 
-- **Quantum estimator test suite** (`planner/tests/test_quantum_estimator.py`)
-  and **parallel scanner test suite**
-  (`inspector/tests/test_parallel_scanner.py`, mocked network) — every GPU
-  feature now has coverage.
-- **Frontend side-channel panel** — `SideChannelPanel` component (demo +
-  real-binary analysis modes) wired into the scanner dashboard's new
-  "Side Channel" tab, with component tests.
+- **Frontend GPU panels complete** — `QuantumThreatPanel`, `AnomalyPanel`,
+  `RLPlanViewer` join `SideChannelPanel` on the org dashboard's GPU analysis
+  grid, with component tests (frontend suite now 44 tests).
+- **v2-vs-v3 GNN benchmark** (`planner/qtrust_planner/benchmark_v3.py`) —
+  same held-out split and scipy-Kendall protocol as `benchmark.py`;
+  writes `results/benchmark_v3.json`.
+- **Executable quantum notebook** (`notebooks/02_quantum_threat_gpu.ipynb`)
+  generated from the authoritative script and executed with outputs; the
+  script is now runnable from any working directory.
+- **Publishing pipelines** — PyPI Trusted Publishing workflow
+  (`publish-pypi.yml`) and GHCR Docker workflow (`publish-docker.yml`) on
+  tags/releases.
+- **Documentation site** — `mkdocs.yml` (Material) + GitHub Pages workflow;
+  new pages: PERFORMANCE.md, MULTI_CHAIN.md, GO_LIVE_CHECKLIST.md,
+  case-studies/CASE_STUDY_EXAMPLE_COM.md (scan → CBOM → on-chain → verify,
+  validated end-to-end on a local chain-id-84532 chain).
+- **Generated API types** — `frontend/src/lib/generated/api-schema.ts` from
+  `backend/openapi.yaml` via openapi-typescript.
+- **Halmos formal-verification workflow** (report-only mode pending a
+  halmos-clean test setup) plus property-based Hypothesis job in CI with a
+  `ci` profile (1000 examples where per-test settings allow).
+- **GitHub Release v2.0.0** published with release notes, audit PDF, and
+  GPU feature bundle.
+- **Trained checkpoints at full scale** — RL agent 10K episodes (best mean
+  reward +6.24 vs −8.6 untrained); side-channel detector trained at
+  5K+5K traces / 50 epochs; anomaly VAE on 1,000 CBOMs / 100 epochs; GNN v3
+  best val τ 0.658 → 0.70+ during the 100K-graph run (checkpoint saved
+  continuously; `make -f Makefile.gpu train-gnn` reproduces/resumes).
 
 ## [2.0.0] — 2026-08-24
 

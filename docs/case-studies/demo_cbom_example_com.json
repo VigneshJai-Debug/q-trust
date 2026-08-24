@@ -1,0 +1,22 @@
+{
+  "schema_version": "cbom.v1",
+  "org_did": "did:ethr:0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "generated_at": 1787608033,
+  "scanner_version": "qtrust-inspector-1.1.0",
+  "assets": [
+    {
+      "asset_type": "tls_certificate",
+      "algorithm": "ecdsa-with-SHA256",
+      "location": "example.com:443",
+      "criticality": "medium",
+      "key_size": 256
+    }
+  ],
+  "summary": {
+    "total_assets": 1,
+    "target": "example.com",
+    "by_algorithm": {
+      "ecdsa-with-SHA256": 1
+    }
+  }
+}

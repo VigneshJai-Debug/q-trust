@@ -3,12 +3,26 @@
 Run as a script or in Jupyter:
     python notebooks/02_quantum_threat_gpu.py
 
-Uses qiskit-algorithms + qiskit-aer(-gpu) when available; otherwise falls back
-to an honestly-labeled classical Pollard's rho for small N. All quantum
-resource estimates come from published roadmaps via
+Uses qiskit-aer(-gpu) when available; otherwise falls back to an
+honestly-labeled classical Pollard's rho for small N. All quantum resource
+estimates come from published roadmaps via
 qtrust_planner.quantum_estimator.QuantumThreatEstimator.
 """
+import sys
 import time
+from pathlib import Path
+
+# Make qtrust_planner importable regardless of the working directory
+# (works as a script, from the repo root, and inside Jupyter where __file__
+# is undefined).
+_bootstrap = [Path.cwd() / "planner"]
+try:
+    _bootstrap.append(Path(__file__).resolve().parent.parent / "planner")
+except NameError:
+    pass  # executed inside a notebook — no __file__
+for _p in _bootstrap:
+    if _p.exists() and str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
 # Check for GPU simulator
 gpu_available = False

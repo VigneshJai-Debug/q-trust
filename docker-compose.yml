@@ -95,6 +95,19 @@ services:
     environment:
       - QTRUST_MODEL_PATH=/app/model.pt
       - QTRUST_DEADLINES_PATH=/app/data/algorithms.json
+      # GPU features (RL agent). Set to "auto" to use the A100 when present;
+      # the planner falls back to CPU transparently when no device is exposed.
+      - QTRUST_DEVICE=auto
+    # NVIDIA GPU passthrough (requires nvidia-container-toolkit on the host).
+    # `docker compose up planner` then exposes the A100; verify with:
+    #   docker exec qtrust-planner nvidia-smi
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     networks:
       - qtrust-net
 
