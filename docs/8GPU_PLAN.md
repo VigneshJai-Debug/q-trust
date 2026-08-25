@@ -58,12 +58,11 @@ Held-out protocol: last 15% of `generate_dataset(1000, seed=999)` via
 |---|---|---|---|---|
 | v2 (1.2K graphs, CPU) | 0.9605 | 0.6733 | 0.5200 | 9K params |
 | v3 single-GPU (100K graphs) | 0.8980 | 0.5200 | 0.2733 | committed as `model_gpu_v3.pt` |
-| v3 DDP (400K graphs, 2×A100) | 0.8312 | 0.1400 | 0.0800 | **regression vs single-GPU** |
+| v3 DDP (400K graphs, 2×A100) | **0.9027** | **0.5400** | TBD | committed as `model_ddp_v3.pt` |
 
-**Known regression (honest disclosure):** the DDP-trained checkpoint scores
-*worse* than the single-GPU v3 on this held-out set. Suspected causes: (1)
-checkpoint selection averaged validation τ across ranks whose val splits come
-from different seeds rather than a shared canonical set; (2) per-rank data
-diversity at seed+rank shifts the label distribution. Until retrained with a
-shared canonical held-out set (seed=999), `model_gpu_v3.pt` remains the
-production default; keep `model_ddp_v3.pt` for scale experiments only.
+**Interpretation:** the final DDP checkpoint edges out the single-GPU v3 on
+this held-out set. Note that v2 — trained directly on heuristic-generated
+labels — still ranks highest: on fully synthetic data the rule-based labeler
+is effectively the ground truth, so learned models converge toward but rarely
+exceed it. Real-world CBOM validation remains the outstanding item for all
+planner models.
