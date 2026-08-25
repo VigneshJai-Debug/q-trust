@@ -71,13 +71,20 @@ import {
   type SignedCBOMRegistrationPayload,
   type SignedMigrationPayload,
 } from "./services/attestation.js";
-import { startIndexer } from "./services/indexer.js";
+import { startIndexer, stopIndexer, pool as pgPool } from "./services/indexer.js";
 import { evaluate } from "./services/evaluate.js";
 import { registerScannerRoutes } from "./routes/scanner.js";
 import { registerGPURoutes } from "./services/gpu-service.js";
+import { gracefulShutdown } from "./middleware/auth.js";
 import { initSentry, registerSentryHooks } from "./plugins/sentry.js";
 import { registerMetrics } from "./plugins/metrics.js";
-import { CredentialVerifySchema, RelayAuditBodySchema } from "./schemas/index.js";
+import {
+  CredentialVerifySchema,
+  RelayAuditBodySchema,
+  RelayAttestationBodySchema,
+  RelayCBOMBodySchema,
+  RelayMigrationBodySchema,
+} from "./schemas/index.js";
 import { CORS_ORIGINS, API_KEYS, API_KEY_REQUIRED, PLANNER_URL, CHAIN, CHAIN_ID, publicClient, CONTRACTS } from "./config.js";
 import {
   RevocationAnchorAbi,
@@ -103,6 +110,21 @@ const server = fastify({
   logger: true,
   bodyLimit: 1 * 1024 * 1024,
 }).withTypeProvider<TypeBoxTypeProvider>();
+
+// ------------------------------------------------------------------
+// Process-level fault handlers (audit Critical #10): without these, a
+// single unhandled promise rejection (e.g. an RPC outage inside an indexer
+// callback) takes down the whole API process.
+// ------------------------------------------------------------------
+process.on("unhandledRejection", (reason) => {
+  server.log.error({ err: reason }, "Unhandled promise rejection — keeping process alive");
+});
+process.on("uncaughtException", (err) => {
+  server.log.error({ err }, "Uncaught exception — exiting");
+  // An uncaught exception leaves the process in an undefined state; exit
+  // cleanly so the process manager restarts us.
+  process.exit(1);
+});
 
 // Redis for webhook subscriptions (optional — degrades gracefully)
 const redisUrl =
@@ -350,9 +372,17 @@ server.get("/v1/plans/:did", async (request, reply) => {
 });
 
 // ------------------------------------------------------------------
-// Admin write API (API-key gated; relayer submits transactions)
+// Admin write API (API-key gated; relayer submits transactions).
+//
+// Each route spawns on-chain transactions via the relayer — they get an
+// explicit per-route rate limit (audit Critical #12 / High #17): with
+// QTRUST_RATE_LIMIT_MAX=0 the global limiter is disabled, and without a
+// per-route config these routes would be unlimited.
 // ------------------------------------------------------------------
-server.post("/v1/write/assets", { preHandler: requireApiKey }, async (request, reply) => {
+server.post("/v1/write/assets", {
+  preHandler: requireApiKey,
+  config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+}, async (request, reply) => {
   const body = request.body as { cbomHash?: string; metadataURI?: string };
   if (!body.cbomHash || !body.cbomHash.startsWith("0x")) {
     return reply.status(400).send({ error: "cbomHash (0x-prefixed) is required" });
@@ -364,12 +394,15 @@ server.post("/v1/write/assets", { preHandler: requireApiKey }, async (request, r
     });
     return { ...result, relayer: relayerAddress() };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return reply.status(422).send({ error: `Registration failed: ${msg}` });
+    request.log.error(err, "CBOM registration failed");
+    return reply.status(422).send({ error: "Registration failed" });
   }
 });
 
-server.post("/v1/write/attestations", { preHandler: requireApiKey }, async (request, reply) => {
+server.post("/v1/write/attestations", {
+  preHandler: requireApiKey,
+  config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+}, async (request, reply) => {
   const body = request.body as {
     productId?: string;
     version?: string;
@@ -392,12 +425,15 @@ server.post("/v1/write/attestations", { preHandler: requireApiKey }, async (requ
     });
     return { ...result, relayer: relayerAddress() };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return reply.status(422).send({ error: `Attestation failed: ${msg}` });
+    request.log.error(err, "Attestation failed");
+    return reply.status(422).send({ error: "Attestation failed" });
   }
 });
 
-server.post("/v1/write/migrations", { preHandler: requireApiKey }, async (request, reply) => {
+server.post("/v1/write/migrations", {
+  preHandler: requireApiKey,
+  config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+}, async (request, reply) => {
   const body = request.body as {
     migrationId?: string;
     assetId?: string;
@@ -422,8 +458,8 @@ server.post("/v1/write/migrations", { preHandler: requireApiKey }, async (reques
     });
     return { ...result, relayer: relayerAddress() };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return reply.status(422).send({ error: `Migration failed: ${msg}` });
+    request.log.error(err, "Migration recording failed");
+    return reply.status(422).send({ error: "Migration recording failed" });
   }
 });
 
@@ -432,23 +468,27 @@ server.post("/v1/write/migrations", { preHandler: requireApiKey }, async (reques
   // ------------------------------------------------------------------
   server.post("/v1/relay/attestation", {
     config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+    schema: {
+      body: RelayAttestationBodySchema,
+      tags: ["relay"],
+      summary: "Relay an EIP-712-signed vendor attestation",
+      description:
+        "Verifies the vendor's signature against VendorRegistry's domain, checks the on-chain nonce, and submits attestProductSigned via the relayer.",
+    },
   }, async (request, reply) => {
   const body = request.body as SignedAttestationPayload;
-  if (!body.productId || !body.version || !body.algorithm || !body.signature) {
-    return reply.status(400).send({
-      error: "productId, version, algorithm, nonce and signature are required",
-    });
-  }
-  if (typeof body.supported !== "boolean") {
-    return reply.status(400).send({ error: "supported must be a boolean" });
-  }
   try {
     const result = await relaySignedAttestation(body);
     return { ...result, relayer: relayerAddress(), chain_id: CHAIN.id };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    const code = msg.includes("signature") || msg.includes("Nonce") ? 400 : 422;
-    return reply.status(code).send({ error: msg });
+    // Only echo our own validation errors; raw transport/RPC errors stay in
+    // the logs so internal details never leak to clients (audit H-6).
+    if (/Nonce mismatch|signature verification|must be/.test(msg)) {
+      return reply.status(400).send({ error: msg });
+    }
+    request.log.error(err, "Relay attestation failed");
+    return reply.status(422).send({ error: "Relay submission failed" });
   }
 });
 
@@ -465,40 +505,50 @@ server.get("/v1/relay/nonce/:did", async (request, reply) => {
   // EIP-712 gasless CBOM registration
   server.post("/v1/relay/cbom", {
     config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+    schema: {
+      body: RelayCBOMBodySchema,
+      tags: ["relay"],
+      summary: "Relay an EIP-712-signed CBOM registration",
+      description:
+        "Verifies the org's signature against AssetRegistry's domain, checks the on-chain nonce, and submits registerCBOMSigned via the relayer.",
+    },
   }, async (request, reply) => {
   const body = request.body as SignedCBOMRegistrationPayload;
-  if (!body.cbomHash || !body.signature) {
-    return reply.status(400).send({
-      error: "cbomHash, nonce and signature are required",
-    });
-  }
   try {
     const result = await relaySignedCBOMRegistration(body);
     return { ...result, relayer: relayerAddress(), chain_id: CHAIN.id };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    const code = msg.includes("signature") || msg.includes("Nonce") ? 400 : 422;
-    return reply.status(code).send({ error: msg });
+    if (/Nonce mismatch|signature verification|must be/.test(msg)) {
+      return reply.status(400).send({ error: msg });
+    }
+    request.log.error(err, "Relay CBOM failed");
+    return reply.status(422).send({ error: "Relay submission failed" });
   }
 });
 
   // EIP-712 gasless migration recording
   server.post("/v1/relay/migration", {
     config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+    schema: {
+      body: RelayMigrationBodySchema,
+      tags: ["relay"],
+      summary: "Relay an EIP-712-signed migration recording",
+      description:
+        "Verifies the org's signature against MigrationRegistry's domain, checks asset ownership on-chain, and submits recordMigrationSigned via the relayer.",
+    },
   }, async (request, reply) => {
   const body = request.body as SignedMigrationPayload;
-  if (!body.migrationId || !body.assetId || !body.signature) {
-    return reply.status(400).send({
-      error: "migrationId, assetId, fromAlgorithm, toAlgorithm, nonce and signature are required",
-    });
-  }
   try {
     const result = await relaySignedMigration(body);
     return { ...result, relayer: relayerAddress(), chain_id: CHAIN.id };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    const code = msg.includes("signature") || msg.includes("Nonce") ? 400 : 422;
-    return reply.status(code).send({ error: msg });
+    if (/Nonce mismatch|signature verification|must be/.test(msg)) {
+      return reply.status(400).send({ error: msg });
+    }
+    request.log.error(err, "Relay migration failed");
+    return reply.status(422).send({ error: "Relay submission failed" });
   }
 });
 
@@ -769,7 +819,10 @@ server.get("/v1/trust-anchors/:issuer", async (request, reply) => {
 // ------------------------------------------------------------------
 // Webhooks (Redis-backed subscriptions) — requires API key for subscribe/unsubscribe
 // ------------------------------------------------------------------
-server.post("/v1/webhooks/subscribe", { preHandler: requireApiKey }, async (request, reply) => {
+server.post("/v1/webhooks/subscribe", {
+  preHandler: requireApiKey,
+  config: { rateLimit: { max: 20, timeWindow: "1 minute" } },
+}, async (request, reply) => {
   const { address, url, secret, events } = request.body as {
     address: string;
     url: string;
@@ -807,7 +860,10 @@ server.post("/v1/webhooks/subscribe", { preHandler: requireApiKey }, async (requ
   return { subscribed: true, subscriber: { address, url, events: eventList, secret: secret ? "•••" : "" } };
 });
 
-server.post("/v1/webhooks/unsubscribe", { preHandler: requireApiKey }, async (request, reply) => {
+server.post("/v1/webhooks/unsubscribe", {
+  preHandler: requireApiKey,
+  config: { rateLimit: { max: 20, timeWindow: "1 minute" } },
+}, async (request, reply) => {
   const { address, url, events } = request.body as {
     address: string;
     url: string;
@@ -938,6 +994,23 @@ const start = async () => {
     await startIndexer();
     await server.listen({ port: Number(process.env.PORT) || 3001, host: "0.0.0.0" });
     console.log(`Server listening on ${JSON.stringify(server.server.address())}`);
+
+    // Audit Critical #11: gracefulShutdown was exported but never invoked —
+    // on every deploy/restart the Postgres pool, Redis client, indexer
+    // subscriptions, and in-flight requests were abandoned mid-flight.
+    gracefulShutdown(server, "SIGTERM", async () => {
+      stopIndexer();
+      if (redis) {
+        try {
+          await redis.quit();
+        } catch {
+          // already disconnected
+        }
+      }
+      if (pgPool) {
+        await pgPool.end();
+      }
+    });
   } catch (err) {
     server.log.error(err);
     process.exit(1);

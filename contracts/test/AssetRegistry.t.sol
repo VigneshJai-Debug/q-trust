@@ -205,11 +205,27 @@ contract AssetRegistryTest is Test {
     function test_RevertWhen_MetadataURITooLong_SignedPath() public {
         string memory longURI = string(new bytes(513));
         uint256 orgSk = 0x0A6C2;
+        address orgSigner = vm.addr(orgSk);
         bytes32 hash = keccak256("cbom-long-uri");
-        bytes memory sig = _sign(vm.addr(orgSk), orgSk, hash, longURI, 0);
+        // The signed path requires the signer to hold REGISTRAR_ROLE
+        // (role-bypass fix) — grant it so validation reaches the URI check.
+        registry.grantRole(registry.REGISTRAR_ROLE(), orgSigner);
+        bytes memory sig = _sign(orgSigner, orgSk, hash, longURI, 0);
 
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(StringBounds.StringTooLong.selector, 513, 512));
         registry.registerCBOMSigned(hash, longURI, 0, sig);
+    }
+
+    function test_RevertWhen_SignerLacksRegistrarRole_SignedPath() public {
+        // Regression test for the gasless role bypass: a valid signature from
+        // an EOA WITHOUT REGISTRAR_ROLE must be rejected.
+        uint256 outsiderSk = 0x0A6D1;
+        address outsider = vm.addr(outsiderSk);
+        bytes memory sig = _sign(outsider, outsiderSk, CBOM_HASH, METADATA_URI, 0);
+
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(AssetRegistry.NotRegistrar.selector, outsider));
+        registry.registerCBOMSigned(CBOM_HASH, METADATA_URI, 0, sig);
     }
 }

@@ -23,7 +23,7 @@ const nextConfig = {
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' data: https://fonts.gstatic.com",
       "img-src 'self' data: https://ipfs.io https://explorer.walletconnect.com",
-      `connect-src 'self' ${apiBase} ${apiBase.replace(/^http/, "ws")} https://sepolia.base.org https://mainnet.base.org wss://relay.walletconnect.com https://relay.walletconnect.com https://explorer.walletconnect.com`,
+      `connect-src 'self' ${apiBase} ${apiBase.replace(/^http/, "ws")} https://sepolia.base.org https://mainnet.base.org wss://relay.walletconnect.com https://relay.walletconnect.com https://explorer.walletconnect.com https://ipfs.io`,
       "frame-ancestors 'none'",
       "object-src 'none'",
       "base-uri 'self'",

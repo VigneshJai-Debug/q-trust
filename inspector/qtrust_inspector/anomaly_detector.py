@@ -180,6 +180,12 @@ class CBOMAnomalyDetector:
             "ML-DSA": 11, "SLH-DSA": 12, "Unknown": 13,
         }
 
+        # Audit H-9: compute the RSA ratio once instead of re-scanning all
+        # assets inside the loop (O(n²) -> O(n)).
+        n_assets = len(assets)
+        rsa_count = sum(1 for a in assets if "RSA" in a.get("algorithm", "").upper())
+        rsa_ratio = rsa_count / n_assets
+
         for asset in assets:
             alg = asset.get("algorithm", "Unknown").upper()
             alg_type = 13  # Unknown
@@ -197,10 +203,6 @@ class CBOMAnomalyDetector:
             is_expired = 1.0 if asset.get("expired", False) else 0.0
             has_vendor = 1.0 if asset.get("vendor") else 0.0
             is_self_signed = 1.0 if asset.get("self_signed", False) else 0.0
-
-            # Compute running RSA ratio
-            rsa_count = sum(1 for a in assets if "RSA" in a.get("algorithm", "").upper())
-            rsa_ratio = rsa_count / len(assets)
 
             weak_key = 1.0 if ("RSA" in alg and key_size < 2048) else 0.0
             days_until_expiry = min(asset.get("days_until_expiry", 365) / 365.0, 1.0)

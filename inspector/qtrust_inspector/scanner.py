@@ -417,15 +417,21 @@ class CryptoScanner:
     # ------------------------------------------------------------------
     # Combined host scan
     # ------------------------------------------------------------------
-    def scan_host(self, host: str) -> dict[str, Any]:
+    def scan_host(self, host: str, allow_private: bool = False) -> dict[str, Any]:
         """Scan a single host for both TLS and SSH cryptographic assets.
 
         Args:
             host: Hostname or IP address.
+            allow_private: Skip the SSRF/private-range guard (explicit opt-in).
 
         Returns:
             A dict with: host, scan_timestamp, tls_findings (list), ssh_findings (list).
         """
+        # Audit I-3 / Critical #7: guard EVERY network entry point. The
+        # top-level scan_host() wrapper validated, but direct class-API users
+        # (including scan_network()) bypassed the check entirely — letting
+        # callers probe 127.0.0.1, RFC-1918 ranges, or 169.254.169.254.
+        validate_scan_target(host, allow_private=allow_private)
         findings: dict[str, Any] = {
             "host": host,
             "scan_timestamp": datetime.now(timezone.utc).isoformat(),
@@ -505,7 +511,9 @@ class CryptoScanner:
                 assets.append(self._ssh_to_asset(ssh, host))
 
             if "scan_timestamp" in host_scan:
-                scan_timestamp = scan_timestamp
+                # Audit H-1: this was a self-assignment no-op — actually use
+                # the per-host scan timestamp when present.
+                scan_timestamp = host_scan["scan_timestamp"]
 
         return {
             "schema_version": CBOM_SCHEMA_VERSION,

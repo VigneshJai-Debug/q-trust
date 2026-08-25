@@ -4,6 +4,7 @@ pragma solidity 0.8.24;
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "./MigrationRegistry.sol";
@@ -13,7 +14,7 @@ import "./lib/StringBounds.sol";
 /// @notice Auditors post attestations that they reviewed an organization's PQC
 ///         migration posture. Supports EIP-712 gasless posting and UUPS proxy
 ///         upgradeability.
-contract AuditRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeable {
+contract AuditRegistry is AccessControl, ReentrancyGuard, Pausable, Initializable, UUPSUpgradeable {
 
     error AuditNotFound(bytes32 auditId);
     error DuplicateAudit(bytes32 auditId);
@@ -177,7 +178,7 @@ contract AuditRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeabl
         string calldata reportURI,
         uint256 nonce,
         bytes calldata signature
-    ) external whenNotPaused returns (bytes32 auditId) {
+    ) external nonReentrant whenNotPaused returns (bytes32 auditId) {
         address signer = _recoverAuditor(
             orgDid, result, assetsReviewed, assetsMigrated, reportHash, reportURI, nonce, signature
         );
@@ -233,7 +234,7 @@ contract AuditRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeabl
         uint256 assetsMigrated,
         bytes32 reportHash,
         string calldata reportURI
-    ) external onlyRole(AUDITOR_ROLE) whenNotPaused returns (bytes32 auditId) {
+    ) external nonReentrant onlyRole(AUDITOR_ROLE) whenNotPaused returns (bytes32 auditId) {
         return _postAudit(msg.sender, orgDid, result, assetsReviewed, assetsMigrated, reportHash, reportURI);
     }
 

@@ -34,6 +34,7 @@ dependencies = [
 
 [project.optional-dependencies]
 net = ["python-nmap>=0.7.1"]
+ml = ["torch>=2.0.0", "numpy>=1.24.0"]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",

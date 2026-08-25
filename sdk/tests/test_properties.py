@@ -183,7 +183,7 @@ claim_sets = st.dictionaries(
     st.text(alphabet="abcdefghijklmnop_", min_size=1, max_size=10),
     st.one_of(json_scalars, st.lists(json_scalars, max_size=3)),
     max_size=4,
-).filter(lambda d: all(not isinstance(v, dict) for v in d.values()))
+).filter(lambda d: all(not isinstance(v, dict) for v in d.values()) and "id" not in d)
 
 
 @settings(max_examples=40)
@@ -195,6 +195,14 @@ def test_vc_issue_verify_roundtrip(subject, claims):
     result = verifier.verify_credential_sync(vc)
     assert result.valid is True
     assert result.subject_did == subject
+
+
+def test_vc_issue_rejects_reserved_id_claim():
+    """Caller claims must not clobber the subject DID binding (audit follow-up)."""
+    signing_key = SigningKey.generate()
+    issuer = VCIssuer(issuer_did=ISSUER_DID, private_key=bytes(signing_key))
+    with pytest.raises(ValueError, match="reserved"):
+        issuer.issue(subject_did="did:web:creditunion.com", claims={"id": "evil"})
 
 
 @settings(max_examples=40)

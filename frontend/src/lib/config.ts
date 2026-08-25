@@ -7,8 +7,10 @@
 import { createPublicClient, http, type Address, type Chain } from "viem";
 import { baseSepolia } from "viem/chains";
 
-const RPC_URL = process.env.QTRUST_BASE_SEPOLIA_RPC ?? "https://sepolia.base.org";
-const USE_MAINNET = process.env.QTRUST_USE_MAINNET === "true";
+const RPC_URL = process.env.NEXT_PUBLIC_QTRUST_BASE_SEPOLIA_RPC ??
+  process.env.QTRUST_BASE_SEPOLIA_RPC ?? "https://sepolia.base.org";
+const USE_MAINNET = process.env.NEXT_PUBLIC_QTRUST_USE_MAINNET === "true" ||
+  process.env.QTRUST_USE_MAINNET === "true";
 
 export const CHAIN: Chain = USE_MAINNET ? {
   id: 8453,
@@ -24,12 +26,34 @@ export const publicClient = createPublicClient({
   transport: http(RPC_URL, { timeout: 30_000 }),
 });
 
-/** Contract addresses, sourced from environment. */
+/** Contract addresses, sourced from environment.
+ *
+ * Client components only see NEXT_PUBLIC_* vars (Next.js inlines them into
+ * the browser bundle); server-side env names are accepted as a fallback so
+ * API routes / SSR still work without duplication (audit Critical #3).
+ */
 export const CONTRACTS = {
-  assetRegistry: (process.env.QTRUST_ASSET_REGISTRY_ADDRESS ?? process.env.QTRUST_REGISTRY_ADDRESS ?? "0x0") as Address,
-  vendorRegistry: (process.env.QTRUST_VENDOR_REGISTRY_ADDRESS ?? "0x0") as Address,
-  migrationRegistry: (process.env.QTRUST_MIGRATION_REGISTRY_ADDRESS ?? "0x0") as Address,
-  auditRegistry: (process.env.QTRUST_AUDIT_REGISTRY_ADDRESS ?? "0x0") as Address,
+  assetRegistry: (
+    process.env.NEXT_PUBLIC_QTRUST_ASSET_REGISTRY_ADDRESS ??
+    process.env.QTRUST_ASSET_REGISTRY_ADDRESS ??
+    process.env.QTRUST_REGISTRY_ADDRESS ??
+    "0x0"
+  ) as Address,
+  vendorRegistry: (
+    process.env.NEXT_PUBLIC_QTRUST_VENDOR_REGISTRY_ADDRESS ??
+    process.env.QTRUST_VENDOR_REGISTRY_ADDRESS ??
+    "0x0"
+  ) as Address,
+  migrationRegistry: (
+    process.env.NEXT_PUBLIC_QTRUST_MIGRATION_REGISTRY_ADDRESS ??
+    process.env.QTRUST_MIGRATION_REGISTRY_ADDRESS ??
+    "0x0"
+  ) as Address,
+  auditRegistry: (
+    process.env.NEXT_PUBLIC_QTRUST_AUDIT_REGISTRY_ADDRESS ??
+    process.env.QTRUST_AUDIT_REGISTRY_ADDRESS ??
+    "0x0"
+  ) as Address,
 } as const;
 
 /** Resolve a 0x-prefixed hex asset ID into a bytes32 for ABI calls. */

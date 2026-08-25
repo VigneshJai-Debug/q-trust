@@ -173,10 +173,14 @@ export function securityHeaders(
 export function gracefulShutdown(
   server: FastifyInstance,
   signal: string,
+  cleanup?: () => Promise<void>,
 ): void {
   const handler = async () => {
     server.log.info({ signal }, 'Received signal, shutting down gracefully');
     try {
+      if (cleanup) {
+        await cleanup();
+      }
       await server.close();
       server.log.info('Server closed successfully');
       process.exit(0);

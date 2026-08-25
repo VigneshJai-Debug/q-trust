@@ -247,6 +247,15 @@ contract MigrationRegistryTest is Test {
 
     function test_DomainSeparator_ChainFork_SignedStillVerifies() public {
         bytes32 sepBefore = registry.domainSeparator();
+        // The signed path requires the signer to hold MIGRATOR_ROLE
+        // (role-bypass fix).
+        registry.grantRole(registry.MIGRATOR_ROLE(), orgSigner);
+        // The signer must also OWN the asset (audit M-1 ownership check),
+        // so register a fresh asset under orgSigner instead of migrator's.
+        vm.prank(orgSigner);
+        assets.grantRole(assets.REGISTRAR_ROLE(), orgSigner);
+        vm.prank(orgSigner);
+        bytes32 forkAssetId = assets.registerCBOM(keccak256("cbom-fork"), "ipfs://QmCBOM-fork");
 
         // Simulate a chain fork: the separator must re-derive for chain 999.
         vm.chainId(999);
@@ -254,15 +263,53 @@ contract MigrationRegistryTest is Test {
 
         bytes32 migrationId = keccak256("fork-migration");
         bytes memory sig = _sign(
-            orgSigner, orgKey, migrationId, ASSET_ID, "RSA-2048", "ML-DSA-441", EVIDENCE_HASH, "ipfs://QmEv", 0
+            orgSigner, orgKey, migrationId, forkAssetId, "RSA-2048", "ML-DSA-441", EVIDENCE_HASH, "ipfs://QmEv", 0
         );
         vm.prank(relayer);
         bytes32 recorded = registry.recordMigrationSigned(
-            migrationId, ASSET_ID, "RSA-2048", "ML-DSA-441", EVIDENCE_HASH, "ipfs://QmEv", 0, sig
+            migrationId, forkAssetId, "RSA-2048", "ML-DSA-441", EVIDENCE_HASH, "ipfs://QmEv", 0, sig
         );
 
         assertEq(recorded, migrationId, "signed migration must verify on the forked chain");
         assertEq(registry.nonces(orgSigner), 1);
+    }
+
+    function test_RevertWhen_SignerLacksMigratorRole_SignedPath() public {
+        // Regression test for the gasless role bypass: a valid signature from
+        // an EOA WITHOUT MIGRATOR_ROLE must be rejected.
+        uint256 outsiderSk = 0x0A6D2;
+        address outsider = vm.addr(outsiderSk);
+        bytes32 migrationId = keccak256("unauthorized-migration");
+        bytes memory sig = _sign(
+            outsider, outsiderSk, migrationId, ASSET_ID, "RSA-2048", "ML-DSA-441", EVIDENCE_HASH, "ipfs://QmEv", 0
+        );
+
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(MigrationRegistry.NotMigrator.selector, outsider));
+        registry.recordMigrationSigned(
+            migrationId, ASSET_ID, "RSA-2048", "ML-DSA-441", EVIDENCE_HASH, "ipfs://QmEv", 0, sig
+        );
+    }
+
+    function test_RevertWhen_RecordingMigrationForForeignAsset() public {
+        // Regression test (audit M-1): a migrator who does NOT own the asset
+        // must not be able to record a migration against it.
+        uint256 foreignKey = 0x0A6D5;
+        address foreignMigrator = vm.addr(foreignKey);
+        registry.grantRole(registry.MIGRATOR_ROLE(), foreignMigrator);
+
+        vm.prank(foreignMigrator);
+        vm.expectRevert(
+            abi.encodeWithSelector(MigrationRegistry.NotAssetOwner.selector, foreignMigrator, ASSET_ID)
+        );
+        registry.recordMigration(
+            keccak256("foreign-migration"),
+            ASSET_ID,
+            "RSA-2048",
+            "ML-DSA-441",
+            EVIDENCE_HASH,
+            "ipfs://QmEvidence"
+        );
     }
 
     function test_RevertWhen_AlgorithmTooLong() public {

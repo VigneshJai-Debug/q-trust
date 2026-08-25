@@ -328,10 +328,12 @@ const REORG_CHECK_INTERVAL_MS = Number(process.env.QTRUST_INDEXER_REORG_CHECK_IN
 let lastReorgCheckAt = 0;
 
 /** Subscribe to live events after the initial backfill. */
+const unwatchers: Array<() => void> = [];
+
 function watchLive(spec: EventSpec): void {
   const address = spec.contract();
   if (address === "0x0") return;
-  getPublicClient().watchEvent({
+  const unwatch = getPublicClient().watchEvent({
     address,
     event: parseAbiItem(spec.event) as AbiEvent,
     onLogs: async (logs) => {
@@ -346,11 +348,21 @@ function watchLive(spec: EventSpec): void {
           console.warn(`Indexer: reorg check failed for ${spec.key}:`, err);
         }
       }
+      let head: bigint | null = null;
+      if (CONFIRMATIONS > 0) {
+        // Guarded: an RPC outage here must not reject inside the watcher
+        // callback and crash the process (audit Critical #10).
+        try {
+          head = await getPublicClient().getBlockNumber();
+        } catch (err) {
+          console.warn(`Indexer: getBlockNumber failed for ${spec.key}, skipping batch:`, err);
+          return;
+        }
+      }
       for (const log of logs) {
         const blockNum = log.blockNumber ?? 0n;
         // Wait for N confirmations before processing to handle re-orgs.
-        if (CONFIRMATIONS > 0) {
-          const head = await getPublicClient().getBlockNumber();
+        if (head !== null) {
           if (head - blockNum < BigInt(CONFIRMATIONS)) {
             // Not enough confirmations yet — skip, backfill will catch it on next restart.
             continue;
@@ -362,7 +374,6 @@ function watchLive(spec: EventSpec): void {
             await recordProcessedBlock(log.blockNumber, log.blockHash);
           }
           await setCursor(spec.key, blockNum + 1n, log.blockHash ?? "");
-
           // Fan out webhook delivery for this event.
           try {
             const { fanOut } = await import("./webhook.js");
@@ -387,9 +398,22 @@ function watchLive(spec: EventSpec): void {
       }
     },
   });
+  unwatchers.push(unwatch);
 }
 
 let started = false;
+
+/** Stop live event subscriptions (graceful shutdown). */
+export function stopIndexer(): void {
+  for (const unwatch of unwatchers.splice(0)) {
+    try {
+      unwatch();
+    } catch {
+      // best-effort during shutdown
+    }
+  }
+  started = false;
+}
 
 /** Start the indexer (idempotent). Call once at server boot. */
 export async function startIndexer(): Promise<void> {

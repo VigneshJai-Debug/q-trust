@@ -4,8 +4,10 @@
 Supports:
 - W3C VC Data Model v2.0 (JSON-LD and JWT)
 - Ed25519 signatures
-- SD-JWT selective disclosure (basic)
 - Credential revocation checking via on-chain roots
+
+Note: SD-JWT selective disclosure is NOT implemented. Field-stripping a
+signed credential is cryptographically unsound (see VCPresenter.present).
 """
 from __future__ import annotations
 
@@ -179,6 +181,10 @@ class VCIssuer:
         schema_id: str | None = None,
     ) -> VerifiableCredential:
         """Issue a new Verifiable Credential."""
+        if claims and "id" in claims:
+            # "id" carries the subject DID and is set from subject_did;
+            # letting caller claims override it breaks subject binding.
+            raise ValueError("claim 'id' is reserved for the subject DID")
         types = ["VerifiableCredential"]
         if credential_type:
             types.extend(credential_type)
@@ -229,10 +235,7 @@ class VCPresenter:
 
     Usage:
         presenter = VCPresenter(holder_did="did:web:creditunion.com")
-        vp = presenter.present(
-            vc=credential,
-            disclosed_fields=["pqc_readiness_level"],
-        )
+        vp = presenter.present(vc=credential, verifier_did="did:web:verifier.example")
     """
 
     def __init__(self, holder_did: str, private_key: bytes | None = None):
@@ -245,28 +248,25 @@ class VCPresenter:
         disclosed_fields: list[str] | None = None,
         verifier_did: str | None = None,
     ) -> VerifiablePresentation:
-        """Create a selective-disclosure presentation.
+        """Create a Verifiable Presentation binding the holder to the VC.
 
-        If disclosed_fields is specified, only those fields are included
-        in the credentialSubject (SD-JWT style).
+        Selective disclosure is intentionally NOT supported: stripping fields
+        from a credential whose issuer proof covers the FULL subject leaves
+        the disclosed values with no cryptographic binding (audit Critical
+        #6) — a malicious holder could present arbitrary "disclosed" content.
+        Real selective disclosure requires salted-digest commitments at
+        issuance (SD-JWT); passing ``disclosed_fields`` now raises ValueError
+        instead of silently producing a forgeable presentation.
         """
         if disclosed_fields:
-            # Selective disclosure: only include specified fields
-            subject = vc.credentialSubject
-            disclosed = {"id": subject.get("id")}
-            for field in disclosed_fields:
-                if field in subject:
-                    disclosed[field] = subject[field]
-
-            vc_data = {
-                "@context": vc.context,
-                "type": vc.type,
-                "issuer": vc.issuer,
-                "credentialSubject": disclosed,
-            }
-        else:
-            vc_data = vc.model_dump(by_alias=True, exclude_none=True)
-            vc_data.pop("proof", None)
+            raise ValueError(
+                "Selective disclosure is not supported: field-stripping "
+                "produces presentations whose claims are not bound by the "
+                "issuer's signature. Use the full credential, or issue "
+                "SD-JWT credentials with salted commitments."
+            )
+        vc_data = vc.model_dump(by_alias=True, exclude_none=True)
+        vc_data.pop("proof", None)
 
         vp = VerifiablePresentation(
             holder=self.holder_did,

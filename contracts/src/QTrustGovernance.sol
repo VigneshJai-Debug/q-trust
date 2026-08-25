@@ -118,30 +118,27 @@ contract QTrustGovernance is AccessControl {
 
     /** @notice Schedule an arbitrary call through the timelock. */
     function schedule(address target, bytes calldata data, bytes32 salt) external onlyRole(PROPOSER_ROLE) {
+        // Role mutations MUST go through scheduleGrantRole(), which restricts
+        // recipients to the timelock (or an explicitly provisioned operator).
+        // Otherwise a proposer could grant any operational role to any EOA
+        // after the timelock delay.
+        if (_isRoleMutationCall(data)) revert ForbiddenGovernanceCall();
         _schedule(target, data, salt);
     }
 
     function _schedule(address target, bytes memory data, bytes32 salt) internal {
-        // Prevent governance from escalating itself to full admin.
-        if (_isAdminRoleCall(data)) revert ForbiddenGovernanceCall();
         timelock.schedule(target, 0, data, bytes32(0), salt, DEFAULT_DELAY);
         emit GovernanceCallScheduled(target, data, DEFAULT_DELAY, salt);
     }
 
-    /// @dev True when calldata targets grantRole/revokeRole/renounceRole with
-    ///      the DEFAULT_ADMIN_ROLE (bytes32(0)) as the role argument.
-    function _isAdminRoleCall(bytes memory data) internal pure returns (bool) {
-        if (data.length < 4 + 64) return false; // selector + role + account
+    /// @dev True when calldata invokes grantRole/revokeRole/renounceRole,
+    ///      regardless of which role is targeted.
+    function _isRoleMutationCall(bytes memory data) internal pure returns (bool) {
+        if (data.length < 4) return false;
         bytes4 selector = bytes4(data);
-        bool isRoleCall = selector == IAccessControl.grantRole.selector ||
+        return selector == IAccessControl.grantRole.selector ||
             selector == IAccessControl.revokeRole.selector ||
             selector == IAccessControl.renounceRole.selector;
-        if (!isRoleCall) return false;
-        bytes32 role;
-        assembly {
-            role := mload(add(data, 36))
-        }
-        return role == _DEFAULT_ADMIN_ROLE;
     }
 
     /** @notice Execute a previously scheduled call (after its delay elapses). */

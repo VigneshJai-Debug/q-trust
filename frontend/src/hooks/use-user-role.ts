@@ -111,11 +111,11 @@ export function useUserRole(): UserRoleInfo {
 
     const orgData = orgAssets.data;
     const vendorData = vendorAttestations.data;
-    const orgTotal =
-      orgData && typeof orgData === "object" && "total" in orgData
-        ? Number((orgData as { total?: unknown }).total)
-        : 0;
-    const isOrg = Number.isFinite(orgTotal) && orgTotal > 0;
+    // fetchOrgAssets() returns AssetInfo[] — an array has no `total` field,
+    // so the previous `"total" in orgData` check never matched and isOrg was
+    // permanently false (audit Critical #2). Use the array length.
+    const orgTotal = Array.isArray(orgData) ? orgData.length : 0;
+    const isOrg = orgTotal > 0;
     const isVendor = Boolean(vendorData && "attestations" in vendorData && vendorData.attestations.length > 0);
 
     let role: UserRole = "none";

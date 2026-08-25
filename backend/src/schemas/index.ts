@@ -109,6 +109,39 @@ export const RelayAuditBodySchema = Type.Object({
   signature: HexSignature,
 });
 
+// Mirrors VendorRegistry.attestProductSigned(string productId, string version,
+// string algorithm, bool supported, string evidenceURI, uint256 nonce, bytes signature)
+export const RelayAttestationBodySchema = Type.Object({
+  productId: Type.String({ minLength: 1, maxLength: 128 }),
+  version: Type.String({ minLength: 1, maxLength: 64 }),
+  algorithm: Type.String({ minLength: 1, maxLength: 128 }),
+  supported: Type.Boolean(),
+  evidenceURI: Type.Optional(Type.String({ maxLength: 2048 })),
+  nonce: Type.Integer({ minimum: 0 }),
+  signature: HexSignature,
+});
+
+// Mirrors AssetRegistry.registerCBOMSigned(bytes32 cbomHash,
+// string metadataURI, uint256 nonce, bytes signature)
+export const RelayCBOMBodySchema = Type.Object({
+  cbomHash: HexBytes32,
+  metadataURI: Type.Optional(Type.String({ maxLength: 2048 })),
+  nonce: Type.Integer({ minimum: 0 }),
+  signature: HexSignature,
+});
+
+// Mirrors MigrationRegistry.recordMigrationSigned(...)
+export const RelayMigrationBodySchema = Type.Object({
+  migrationId: HexBytes32,
+  assetId: HexBytes32,
+  fromAlgorithm: Type.String({ minLength: 1, maxLength: 64 }),
+  toAlgorithm: Type.String({ minLength: 1, maxLength: 64 }),
+  evidenceHash: HexBytes32,
+  evidenceURI: Type.Optional(Type.String({ maxLength: 2048 })),
+  nonce: Type.Integer({ minimum: 0 }),
+  signature: HexSignature,
+});
+
 export const SideChannelAnalyzeSchema = Type.Object({
   simulated: Type.Optional(Type.Boolean({ default: true })),
   leakage_prob: Type.Optional(Type.Number({ minimum: 0, maximum: 1, default: 0 })),

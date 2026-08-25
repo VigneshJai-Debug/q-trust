@@ -20,6 +20,7 @@ contract EvidenceRegistry is AccessControl, ReentrancyGuard, Pausable, Initializ
     error DuplicateEvidence(bytes32 evidenceId);
     error EmptyEvidenceRoot();
     error NotOwnerOrAdmin(address caller);
+    error NotRegistrar(address caller);
     error AlreadyRevoked(bytes32 evidenceId);
     error InvalidSignature();
     error InvalidNonce(address signer, uint256 provided, uint256 expected);
@@ -174,6 +175,9 @@ contract EvidenceRegistry is AccessControl, ReentrancyGuard, Pausable, Initializ
             evidenceRoot, entryCount, scanTarget, findingsCount, riskSummaryHash, nonce, signature
         );
         if (signer == address(0)) revert InvalidSignature();
+        // The signature proves intent, not authority: the signer must hold
+        // REGISTRAR_ROLE exactly like the direct path requires.
+        if (!hasRole(REGISTRAR_ROLE, signer)) revert NotRegistrar(signer);
         if (nonces[signer] != nonce) {
             revert InvalidNonce(signer, nonce, nonces[signer]);
         }

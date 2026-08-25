@@ -8,6 +8,8 @@ import "../src/AssetRegistry.sol";
 import "../src/VendorRegistry.sol";
 import "../src/MigrationRegistry.sol";
 import "../src/AuditRegistry.sol";
+import "../src/ComplianceAttestation.sol";
+import "../src/EvidenceRegistry.sol";
 import "../src/QTrustGovernance.sol";
 import "../src/RevocationAnchor.sol";
 import "../src/PolicyCommitment.sol";
@@ -23,13 +25,16 @@ contract Deploy is Script {
         (AssetRegistry assets, VendorRegistry vendors, MigrationRegistry migrations, AuditRegistry audits) =
             _deployRegistries(deployer);
 
+        // Deploy the compliance and evidence registries alongside the core
+        // four so every registry is governed by the same timelock (audit M-6).
+        ComplianceAttestation compliance = _deployCompliance(deployer);
+        EvidenceRegistry evidence = _deployEvidence(deployer);
+
         TimelockController timelock = _deployTimelock(deployer);
 
-        // Pre-grant AUDITOR_ROLE to the deployer so the E2E test / pilot can
-        // operate as an auditor without going through timelock governance.
-        audits.grantRole(audits.AUDITOR_ROLE(), deployer);
-
-        _handAdminToTimelock(assets, vendors, migrations, audits, timelock, deployer);
+        _handAdminToTimelock(
+            assets, vendors, migrations, audits, compliance, evidence, timelock, deployer
+        );
 
         QTrustGovernance governance = new QTrustGovernance(
             address(timelock),
@@ -162,6 +167,32 @@ contract Deploy is Script {
         console2.log("TrustAnchorRegistry proxy:  ", address(trustAnchor));
     }
 
+    function _deployCompliance(address deployer) internal returns (ComplianceAttestation) {
+        ComplianceAttestation impl = new ComplianceAttestation();
+        ComplianceAttestation compliance = ComplianceAttestation(
+            address(new ERC1967Proxy(
+                address(impl),
+                abi.encodeCall(ComplianceAttestation.initialize, ())
+            ))
+        );
+        console2.log("ComplianceAttestation impl: ", address(impl));
+        console2.log("ComplianceAttestation proxy:", address(compliance));
+        return compliance;
+    }
+
+    function _deployEvidence(address deployer) internal returns (EvidenceRegistry) {
+        EvidenceRegistry impl = new EvidenceRegistry();
+        EvidenceRegistry evidence = EvidenceRegistry(
+            address(new ERC1967Proxy(
+                address(impl),
+                abi.encodeCall(EvidenceRegistry.initialize, ())
+            ))
+        );
+        console2.log("EvidenceRegistry impl:      ", address(impl));
+        console2.log("EvidenceRegistry proxy:     ", address(evidence));
+        return evidence;
+    }
+
     function _deployTimelock(address deployer) internal returns (TimelockController) {
         address[] memory proposers = new address[](1);
         proposers[0] = deployer;
@@ -175,6 +206,8 @@ contract Deploy is Script {
         VendorRegistry vendors,
         MigrationRegistry migrations,
         AuditRegistry audits,
+        ComplianceAttestation compliance,
+        EvidenceRegistry evidence,
         TimelockController timelock,
         address deployer
     ) internal {
@@ -188,28 +221,67 @@ contract Deploy is Script {
         migrations.grantRole(migrations.MIGRATOR_ROLE(), address(timelock));
         migrations.grantRole(migrations.AUDITOR_ROLE(), address(timelock));
         audits.grantRole(audits.AUDITOR_ROLE(), address(timelock));
+        compliance.grantRole(compliance.ATTESTER_ROLE(), address(timelock));
+        evidence.grantRole(evidence.REGISTRAR_ROLE(), address(timelock));
 
         console2.log("Operational roles transferred to timelock:");
-        console2.log("  AssetRegistry.REGISTRAR_ROLE      ->", address(timelock));
-        console2.log("  VendorRegistry.VENDOR_ADMIN_ROLE  ->", address(timelock));
-        console2.log("  MigrationRegistry.MIGRATOR_ROLE   ->", address(timelock));
-        console2.log("  MigrationRegistry.AUDITOR_ROLE    ->", address(timelock));
-        console2.log("  AuditRegistry.AUDITOR_ROLE        ->", address(timelock));
+        console2.log("  AssetRegistry.REGISTRAR_ROLE           ->", address(timelock));
+        console2.log("  VendorRegistry.VENDOR_ADMIN_ROLE       ->", address(timelock));
+        console2.log("  MigrationRegistry.MIGRATOR_ROLE        ->", address(timelock));
+        console2.log("  MigrationRegistry.AUDITOR_ROLE         ->", address(timelock));
+        console2.log("  AuditRegistry.AUDITOR_ROLE             ->", address(timelock));
+        console2.log("  ComplianceAttestation.ATTESTER_ROLE    ->", address(timelock));
+        console2.log("  EvidenceRegistry.REGISTRAR_ROLE        ->", address(timelock));
 
         assets.grantRole(adminRole, address(timelock));
         vendors.grantRole(adminRole, address(timelock));
         migrations.grantRole(adminRole, address(timelock));
         audits.grantRole(adminRole, address(timelock));
+        compliance.grantRole(adminRole, address(timelock));
+        evidence.grantRole(adminRole, address(timelock));
 
-        assets.renounceRole(adminRole, deployer);
-        vendors.renounceRole(adminRole, deployer);
-        migrations.renounceRole(adminRole, deployer);
-        audits.renounceRole(adminRole, deployer);
+        // Renounce ALL deployer roles (admin AND operational): retaining the
+        // operational roles would let the deployer bypass the timelock for
+        // every registration, migration, attestation, and evidence record.
+        _renounceDeployerRoles(assets, deployer, [assets.REGISTRAR_ROLE(), bytes32(0)]);
+        _renounceDeployerRoles(vendors, deployer, [vendors.VENDOR_ADMIN_ROLE(), bytes32(0)]);
+        _renounceDeployerRoles(
+            migrations,
+            deployer,
+            [
+                migrations.MIGRATOR_ROLE(),
+                migrations.AUDITOR_ROLE()
+            ]
+        );
+        _renounceDeployerRoles(audits, deployer, [bytes32(0), bytes32(0)]);
+        _renounceDeployerRoles(compliance, deployer, [compliance.ATTESTER_ROLE(), bytes32(0)]);
+        _renounceDeployerRoles(evidence, deployer, [evidence.REGISTRAR_ROLE(), bytes32(0)]);
 
-        console2.log("DEFAULT_ADMIN_ROLE granted to timelock; deployer renounced:");
+        console2.log("DEFAULT_ADMIN_ROLE granted to timelock; all deployer roles renounced:");
         console2.log("  AssetRegistry     ", address(assets));
         console2.log("  VendorRegistry    ", address(vendors));
         console2.log("  MigrationRegistry ", address(migrations));
         console2.log("  AuditRegistry     ", address(audits));
+        console2.log("  ComplianceAttestation", address(compliance));
+        console2.log("  EvidenceRegistry     ", address(evidence));
+    }
+
+    /// @dev Renounce DEFAULT_ADMIN_ROLE plus each supplied operational role
+    ///      when the deployer still holds it.
+    function _renounceDeployerRoles(
+        IAccessControl accessControl,
+        address account,
+        bytes32[2] memory extraRoles
+    ) internal {
+        bytes32 adminRole = 0x00;
+        if (accessControl.hasRole(adminRole, account)) {
+            accessControl.renounceRole(adminRole, account);
+        }
+        for (uint256 i = 0; i < extraRoles.length; i++) {
+            if (extraRoles[i] == bytes32(0)) continue;
+            if (accessControl.hasRole(extraRoles[i], account)) {
+                accessControl.renounceRole(extraRoles[i], account);
+            }
+        }
     }
 }

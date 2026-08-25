@@ -197,7 +197,10 @@ def _lookup_vulnerability(algorithm: str, key_size: int | None = None) -> Quantu
     if algo_upper in _NORMALIZED_VULNERABILITY_DB:
         vuln = _NORMALIZED_VULNERABILITY_DB[algo_upper]
     else:
-        vuln = QuantumVulnerability.SAFE
+        # Fail closed: an algorithm we cannot identify is treated as
+        # quantum-BROKEN until proven otherwise (audit Critical #8). An
+        # attacker-controlled algorithm string must never score as safe.
+        vuln = QuantumVulnerability.BROKEN
         for key, value in ALGORITHM_VULNERABILITY_DB.items():
             normalized_key = _normalize_algorithm_name(key)
             if normalized_key in algo_upper or algo_upper in normalized_key:

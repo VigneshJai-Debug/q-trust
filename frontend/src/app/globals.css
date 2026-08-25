@@ -6,6 +6,30 @@
   --color-qtrust-600: #0d9488;
   --color-qtrust-700: #0f766e;
   --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* shadcn/ui design tokens (audit Critical #4). GPU/analytics panels use
+     bg-card, text-foreground, border-border, etc. — without these the
+     components render transparent and borderless. */
+  --color-background: #ffffff;
+  --color-foreground: #0f172a;
+  --color-card: #ffffff;
+  --color-card-foreground: #0f172a;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+  --color-border: #e2e8f0;
+  --color-input: #e2e8f0;
+  --color-ring: #14b8a6;
+  --color-primary: #0d9488;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #f1f5f9;
+  --color-secondary-foreground: #0f172a;
+  --color-accent: #f0fdfa;
+  --color-accent-foreground: #0f172a;
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #0f172a;
+  --radius: 0.5rem;
 }
 
 :root {

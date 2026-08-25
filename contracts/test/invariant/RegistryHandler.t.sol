@@ -41,6 +41,7 @@ contract RegistryHandler is Test {
     uint256 public migrationsPauseToggles;
 
     bytes32 private immutable _seedAssetId;
+    mapping(address => bytes32) internal _assetOf;
 
     constructor() {
         assets = ProxyDeploy.asset();
@@ -67,6 +68,24 @@ contract RegistryHandler is Test {
         _seedAssetId = assets.registerCBOM(keccak256("seed-cbom"), "ipfs://QmSeed");
         seenAssetId[_seedAssetId] = true;
         _createdAssetIds.push(_seedAssetId);
+
+        // Each actor owns a dedicated asset so migrations respect the
+        // ownership rule (audit M-1): recordMigration* must only be invoked
+        // with an asset owned by the recording org.
+        for (uint256 i = 0; i < actors.length; i++) {
+            vm.prank(actors[i]);
+            bytes32 owned = assets.registerCBOM(
+                keccak256(abi.encode("owned-cbom", actors[i])),
+                "ipfs://QmOwned"
+            );
+            _assetOf[actors[i]] = owned;
+            seenAssetId[owned] = true;
+            _createdAssetIds.push(owned);
+        }
+    }
+
+    function _ownedAsset(address actor) internal view returns (bytes32) {
+        return _assetOf[actor];
     }
 
     function _addActor(uint256 key_) internal {
@@ -184,11 +203,13 @@ contract RegistryHandler is Test {
 
         if (_seenMigrationId[migrationId]) return;
 
+        bytes32 assetId = _ownedAsset(actor);
+
         if (migrations.paused()) {
             vm.expectRevert();
             vm.prank(actor);
             migrations.recordMigration(
-                migrationId, _seedAssetId, "RSA-2048", "ML-DSA-441",
+                migrationId, assetId, "RSA-2048", "ML-DSA-441",
                 keccak256("evd"), "ipfs://QmEv"
             );
             _seenMigrationId[migrationId] = true;
@@ -197,7 +218,7 @@ contract RegistryHandler is Test {
 
         vm.prank(actor);
         migrations.recordMigration(
-            migrationId, _seedAssetId, "RSA-2048", "ML-DSA-441",
+            migrationId, assetId, "RSA-2048", "ML-DSA-441",
             keccak256("evd"), "ipfs://QmEv"
         );
         _seenMigrationId[migrationId] = true;
@@ -210,22 +231,23 @@ contract RegistryHandler is Test {
         if (_seenMigrationId[migrationId]) return;
 
         uint256 nonce = migrations.nonces(actor);
+        bytes32 assetId = _ownedAsset(actor);
         bytes memory sig = _signMigration(
-            actor, migrationId, _seedAssetId, "RSA-2048", "SLH-DSA-128s",
+            actor, migrationId, assetId, "RSA-2048", "SLH-DSA-128s",
             keccak256("evd-signed"), "ipfs://QmEvS", nonce
         );
 
         if (migrations.paused()) {
             vm.expectRevert();
             migrations.recordMigrationSigned(
-                migrationId, _seedAssetId, "RSA-2048", "SLH-DSA-128s",
+                migrationId, assetId, "RSA-2048", "SLH-DSA-128s",
                 keccak256("evd-signed"), "ipfs://QmEvS", nonce, sig
             );
             return;
         }
 
         migrations.recordMigrationSigned(
-            migrationId, _seedAssetId, "RSA-2048", "SLH-DSA-128s",
+            migrationId, assetId, "RSA-2048", "SLH-DSA-128s",
             keccak256("evd-signed"), "ipfs://QmEvS", nonce, sig
         );
         _seenMigrationId[migrationId] = true;

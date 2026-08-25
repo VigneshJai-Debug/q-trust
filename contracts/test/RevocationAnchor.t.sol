@@ -140,6 +140,26 @@ contract RevocationAnchorTest is Test {
         assertFalse(anchor.isIssuerActive(issuer1));
     }
 
+    function test_RevertWhen_DeactivatedIssuerUpdatesRoot() public {
+        // Regression test (audit M-2): a deactivated issuer must not be able
+        // to anchor new revocation roots on either path.
+        anchor.deactivateIssuer(issuer1);
+
+        vm.expectRevert(abi.encodeWithSelector(RevocationAnchor.IssuerInactive.selector, issuer1));
+        anchor.updateRoot(issuer1, keccak256("root-after-deactivation"));
+    }
+
+    function test_RevertWhen_DeactivatedIssuerUpdatesRootSigned() public {
+        // Same guard must hold on the EIP-712 gasless path.
+        anchor.deactivateIssuer(issuer1);
+        bytes32 root = keccak256("signed-root-after-deactivation");
+        bytes memory sig = _signRootUpdate(issuer1, issuerKey1, issuer1, root, 0);
+
+        vm.prank(makeAddr("relayer"));
+        vm.expectRevert(abi.encodeWithSelector(RevocationAnchor.IssuerInactive.selector, issuer1));
+        anchor.updateRootSigned(issuer1, root, 0, sig);
+    }
+
     // ======== Pausable ========
 
     function test_Pause_Unpause() public {

@@ -28,6 +28,29 @@ const VENDOR_REGISTRY = process.env.QTRUST_VENDOR_REGISTRY_ADDRESS as Address;
 const MIGRATION_REGISTRY = process.env.QTRUST_MIGRATION_REGISTRY_ADDRESS as Address;
 const AUDIT_REGISTRY = process.env.QTRUST_AUDIT_REGISTRY_ADDRESS as Address;
 
+// ------------------------------------------------------------------
+// Nonce serialization (audit H-4: TOCTOU race).
+//
+// The relay flow reads the signer's on-chain nonce and then broadcasts.
+// Two concurrent requests signed with the same nonce both pass the read
+// check; one transaction reverts on-chain and gas is wasted. Serializing
+// check+broadcast per (registry, signer) closes the race in-process.
+// ------------------------------------------------------------------
+const nonceLocks = new Map<string, Promise<unknown>>();
+
+function withNonceLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = nonceLocks.get(key) ?? Promise.resolve();
+  // Chain after the previous holder; a prior failure must not abort
+  // subsequent queued operations.
+  const run = prev.then(fn, fn);
+  const tail = run.catch(() => undefined);
+  nonceLocks.set(key, tail);
+  void tail.then(() => {
+    if (nonceLocks.get(key) === tail) nonceLocks.delete(key);
+  });
+  return run;
+}
+
 // Fail fast in production: a relayer key is mandatory at boot.
 if (process.env.NODE_ENV === "production" && !RELAYER_KEY) {
   throw new Error("QTRUST_RELAYER_PRIVATE_KEY is required");
@@ -190,42 +213,47 @@ export async function relaySignedAttestation(
   }
 
   // The vendor's current on-chain nonce must match the one they signed.
-  const onChainNonce = await publicClient.readContract({
-    address: VENDOR_REGISTRY,
-    abi: VendorRegistryAbi,
-    functionName: "nonces",
-    args: [signer],
-  });
-  if (BigInt(onChainNonce) !== BigInt(payload.nonce)) {
-    throw new Error(
-      `Nonce mismatch: signed ${payload.nonce}, on-chain ${onChainNonce} — signature is stale or replayed`,
+  // Check + broadcast are serialized per signer (audit H-4: TOCTOU race —
+  // two concurrent same-nonce requests would otherwise both pass the read
+  // and one transaction would revert on-chain, wasting gas).
+  return withNonceLock(`vendor:${signer}`, async () => {
+    const onChainNonce = await publicClient.readContract({
+      address: VENDOR_REGISTRY,
+      abi: VendorRegistryAbi,
+      functionName: "nonces",
+      args: [signer],
+    });
+    if (BigInt(onChainNonce) !== BigInt(payload.nonce)) {
+      throw new Error(
+        `Nonce mismatch: signed ${payload.nonce}, on-chain ${onChainNonce} — signature is stale or replayed`,
+      );
+    }
+
+    const txHash = await getWalletClient().writeContract({
+      address: VENDOR_REGISTRY,
+      abi: VendorRegistryAbi,
+      functionName: "attestProductSigned",
+      args: [
+        payload.productId,
+        payload.version,
+        payload.algorithm,
+        payload.supported,
+        payload.evidenceURI,
+        BigInt(payload.nonce),
+        payload.signature as `0x${string}`,
+      ],
+    });
+
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
+    const productAttestedLog = receipt.logs.find(
+      (log) => (log as any).eventName === "ProductAttested",
     );
-  }
+    const attestationId = productAttestedLog && "args" in productAttestedLog
+      ? (productAttestedLog.args as Record<string, unknown>)?.attestationId as string | undefined
+      : undefined;
 
-  const txHash = await getWalletClient().writeContract({
-    address: VENDOR_REGISTRY,
-    abi: VendorRegistryAbi,
-    functionName: "attestProductSigned",
-    args: [
-      payload.productId,
-      payload.version,
-      payload.algorithm,
-      payload.supported,
-      payload.evidenceURI,
-      BigInt(payload.nonce),
-      payload.signature as `0x${string}`,
-    ],
+    return { txHash, vendorDid: signer, attestationId: attestationId ?? "" };
   });
-
-  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
-  const productAttestedLog = receipt.logs.find(
-    (log) => (log as any).eventName === "ProductAttested",
-  );
-  const attestationId = productAttestedLog && "args" in productAttestedLog
-    ? (productAttestedLog.args as Record<string, unknown>)?.attestationId as string | undefined
-    : undefined;
-
-  return { txHash, vendorDid: signer, attestationId: attestationId ?? "" };
 }
 
 /** Fetch a vendor's current EIP-712 nonce (for signing). */
@@ -296,39 +324,42 @@ export async function relaySignedCBOMRegistration(
     throw new Error("EIP-712 signature verification failed: invalid signature");
   }
 
-  const onChainNonce = await publicClient.readContract({
-    address: ASSET_REGISTRY,
-    abi: AssetRegistryAbi,
-    functionName: "nonces",
-    args: [signer],
-  });
-  if (BigInt(onChainNonce) !== BigInt(payload.nonce)) {
-    throw new Error(
-      `Nonce mismatch: signed ${payload.nonce}, on-chain ${onChainNonce}`,
+  // Check + broadcast serialized per signer (audit H-4: TOCTOU race fix).
+  return withNonceLock(`asset:${signer}`, async () => {
+    const onChainNonce = await publicClient.readContract({
+      address: ASSET_REGISTRY,
+      abi: AssetRegistryAbi,
+      functionName: "nonces",
+      args: [signer],
+    });
+    if (BigInt(onChainNonce) !== BigInt(payload.nonce)) {
+      throw new Error(
+        `Nonce mismatch: signed ${payload.nonce}, on-chain ${onChainNonce}`,
+      );
+    }
+
+    const txHash = await getWalletClient().writeContract({
+      address: ASSET_REGISTRY,
+      abi: AssetRegistryAbi,
+      functionName: "registerCBOMSigned",
+      args: [
+        payload.cbomHash as `0x${string}`,
+        payload.metadataURI,
+        BigInt(payload.nonce),
+        payload.signature as `0x${string}`,
+      ],
+    });
+
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
+    const cbomRegisteredLog = receipt.logs.find(
+      (log) => (log as any).eventName === "CBOMRegistered",
     );
-  }
+    const assetId = cbomRegisteredLog && "args" in cbomRegisteredLog
+      ? (cbomRegisteredLog.args as Record<string, unknown>)?.assetId as string | undefined
+      : undefined;
 
-  const txHash = await getWalletClient().writeContract({
-    address: ASSET_REGISTRY,
-    abi: AssetRegistryAbi,
-    functionName: "registerCBOMSigned",
-    args: [
-      payload.cbomHash as `0x${string}`,
-      payload.metadataURI,
-      BigInt(payload.nonce),
-      payload.signature as `0x${string}`,
-    ],
+    return { txHash, orgDid: signer, assetId: assetId ?? "" };
   });
-
-  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
-  const cbomRegisteredLog = receipt.logs.find(
-    (log) => (log as any).eventName === "CBOMRegistered",
-  );
-  const assetId = cbomRegisteredLog && "args" in cbomRegisteredLog
-    ? (cbomRegisteredLog.args as Record<string, unknown>)?.assetId as string | undefined
-    : undefined;
-
-  return { txHash, orgDid: signer, assetId: assetId ?? "" };
 }
 
 /** Fetch an org's current EIP-712 nonce for CBOM registration. */
@@ -411,41 +442,44 @@ export async function relaySignedMigration(
     throw new Error("EIP-712 signature verification failed: invalid signature");
   }
 
-  const onChainNonce = await publicClient.readContract({
-    address: MIGRATION_REGISTRY,
-    abi: MigrationRegistryAbi,
-    functionName: "nonces",
-    args: [signer],
-  });
-  if (BigInt(onChainNonce) !== BigInt(payload.nonce)) {
-    throw new Error(
-      `Nonce mismatch: signed ${payload.nonce}, on-chain ${onChainNonce}`,
+  // Check + broadcast serialized per signer (audit H-4: TOCTOU race fix).
+  return withNonceLock(`migration:${signer}`, async () => {
+    const onChainNonce = await publicClient.readContract({
+      address: MIGRATION_REGISTRY,
+      abi: MigrationRegistryAbi,
+      functionName: "nonces",
+      args: [signer],
+    });
+    if (BigInt(onChainNonce) !== BigInt(payload.nonce)) {
+      throw new Error(
+        `Nonce mismatch: signed ${payload.nonce}, on-chain ${onChainNonce}`,
+      );
+    }
+
+    const txHash = await getWalletClient().writeContract({
+      address: MIGRATION_REGISTRY,
+      abi: MigrationRegistryAbi,
+      functionName: "recordMigrationSigned",
+      args: [
+        payload.migrationId as `0x${string}`,
+        payload.assetId as `0x${string}`,
+        payload.fromAlgorithm,
+        payload.toAlgorithm,
+        payload.evidenceHash as `0x${string}`,
+        payload.evidenceURI,
+        BigInt(payload.nonce),
+        payload.signature as `0x${string}`,
+      ],
+    });
+
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
+    const migrationRecordedLog = receipt.logs.find(
+      (log) => (log as any).eventName === "MigrationRecorded",
     );
-  }
+    const migrationId = migrationRecordedLog && "args" in migrationRecordedLog ? (migrationRecordedLog.args as Record<string, unknown>)?.migrationId as string | undefined : undefined;
 
-  const txHash = await getWalletClient().writeContract({
-    address: MIGRATION_REGISTRY,
-    abi: MigrationRegistryAbi,
-    functionName: "recordMigrationSigned",
-    args: [
-      payload.migrationId as `0x${string}`,
-      payload.assetId as `0x${string}`,
-      payload.fromAlgorithm,
-      payload.toAlgorithm,
-      payload.evidenceHash as `0x${string}`,
-      payload.evidenceURI,
-      BigInt(payload.nonce),
-      payload.signature as `0x${string}`,
-    ],
+    return { txHash, orgDid: signer, migrationId: migrationId ?? "" };
   });
-
-  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
-  const migrationRecordedLog = receipt.logs.find(
-    (log) => (log as any).eventName === "MigrationRecorded",
-  );
-  const migrationId = migrationRecordedLog && "args" in migrationRecordedLog ? (migrationRecordedLog.args as Record<string, unknown>)?.migrationId as string | undefined : undefined;
-
-  return { txHash, orgDid: signer, migrationId: migrationId ?? "" };
 }
 
 // ------------------------------------------------------------------
@@ -525,43 +559,46 @@ export async function relaySignedAudit(
     throw new Error("EIP-712 signature verification failed: invalid signature");
   }
 
-  const onChainNonce = await publicClient.readContract({
-    address: AUDIT_REGISTRY,
-    abi: AuditRegistryAbi,
-    functionName: "nonces",
-    args: [signer],
-  });
-  if (BigInt(onChainNonce) !== BigInt(payload.nonce)) {
-    throw new Error(
-      `Nonce mismatch: signed ${payload.nonce}, on-chain ${onChainNonce}`,
+  // Check + broadcast serialized per signer (audit H-4: TOCTOU race fix).
+  return withNonceLock(`audit:${signer}`, async () => {
+    const onChainNonce = await publicClient.readContract({
+      address: AUDIT_REGISTRY,
+      abi: AuditRegistryAbi,
+      functionName: "nonces",
+      args: [signer],
+    });
+    if (BigInt(onChainNonce) !== BigInt(payload.nonce)) {
+      throw new Error(
+        `Nonce mismatch: signed ${payload.nonce}, on-chain ${onChainNonce}`,
+      );
+    }
+
+    const txHash = await getWalletClient().writeContract({
+      address: AUDIT_REGISTRY,
+      abi: AuditRegistryAbi,
+      functionName: "postAuditSigned",
+      args: [
+        payload.orgDid as Address,
+        payload.result,
+        BigInt(payload.assetsReviewed),
+        BigInt(payload.assetsMigrated),
+        payload.reportHash as `0x${string}`,
+        payload.reportURI,
+        BigInt(payload.nonce),
+        payload.signature as `0x${string}`,
+      ],
+    });
+
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
+    const auditPostedLog = receipt.logs.find(
+      (log) => (log as any).eventName === "AuditPosted",
     );
-  }
+    const auditId = auditPostedLog && "args" in auditPostedLog
+      ? (auditPostedLog.args as Record<string, unknown>)?.auditId as string | undefined
+      : undefined;
 
-  const txHash = await getWalletClient().writeContract({
-    address: AUDIT_REGISTRY,
-    abi: AuditRegistryAbi,
-    functionName: "postAuditSigned",
-    args: [
-      payload.orgDid as Address,
-      payload.result,
-      BigInt(payload.assetsReviewed),
-      BigInt(payload.assetsMigrated),
-      payload.reportHash as `0x${string}`,
-      payload.reportURI,
-      BigInt(payload.nonce),
-      payload.signature as `0x${string}`,
-    ],
+    return { txHash, auditorDid: signer, orgDid: payload.orgDid, auditId: auditId ?? "" };
   });
-
-  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
-  const auditPostedLog = receipt.logs.find(
-    (log) => (log as any).eventName === "AuditPosted",
-  );
-  const auditId = auditPostedLog && "args" in auditPostedLog
-    ? (auditPostedLog.args as Record<string, unknown>)?.auditId as string | undefined
-    : undefined;
-
-  return { txHash, auditorDid: signer, orgDid: payload.orgDid, auditId: auditId ?? "" };
 }
 
 /** Fetch an auditor's current EIP-712 nonce for audit posting. */

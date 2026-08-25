@@ -167,6 +167,9 @@ contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
     ) external nonReentrant whenNotPaused returns (bytes32 assetId) {
         address signer = _recoverCBOMSigner(cbomHash, metadataURI, nonce, signature);
         if (signer == address(0)) revert InvalidSignature();
+        // The signature proves intent, not authority: the signer must hold
+        // REGISTRAR_ROLE exactly like the direct path requires.
+        if (!hasRole(REGISTRAR_ROLE, signer)) revert NotRegistrar(signer);
         if (nonces[signer] != nonce) {
             revert InvalidNonce(signer, nonce, nonces[signer]);
         }

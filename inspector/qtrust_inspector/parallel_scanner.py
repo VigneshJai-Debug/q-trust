@@ -200,15 +200,29 @@ class ParallelScanner:
 
         features_tensor = torch.stack(features).to(self.device)
 
+        # MigrationGNNv3.forward() expects a PyG Data/Batch object, not a raw
+        # tensor. Each asset is scored as its own single-node graph so the
+        # risk head produces one score per asset (latent bug: this call path
+        # previously crashed with AttributeError when the model was found).
+        from torch_geometric.data import Batch, Data
+
+        n = features_tensor.size(0)
+        empty_edges = torch.empty((2, 0), dtype=torch.long, device=self.device)
+        graphs = [
+            Data(x=features_tensor[i].unsqueeze(0), edge_index=empty_edges)
+            for i in range(n)
+        ]
+        batch_data = Batch.from_data_list(graphs).to(self.device)
+
         # Batch inference (all assets at once)
         with torch.no_grad():
             if self.use_gpu:
                 with torch.amp.autocast("cuda"):
-                    _, risk = self.risk_model(features_tensor)
+                    _, risk = self.risk_model(batch_data)
             else:
-                _, risk = self.risk_model(features_tensor)
+                _, risk = self.risk_model(batch_data)
 
-        return risk.cpu().tolist()
+        return risk.detach().float().cpu().view(-1).tolist()
 
     def _asset_to_features(self, algorithm: str, key_size: int, pqc_ready: bool, criticality: str) -> torch.Tensor:
         """Convert asset metadata to 6-dim feature vector."""

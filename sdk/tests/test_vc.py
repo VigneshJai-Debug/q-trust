@@ -60,7 +60,9 @@ def test_vc_to_jwt_claims():
     assert "vc" in claims
 
 
-def test_present_vc_selective_disclosure():
+def test_present_vc_rejects_selective_disclosure():
+    """Field-stripping 'selective disclosure' was cryptographically fake
+    (audit Critical #6) — it must now be rejected explicitly."""
     issuer = VCIssuer(issuer_did="did:web:trailofbits.com")
     vc = issuer.issue(
         subject_did="did:web:creditunion.com",
@@ -68,21 +70,32 @@ def test_present_vc_selective_disclosure():
     )
 
     presenter = VCPresenter(holder_did="did:web:creditunion.com")
-    vp = presenter.present(
-        vc=vc,
-        disclosed_fields=["pqc_readiness_level"],
-        verifier_did="did:web:ncua.gov",
+    with pytest.raises(ValueError, match="Selective disclosure"):
+        presenter.present(
+            vc=vc,
+            disclosed_fields=["pqc_readiness_level"],
+            verifier_did="did:web:ncua.gov",
+        )
+
+
+def test_present_vc_full_binds_issuer_proof():
+    issuer = VCIssuer(issuer_did="did:web:trailofbits.com")
+    vc = issuer.issue(
+        subject_did="did:web:creditunion.com",
+        claims={"pqc_readiness_level": "Level 2", "secret": "hidden"},
     )
 
-    assert vp.holder == "did:web:creditunion.com"
-    assert len(vp.verifiableCredential) == 1
+    presenter = VCPresenter(holder_did="did:web:creditunion.com")
+    vp = presenter.present(vc=vc, verifier_did="did:web:ncua.gov")
 
-    # Check that only disclosed fields are present
+    assert vp.holder == "did:web:creditunion.com"
     presented_vc = vp.verifiableCredential[0]
-    if isinstance(presented_vc, dict):
-        subject = presented_vc.get("credentialSubject", {})
-        assert "pqc_readiness_level" in subject
-        assert "secret" not in subject
+    assert isinstance(presented_vc, dict)
+    # The full issuer-signed subject is embedded — no silent field stripping.
+    subject = presented_vc.get("credentialSubject", {})
+    assert "pqc_readiness_level" in subject
+    assert vp.proof is not None
+    assert vp.proof.get("domain") == "did:web:ncua.gov"
 
 
 def test_present_vc_full():

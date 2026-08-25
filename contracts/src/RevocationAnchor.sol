@@ -17,6 +17,7 @@ import "./lib/StringBounds.sol";
 contract RevocationAnchor is AccessControl, ReentrancyGuard, Pausable, Initializable, UUPSUpgradeable {
 
     error IssuerNotRegistered(address issuer);
+    error IssuerInactive(address issuer);
     error EmptyRoot();
     error InvalidNonce(address signer, uint256 provided, uint256 expected);
     error InvalidSignature();
@@ -196,6 +197,9 @@ contract RevocationAnchor is AccessControl, ReentrancyGuard, Pausable, Initializ
         bytes32 newRoot
     ) internal returns (bytes32 previousRoot) {
         if (bytes(_issuers[issuer].issuerDid).length == 0) revert IssuerNotRegistered(issuer);
+        // A deactivated issuer must not anchor new revocation roots (this
+        // guards both the direct ISSUER_ADMIN_ROLE path and the EIP-712 path).
+        if (!_issuers[issuer].active) revert IssuerInactive(issuer);
         if (newRoot == bytes32(0)) revert EmptyRoot();
 
         previousRoot = _issuers[issuer].currentRoot;

@@ -172,6 +172,30 @@ contract QTrustGovernanceTest is Test {
         governance.scheduleGrantRole(0, registrarRole, makeAddr("attacker"), keccak256("evil"));
     }
 
+    function test_RawScheduleCannotCarryOperationalRoleGrant() public {
+        // Regression test (audit High #13): raw schedule() must not be able to
+        // carry grantRole calldata for ANY role — operational grants have to
+        // go through the account-restricted scheduleGrantRole().
+        bytes32 registrarRole = assets.REGISTRAR_ROLE();
+        vm.prank(deployer);
+        vm.expectRevert(QTrustGovernance.ForbiddenGovernanceCall.selector);
+        governance.schedule(
+            address(assets),
+            abi.encodeCall(IAccessControl.grantRole, (registrarRole, makeAddr("attacker"))),
+            keccak256("bypass-attempt")
+        );
+    }
+
+    function test_RawScheduleCannotCarryDefaultAdminGrant() public {
+        vm.prank(deployer);
+        vm.expectRevert(QTrustGovernance.ForbiddenGovernanceCall.selector);
+        governance.schedule(
+            address(assets),
+            abi.encodeCall(IAccessControl.grantRole, (bytes32(0), makeAddr("attacker"))),
+            keccak256("admin-bypass-attempt")
+        );
+    }
+
     function test_NonProposerCannotSchedule() public {
         vm.prank(makeAddr("random-caller"));
         vm.expectRevert();

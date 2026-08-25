@@ -48,6 +48,9 @@ contract EvidenceRegistryTest is Test {
     function test_DomainSeparator_ChainFork_SignedStillVerifies() public {
         uint256 ownerSk = 0x0A6C5;
         address ownerSigner = vm.addr(ownerSk);
+        // The signed path requires the signer to hold REGISTRAR_ROLE
+        // (role-bypass fix).
+        registry.grantRole(registry.REGISTRAR_ROLE(), ownerSigner);
         uint256 nonce = 0;
         bytes32 sepBefore = registry.domainSeparator();
 
@@ -80,5 +83,35 @@ contract EvidenceRegistryTest is Test {
 
         assertTrue(id != bytes32(0), "signed registration must verify on the forked chain");
         assertEq(registry.getEvidence(id).owner, ownerSigner);
+    }
+
+    function test_RevertWhen_SignerLacksRegistrarRole_SignedPath() public {
+        // Regression test for the gasless role bypass: a valid signature from
+        // an EOA WITHOUT REGISTRAR_ROLE must be rejected.
+        uint256 outsiderSk = 0x0A6D4;
+        address outsider = vm.addr(outsiderSk);
+        bytes32 structHash = keccak256(
+            abi.encode(
+                keccak256(
+                    "EvidenceRegistration(bytes32 evidenceRoot,uint256 entryCount,string scanTarget,"
+                    "uint256 findingsCount,bytes32 riskSummaryHash,uint256 nonce)"
+                ),
+                keccak256("evil-root"),
+                uint256(3),
+                keccak256(bytes("evil-host")),
+                uint256(1),
+                keccak256("evil-risk"),
+                uint256(0)
+            )
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", registry.domainSeparator(), structHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(outsiderSk, digest);
+        bytes memory sig = abi.encodePacked(r, s, v);
+
+        vm.prank(address(0xAE1A73));
+        vm.expectRevert(abi.encodeWithSelector(EvidenceRegistry.NotRegistrar.selector, outsider));
+        registry.registerEvidenceSigned(
+            keccak256("evil-root"), 3, "evil-host", 1, keccak256("evil-risk"), 0, sig
+        );
     }
 }

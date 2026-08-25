@@ -50,6 +50,20 @@ contract ComplianceAttestationTest is Test {
         registry.revokeAttestation(id, longReason);
     }
 
+    function test_RevertWhen_SignerLacksAttesterRole_SignedPath() public {
+        // Regression test for the gasless role bypass: a valid signature from
+        // an EOA WITHOUT ATTESTER_ROLE must be rejected.
+        uint256 outsiderSk = 0x0A6D3;
+        address outsider = vm.addr(outsiderSk);
+        bytes memory sig = _signCompliance(outsiderSk, "CNSA_2_0", keccak256("evd"), 0);
+
+        vm.prank(address(0xAE1A73));
+        vm.expectRevert(abi.encodeWithSelector(ComplianceAttestation.NotAttester.selector, outsider));
+        registry.attestComplianceSigned(
+            "CNSA_2_0", 90, 10, 9, 1, keccak256("evd"), 30, 0, sig
+        );
+    }
+
     function _signCompliance(
         uint256 sk,
         string memory framework,
@@ -81,6 +95,9 @@ contract ComplianceAttestationTest is Test {
     function test_DomainSeparator_ChainFork_SignedStillVerifies() public {
         uint256 orgSk = 0x0A6C4;
         address orgSigner = vm.addr(orgSk);
+        // The signed path now requires the signer to hold ATTESTER_ROLE
+        // (role-bypass fix) — grant it before exercising the fork scenario.
+        registry.grantRole(registry.ATTESTER_ROLE(), orgSigner);
         bytes32 sepBefore = registry.domainSeparator();
 
         // Simulate a chain fork: the separator must re-derive for chain 999.

@@ -20,6 +20,7 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard, Pausable, Initiali
     error NotMigrator(address caller);
     error AssetNotRegistered(bytes32 assetId);
     error AssetInactive(bytes32 assetId);
+    error NotAssetOwner(address caller, bytes32 assetId);
     error EmptyEvidenceHash();
     error SameAlgorithm(string algorithm);
     error ZeroAssetRegistry();
@@ -185,6 +186,9 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard, Pausable, Initiali
             evidenceHash, evidenceURI, nonce, signature
         );
         if (signer == address(0)) revert InvalidSignature();
+        // The signature proves intent, not authority: the signer must hold
+        // MIGRATOR_ROLE exactly like the direct path requires.
+        if (!hasRole(MIGRATOR_ROLE, signer)) revert NotMigrator(signer);
         if (nonces[signer] != nonce) {
             revert InvalidNonce(signer, nonce, nonces[signer]);
         }
@@ -255,10 +259,15 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard, Pausable, Initiali
 
         if (_migrations[migrationId].orgDid != address(0)) revert DuplicateMigration(migrationId);
 
-        // Cross-contract integrity: the asset must exist and be active.
+        // Cross-contract integrity: the asset must exist, be active, AND be
+        // owned by the recording org (audit M-1 — without the ownership
+        // check any migrator could record migrations against foreign assets).
         (bool exists, bool active, ) = assetRegistry.verifyAsset(assetId);
         if (!exists) revert AssetNotRegistered(assetId);
         if (!active) revert AssetInactive(assetId);
+        if (assetRegistry.getAsset(assetId).orgDid != orgDid) {
+            revert NotAssetOwner(orgDid, assetId);
+        }
 
         if (evidenceHash == bytes32(0)) revert EmptyEvidenceHash();
         if (keccak256(abi.encodePacked(fromAlgorithm)) == keccak256(abi.encodePacked(toAlgorithm))) {

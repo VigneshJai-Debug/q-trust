@@ -148,14 +148,15 @@ class DIDResolver:
         url = self._did_to_url(did)
 
         # Audit SDK-05 (TOCTOU/DNS rebinding) — see resolve_sync.
-        before_ips = self._resolve_ips(self._did_to_domain(identifier))
+        domain = self._did_to_domain(identifier)
+        before_ips = self._resolve_ips(domain)
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.get(url)
             resp.raise_for_status()
             data = resp.json()
 
-        if self._resolve_ips(self._did_to_domain(identifier)) != before_ips:
+        if self._resolve_ips(domain) != before_ips:
             raise ValueError(f"DNS rebinding detected while resolving {domain}")
 
         doc = DIDDocument(**data)
@@ -183,14 +184,15 @@ class DIDResolver:
         # fetch and re-check after. If the domain's address set changed between
         # validation and response, the response may have come from a rebound
         # (private) host — discard it.
-        before_ips = self._resolve_ips(self._did_to_domain(identifier))
+        domain = self._did_to_domain(identifier)
+        before_ips = self._resolve_ips(domain)
 
         with httpx_sync.Client(timeout=self.timeout) as client:
             resp = client.get(url)
             resp.raise_for_status()
             data = resp.json()
 
-        if self._resolve_ips(self._did_to_domain(identifier)) != before_ips:
+        if self._resolve_ips(domain) != before_ips:
             raise ValueError(f"DNS rebinding detected while resolving {domain}")
 
         doc = DIDDocument(**data)

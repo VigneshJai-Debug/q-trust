@@ -23,6 +23,7 @@ contract ComplianceAttestation is AccessControl, ReentrancyGuard, Pausable, Init
     error RuleCountMismatch(uint256 totalRules, uint256 compliantCount, uint256 nonCompliantCount);
     error InvalidValidityDays(uint256 validityDays);
     error NotOwner(address caller);
+    error NotAttester(address caller);
     error AlreadyRevoked(bytes32 attestationId);
     error InvalidSignature();
     error InvalidNonce(address signer, uint256 provided, uint256 expected);
@@ -186,6 +187,9 @@ contract ComplianceAttestation is AccessControl, ReentrancyGuard, Pausable, Init
             evidenceHash, validityDays, nonce, signature
         );
         if (signer == address(0)) revert InvalidSignature();
+        // The signature proves intent, not authority: the signer must hold
+        // ATTESTER_ROLE exactly like the direct path requires.
+        if (!hasRole(ATTESTER_ROLE, signer)) revert NotAttester(signer);
         if (nonces[signer] != nonce) {
             revert InvalidNonce(signer, nonce, nonces[signer]);
         }
