@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {AssetRegistry} from "./AssetRegistry.sol";
 import {VendorRegistry} from "./VendorRegistry.sol";
 import {MigrationRegistry} from "./MigrationRegistry.sol";
@@ -26,7 +27,13 @@ interface IPausable {
  * through an OpenZeppelin TimelockController so that no single key can mutate
  * the registry without a public notice period.
  */
-contract QTrustGovernance {
+contract QTrustGovernance is AccessControl {
+    /// @notice Role required to schedule governance operations. Execution of an
+    ///         already-scheduled operation remains permissionless by design
+    ///         (censorship-resistant, matching TimelockController's open
+    ///         executor pattern).
+    bytes32 public constant PROPOSER_ROLE = keccak256("PROPOSER_ROLE");
+
     TimelockController public immutable timelock;
     AssetRegistry public immutable assetRegistry;
     VendorRegistry public immutable vendorRegistry;
@@ -61,16 +68,18 @@ contract QTrustGovernance {
         vendorRegistry = VendorRegistry(vendorRegistry_);
         migrationRegistry = MigrationRegistry(migrationRegistry_);
         auditRegistry = AuditRegistry(auditRegistry_);
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(PROPOSER_ROLE, msg.sender);
     }
 
     /** @notice Schedule deactivation of a vendor (public notice, then executed). */
-    function scheduleDeactivateVendor(address vendor, bytes32 salt) external {
+    function scheduleDeactivateVendor(address vendor, bytes32 salt) external onlyRole(PROPOSER_ROLE) {
         bytes memory data = abi.encodeCall(VendorRegistry.deactivateVendor, (vendor));
         _schedule(address(vendorRegistry), data, salt);
     }
 
     /** @notice Schedule retirement of a CBOM asset. */
-    function scheduleRetireAsset(bytes32 assetId, bytes32 salt) external {
+    function scheduleRetireAsset(bytes32 assetId, bytes32 salt) external onlyRole(PROPOSER_ROLE) {
         bytes memory data = abi.encodeCall(AssetRegistry.retireAsset, (assetId));
         _schedule(address(assetRegistry), data, salt);
     }
@@ -81,30 +90,34 @@ contract QTrustGovernance {
         bytes32 role,
         address account,
         bytes32 salt
-    ) external {
+    ) external onlyRole(PROPOSER_ROLE) {
         // Prevent governance from escalating itself to full admin.
         if (role == _DEFAULT_ADMIN_ROLE) revert ForbiddenGovernanceCall();
+        // Operational roles must be granted to the timelock (or an explicitly
+        // provisioned operator) — never to an arbitrary account proposed by a
+        // compromised or malicious proposer.
+        if (!_isTimelockOrProposed(account)) revert ForbiddenGovernanceCall();
         address target = _getRegistry(registryIndex);
         bytes memory data = abi.encodeCall(IAccessControl.grantRole, (role, account));
         _schedule(target, data, salt);
     }
 
     /** @notice Schedule pausing a registry. */
-    function schedulePause(uint256 registryIndex, bytes32 salt) external {
+    function schedulePause(uint256 registryIndex, bytes32 salt) external onlyRole(PROPOSER_ROLE) {
         address target = _getRegistry(registryIndex);
         bytes memory data = abi.encodeCall(IPausable.pause, ());
         _schedule(target, data, salt);
     }
 
     /** @notice Schedule unpausing a registry. */
-    function scheduleUnpause(uint256 registryIndex, bytes32 salt) external {
+    function scheduleUnpause(uint256 registryIndex, bytes32 salt) external onlyRole(PROPOSER_ROLE) {
         address target = _getRegistry(registryIndex);
         bytes memory data = abi.encodeCall(IPausable.unpause, ());
         _schedule(target, data, salt);
     }
 
     /** @notice Schedule an arbitrary call through the timelock. */
-    function schedule(address target, bytes calldata data, bytes32 salt) external {
+    function schedule(address target, bytes calldata data, bytes32 salt) external onlyRole(PROPOSER_ROLE) {
         _schedule(target, data, salt);
     }
 
@@ -142,5 +155,13 @@ contract QTrustGovernance {
         else if (registryIndex == 2) return address(migrationRegistry);
         else if (registryIndex == 3) return address(auditRegistry);
         else revert("QTrustGovernance: invalid registry index");
+    }
+
+    /// @dev Operational roles may only land on the timelock itself or on an
+    ///      account the proposer has been explicitly authorized to provision.
+    ///      The timelock is always allowed (it is the governance executor);
+    ///      any other account must already hold PROPOSER_ROLE.
+    function _isTimelockOrProposed(address account) internal view returns (bool) {
+        return account == address(timelock) || hasRole(PROPOSER_ROLE, account);
     }
 }

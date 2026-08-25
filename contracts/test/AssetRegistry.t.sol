@@ -2,6 +2,7 @@
 pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
+import {ProxyDeploy} from "./helpers/ProxyDeploy.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "../src/AssetRegistry.sol";
 import "../src/lib/StringBounds.sol";
@@ -43,8 +44,7 @@ contract AssetRegistryTest is Test {
     }
 
     function setUp() public {
-        registry = new AssetRegistry();
-        registry.initialize();
+        registry = ProxyDeploy.asset();
         registry.grantRole(registry.REGISTRAR_ROLE(), registrar);
     }
 

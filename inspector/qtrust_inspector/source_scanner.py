@@ -295,6 +295,13 @@ def scan_source_file(
 
         for pattern, algorithm, key_type in HARDCODED_KEY_PATTERNS:
             if re.search(pattern, line, re.IGNORECASE):
+                # Audit I-5: never echo the secret material back into reports
+                # (reports get attached to CBOMs, SARIF uploads, tickets...).
+                redacted = re.sub(
+                    r"""(['"])[A-Za-z0-9+/=_\-]{16,}\1""",
+                    r"\1[REDACTED]\1",
+                    line_stripped,
+                )
                 findings.append(AssetFinding(
                     asset_type="hardcoded_key",
                     host=host,
@@ -304,7 +311,7 @@ def scan_source_file(
                     metadata={
                         "language": lang,
                         "line": line_num,
-                        "evidence": line_stripped[:200],
+                        "evidence": redacted[:200],
                     },
                 ))
 

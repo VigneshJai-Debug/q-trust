@@ -2,6 +2,7 @@
 pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
+import {ProxyDeploy} from "./helpers/ProxyDeploy.sol";
 import "../src/SchemaRegistry.sol";
 import "../src/lib/StringBounds.sol";
 
@@ -11,8 +12,7 @@ contract SchemaRegistryTest is Test {
     address admin = address(0xA001);
 
     function setUp() public {
-        registry = new SchemaRegistry();
-        registry.initialize();
+        registry = ProxyDeploy.schema();
     }
 
     // ======== Register Schema ========

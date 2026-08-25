@@ -232,13 +232,58 @@ export async function deliverWebhook(url: string, event: WebhookEvent, secret?: 
   return false;
 }
 
-/** Fan out one event to every webhook endpoint configured for the org. */
+/**
+ * Resolver for dynamically-subscribed webhook endpoints (Redis-backed
+ * subscriptions created via POST /v1/webhooks/subscribe).
+ *
+ * Audit B-4: subscriptions were stored but never consulted — delivery only
+ * ever used the static QTRUST_WEBHOOKS environment list.
+ */
+export interface StoredSubscriber {
+  url: string;
+  secret?: string;
+}
+export type SubscriberResolver = (eventType: string) => Promise<StoredSubscriber[]>;
+
+let subscriberResolver: SubscriberResolver | null = null;
+
+export function setSubscriberResolver(resolver: SubscriberResolver | null): void {
+  subscriberResolver = resolver;
+}
+
+async function resolveSubscribers(eventType: string): Promise<StoredSubscriber[]> {
+  if (!subscriberResolver) return [];
+  try {
+    return await subscriberResolver(eventType);
+  } catch (err) {
+    console.warn("Webhook subscriber lookup failed:", err);
+    return [];
+  }
+}
+
+/** Fan out one event to every configured + subscribed webhook endpoint. */
 export async function fanOut(orgDid: string, type: string, payload: Record<string, unknown>): Promise<void> {
-  const urls = (process.env.QTRUST_WEBHOOKS ?? "")
+  const staticUrls = (process.env.QTRUST_WEBHOOKS ?? "")
     .split(",")
     .map((s) => s.trim())
-    .filter(Boolean);
-  if (!urls.length) return;
+    .filter(Boolean)
+    .map((url) => ({ url, secret: undefined as string | undefined }));
+
+  const subscribed = await resolveSubscribers(type);
+
+  // Merge both sources, deduping by URL so a target registered twice is not
+  // notified twice for one event.
+  const byUrl = new Map<string, { url: string; secret?: string }>();
+  for (const entry of [...staticUrls, ...subscribed]) {
+    const existing = byUrl.get(entry.url);
+    if (!existing || (!existing.secret && entry.secret)) {
+      byUrl.set(entry.url, entry);
+    }
+  }
+  if (byUrl.size === 0) return;
+
   const event: WebhookEvent = { type, orgDid, payload };
-  await Promise.all(urls.map((u) => deliverWebhook(u, event)));
+  await Promise.all(
+    Array.from(byUrl.values()).map(({ url, secret }) => deliverWebhook(url, event, secret))
+  );
 }

@@ -235,19 +235,39 @@ async function detectAndHandleReorg(spec: EventSpec): Promise<bigint | null> {
       console.warn(
         `Indexer: reorg detected at block ${storedNumber} (stored ${row.block_hash}, canonical ${canonical.hash}) — rewinding ${spec.key}`,
       );
-      await pool.query("BEGIN");
+      // B-5 remediation: pool.query("BEGIN") does NOT pin a connection — each
+      // statement may land on a different pooled connection and autocommit,
+      // leaving a partially-purged read model. Pin one client for the whole
+      // transaction instead.
+      const client = await pool.connect();
       try {
-        await pool.query("DELETE FROM assets WHERE block_number >= $1", [storedNumber]);
-        await pool.query("DELETE FROM attestations WHERE block_number >= $1", [storedNumber]);
-        await pool.query("DELETE FROM migrations WHERE block_number >= $1", [storedNumber]);
-        await pool.query("DELETE FROM audits WHERE block_number >= $1", [storedNumber]);
-        await pool.query("DELETE FROM processed_blocks WHERE block_number >= $1", [storedNumber]);
-        await pool.query("COMMIT");
+        await client.query("BEGIN");
+        await client.query("DELETE FROM assets WHERE block_number >= $1", [storedNumber]);
+        await client.query("DELETE FROM attestations WHERE block_number >= $1", [storedNumber]);
+        await client.query("DELETE FROM migrations WHERE block_number >= $1", [storedNumber]);
+        await client.query("DELETE FROM audits WHERE block_number >= $1", [storedNumber]);
+        await client.query("DELETE FROM processed_blocks WHERE block_number >= $1", [storedNumber]);
+        // B-6 remediation: the purge above wipes every spec's data, so every
+        // spec cursor must rewind to the fork point — not just the caller's.
+        // Otherwise the other streams resume past the fork and permanently
+        // miss the re-executed events.
+        for (const s of EVENTS as unknown as EventSpec[]) {
+          await client.query(
+            `INSERT INTO indexer_state (key, block, block_hash, updated_at) VALUES ($1, $2, '', now())
+             ON CONFLICT (key) DO UPDATE SET block = EXCLUDED.block, block_hash = '', updated_at = now()`,
+            [s.key, storedNumber.toString()],
+          );
+        }
+        await client.query("COMMIT");
       } catch (err) {
-        await pool.query("ROLLBACK");
+        await client.query("ROLLBACK").catch(() => {});
         throw err;
+      } finally {
+        client.release();
       }
-      await setCursor(spec.key, storedNumber);
+      for (const s of EVENTS as unknown as EventSpec[]) {
+        await setCursor(s.key, storedNumber);
+      }
       return storedNumber;
     }
   }

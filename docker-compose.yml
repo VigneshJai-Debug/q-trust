@@ -16,7 +16,7 @@ services:
     container_name: qtrust-api
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     env_file:
       - .env
     environment:
@@ -91,7 +91,7 @@ services:
     container_name: qtrust-planner
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - QTRUST_MODEL_PATH=/app/model.pt
       - QTRUST_DEADLINES_PATH=/app/data/algorithms.json
@@ -189,7 +189,7 @@ services:
     ports:
       - "127.0.0.1:3002:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?GRAFANA_PASSWORD must be set in .env}
     volumes:
       - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana-data:/var/lib/grafana

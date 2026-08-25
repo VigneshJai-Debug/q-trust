@@ -2,6 +2,7 @@
 pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
+import {ProxyDeploy} from "./helpers/ProxyDeploy.sol";
 import "../src/TrustAnchorRegistry.sol";
 import "../src/lib/StringBounds.sol";
 
@@ -14,8 +15,7 @@ contract TrustAnchorRegistryTest is Test {
     address nonIssuer = address(0xDEADBEEF);
 
     function setUp() public {
-        registry = new TrustAnchorRegistry();
-        registry.initialize();
+        registry = ProxyDeploy.trustAnchor();
     }
 
     // ======== Accreditation ========

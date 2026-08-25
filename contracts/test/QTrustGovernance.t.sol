@@ -2,6 +2,7 @@
 pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
+import {ProxyDeploy} from "./helpers/ProxyDeploy.sol";
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {AssetRegistry} from "../src/AssetRegistry.sol";
@@ -24,14 +25,10 @@ contract QTrustGovernanceTest is Test {
 
     function setUp() public {
         vm.startPrank(deployer);
-        assets = new AssetRegistry();
-        assets.initialize();
-        vendors = new VendorRegistry();
-        vendors.initialize();
-        migrations = new MigrationRegistry();
-        migrations.initialize(address(assets));
-        audits = new AuditRegistry();
-        audits.initialize(address(migrations));
+        assets = ProxyDeploy.asset();
+        vendors = ProxyDeploy.vendor();
+        migrations = ProxyDeploy.migration(address(assets));
+        audits = ProxyDeploy.audit(address(migrations));
 
         address[] memory proposers = new address[](1);
         proposers[0] = admin;
@@ -151,18 +148,51 @@ contract QTrustGovernanceTest is Test {
         bytes32 registrarRole = assets.REGISTRAR_ROLE();
         bytes32 salt = keccak256("grant-registrar");
         vm.startPrank(deployer);
-        governance.scheduleGrantRole(0, registrarRole, admin, salt);
+        // Operational roles may only be granted to the timelock itself (or an
+        // account already holding PROPOSER_ROLE) — never an arbitrary EOA.
+        governance.scheduleGrantRole(0, registrarRole, address(timelock), salt);
         vm.stopPrank();
 
-        assertFalse(assets.hasRole(registrarRole, admin), "role not granted yet");
+        assertFalse(assets.hasRole(registrarRole, address(timelock)), "role not granted yet");
 
         vm.warp(block.timestamp + 8 days);
         vm.prank(admin);
         governance.execute(
             address(assets),
-            abi.encodeCall(IAccessControl.grantRole, (registrarRole, admin)),
+            abi.encodeCall(IAccessControl.grantRole, (registrarRole, address(timelock))),
             salt
         );
-        assertTrue(assets.hasRole(registrarRole, admin), "role granted via timelock");
+        assertTrue(assets.hasRole(registrarRole, address(timelock)), "role granted via timelock");
+    }
+
+    function test_ScheduleGrantRoleToArbitraryAccountReverts() public {
+        bytes32 registrarRole = assets.REGISTRAR_ROLE();
+        vm.prank(deployer);
+        vm.expectRevert(QTrustGovernance.ForbiddenGovernanceCall.selector);
+        governance.scheduleGrantRole(0, registrarRole, makeAddr("attacker"), keccak256("evil"));
+    }
+
+    function test_NonProposerCannotSchedule() public {
+        vm.prank(makeAddr("random-caller"));
+        vm.expectRevert();
+        governance.scheduleDeactivateVendor(makeAddr("vendor"), keccak256("s"));
+    }
+
+    function test_ExecutionRemainsPermissionless() public {
+        // Anyone — not only the proposer — may execute an already-scheduled,
+        // delay-elapsed operation (censorship-resistant execution).
+        bytes32 salt = keccak256("open-execute");
+        vm.startPrank(deployer);
+        vendors.registerVendor(vendor, "ACME", "ipfs://");
+        governance.scheduleDeactivateVendor(vendor, salt);
+        vm.stopPrank();
+        vm.warp(block.timestamp + 8 days);
+        vm.prank(makeAddr("anyone"));
+        governance.execute(
+            address(vendors),
+            abi.encodeCall(VendorRegistry.deactivateVendor, (vendor)),
+            salt
+        );
+        assertFalse(vendors.isVendorActive(vendor), "executed by third party");
     }
 }

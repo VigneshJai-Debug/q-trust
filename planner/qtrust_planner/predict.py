@@ -72,18 +72,37 @@ def load_cbom(cbom_path: str) -> dict[str, Any]:
         return json.load(f)
 
 
-def load_dependency_graph(deps_path: str | None, n_assets: int) -> list[list[int]]:
+def load_dependency_graph(
+    deps_path: str | dict[str, Any] | None, n_assets: int
+) -> list[list[int]]:
     """Load or synthesize a dependency graph.
 
     Args:
-        deps_path: Path to a deps.json file, or None.
+        deps_path: Path to a deps.json file, an inline ``{"edges": [[src,
+            tgt], ...]}`` dict (as accepted by POST /plan), or None.
         n_assets: Number of assets (used to synthesize a trivial graph).
 
     Returns:
         A list of [source, target] pairs where target depends on source
         (i.e., source must be migrated before target).
     """
-    if deps_path and os.path.exists(deps_path):
+    # Audit P-4: /plan used to stringify the inline deps dict and pass it as a
+    # path — os.path.exists always failed and edges were silently dropped.
+    if isinstance(deps_path, dict):
+        raw_edges = deps_path.get("edges", [])
+        parsed: list[list[int]] = []
+        for e in raw_edges:
+            try:
+                src, tgt = int(e[0]), int(e[1])
+                if 0 <= src < n_assets and 0 <= tgt < n_assets and src != tgt:
+                    parsed.append([src, tgt])
+            except (TypeError, ValueError, IndexError, KeyError):
+                continue
+        if parsed:
+            return parsed
+        # Fall through to synthesis when the dict carries no usable edges.
+
+    if isinstance(deps_path, str) and deps_path and os.path.exists(deps_path):
         with open(deps_path, encoding="utf-8") as f:
             deps_data = json.load(f)
         return [[d["source"], d["target"]] for d in deps_data.get("dependencies", [])]
@@ -96,7 +115,7 @@ def load_dependency_graph(deps_path: str | None, n_assets: int) -> list[list[int
     return edges
 
 
-def cbom_to_graph(cbom: dict[str, Any], deps_path: str | None = None) -> tuple[Data, list[dict]]:
+def cbom_to_graph(cbom: dict[str, Any], deps_path: str | dict[str, Any] | None = None) -> tuple[Data, list[dict]]:
     """Convert a CBOM JSON + dependency file into a PyG Data object.
 
     Args:

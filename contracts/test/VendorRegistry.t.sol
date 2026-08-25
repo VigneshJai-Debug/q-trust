@@ -2,6 +2,7 @@
 pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
+import {ProxyDeploy} from "./helpers/ProxyDeploy.sol";
 import "@openzeppelin/contracts/access/IAccessControl.sol";
 import "../src/VendorRegistry.sol";
 import "../src/lib/StringBounds.sol";
@@ -50,8 +51,7 @@ contract VendorRegistryTest is Test {
     }
 
     function setUp() public {
-        registry = new VendorRegistry();
-        registry.initialize();
+        registry = ProxyDeploy.vendor();
     }
 
     function test_RegisterVendor() public {

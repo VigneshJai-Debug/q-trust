@@ -79,7 +79,10 @@ contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
     uint256 private _cachedChainId;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {}
+    constructor() {
+        // Prevent initialization of the raw implementation (UUPS best practice).
+        _disableInitializers();
+    }
 
     function initialize() public initializer {
         if (_initialized) revert NotInitialized();

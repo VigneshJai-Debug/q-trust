@@ -2,6 +2,7 @@
 pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
+import {ProxyDeploy} from "./helpers/ProxyDeploy.sol";
 import "../src/MigrationRegistry.sol";
 import "../src/AssetRegistry.sol";
 import "../src/lib/StringBounds.sol";
@@ -59,11 +60,9 @@ contract MigrationRegistryTest is Test {
 
     function setUp() public {
         orgSigner = vm.addr(orgKey);
-        assets = new AssetRegistry();
-        assets.initialize();
+        assets = ProxyDeploy.asset();
         assets.grantRole(assets.REGISTRAR_ROLE(), migrator);
-        registry = new MigrationRegistry();
-        registry.initialize(address(assets));
+        registry = ProxyDeploy.migration(address(assets));
         registry.grantRole(registry.MIGRATOR_ROLE(), migrator);
 
         vm.prank(migrator);

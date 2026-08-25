@@ -2,6 +2,7 @@
 pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
+import {ProxyDeploy} from "./helpers/ProxyDeploy.sol";
 import "../src/ComplianceAttestation.sol";
 import "../src/lib/StringBounds.sol";
 
@@ -12,8 +13,7 @@ contract ComplianceAttestationTest is Test {
     address attester = address(0xA77E);
 
     function setUp() public {
-        registry = new ComplianceAttestation();
-        registry.initialize();
+        registry = ProxyDeploy.compliance();
         registry.grantRole(registry.ATTESTER_ROLE(), attester);
     }
 

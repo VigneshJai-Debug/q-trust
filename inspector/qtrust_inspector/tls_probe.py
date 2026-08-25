@@ -279,6 +279,9 @@ def probe_tls_endpoint(
 ) -> dict[str, Any]:
     """Deep probe a TLS endpoint for PQC support.
 
+    Raises:
+        ValueError: If the host resolves to a forbidden (private/metadata) address.
+
     Args:
         host: Target hostname.
         port: Target port.
@@ -291,6 +294,10 @@ def probe_tls_endpoint(
     Returns:
         Dictionary with detailed TLS probe results.
     """
+    # Audit I-3: guard the probe entry point like every other network path.
+    from .scanner import validate_scan_target
+
+    validate_scan_target(host)
     result = {
         "host": host,
         "port": port,

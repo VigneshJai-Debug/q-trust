@@ -36,8 +36,9 @@ import rateLimit from "@fastify/rate-limit";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
-import { createHash } from "node:crypto";
-import { encryptSecret } from "./services/secret-box.js";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { encryptSecret, decryptSecret } from "./services/secret-box.js";
+import { setSubscriberResolver } from "./services/webhook.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import * as dotenv from "dotenv";
@@ -167,6 +168,13 @@ await server.register(swaggerUi, {
   routePrefix: "/docs",
 });
 
+/** Timing-safe API key comparison: hash both sides to fixed-length digests so
+ *  neither length nor content short-circuits the comparison. */
+function safeApiKeyEquals(a: string, b: string): boolean {
+  const sha = (s: string) => createHash("sha256").update(s, "utf8").digest();
+  return timingSafeEqual(sha(a), sha(b)) && a === b;
+}
+
 /** Require a valid admin API key on write routes. Fail-closed in production. */
 function requireApiKey(request: FastifyRequest, reply: FastifyReply, done: () => void): void {
   const key = request.headers["x-api-key"] as string | undefined;
@@ -180,7 +188,7 @@ function requireApiKey(request: FastifyRequest, reply: FastifyReply, done: () =>
     reply.status(401).send({ error: "API keys not configured — write routes disabled" });
     return;
   }
-  if (!key || !API_KEYS.includes(key)) {
+  if (!key || !API_KEYS.some((k) => safeApiKeyEquals(k, key))) {
     reply.status(401).send({ error: "Invalid or missing API key" });
     return;
   }
@@ -892,6 +900,41 @@ await server.register(registerGPURoutes);
 // ------------------------------------------------------------------
 const start = async () => {
   try {
+    if (process.env.NODE_ENV === "production" && !process.env.QTRUST_SCAN_ALLOWED_ROOTS) {
+      // Critical B-3 remediation: without an allowlist, /v1/scan/* would accept
+      // any absolute path on this host. Refuse to serve rather than guess.
+      server.log.error("Refusing to start: QTRUST_SCAN_ALLOWED_ROOTS is required in production");
+      process.exit(1);
+    }
+    // Wire Redis subscriptions into webhook delivery (audit B-4: previously
+    // stored but never consulted).
+    if (redis) {
+      setSubscriberResolver(async (eventType: string) => {
+        const keys = [`subscribers:${eventType}`, "subscribers:*"];
+        const seen = new Set<string>();
+        const out: Array<{ url: string; secret?: string }> = [];
+        for (const key of keys) {
+          const records = await redis!.smembers(key);
+          for (const raw of records) {
+            try {
+              const parsed = JSON.parse(raw) as { url?: string; address?: string; secret?: string };
+              if (!parsed.url || seen.has(`${parsed.address ?? ""}|${parsed.url}`)) continue;
+              seen.add(`${parsed.address ?? ""}|${parsed.url}`);
+              let secret: string | undefined;
+              try {
+                secret = parsed.secret ? decryptSecret(parsed.secret) : undefined;
+              } catch {
+                console.warn(`Webhook subscriber ${parsed.url}: undecryptable secret — delivering unsigned`);
+              }
+              out.push({ url: parsed.url, secret });
+            } catch {
+              continue;
+            }
+          }
+        }
+        return out;
+      });
+    }
     await startIndexer();
     await server.listen({ port: Number(process.env.PORT) || 3001, host: "0.0.0.0" });
     console.log(`Server listening on ${JSON.stringify(server.server.address())}`);

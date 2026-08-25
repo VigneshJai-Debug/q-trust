@@ -873,8 +873,13 @@ class TestTLSProbe:
 
     def test_tls_probe_result_structure(self):
         from qtrust_inspector.tls_probe import probe_tls_endpoint
-        # This will fail to connect but should return a result dict
-        result = probe_tls_endpoint("192.0.2.1", timeout=1.0)  # TEST-NET, should timeout
+        import pytest
+        # Reserved ranges are rejected by the scan-target guard (audit I-3).
+        with pytest.raises(ValueError, match="forbidden"):
+            probe_tls_endpoint("192.0.2.1", timeout=1.0)  # TEST-NET-1
+        # Unresolvable hosts pass the guard but fail to connect — the probe
+        # still returns a well-formed result dict.
+        result = probe_tls_endpoint("qtrust-test-does-not-exist.invalid", timeout=1.0)
         assert "host" in result
         assert "risk_level" in result
         assert "pqc_kem_detected" in result

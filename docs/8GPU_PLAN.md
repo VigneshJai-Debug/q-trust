@@ -51,9 +51,19 @@ Logs land in `logs/ddp_gnn.log` and `logs/parallel_jobs.log`.
 
 ## Results
 
-Populate after each full run (`train_8gpu.sh` prints a summary):
+Held-out protocol: last 15% of `generate_dataset(1000, seed=999)` via
+`benchmark_v3.py` (`planner/results/benchmark_ddp.json`).
 
-| Artifact | Kendall tau / metric | Date |
-|---|---|---|
-| `model_gpu_v3.pt` (single GPU, 100K) | see `benchmark_v3.py` output | 2026-08-24 |
-| `model_ddp_v3.pt` (DDP, 400K) | TBD | TBD |
+| Model | Kendall τ | Top-5 | Top-10 | Note |
+|---|---|---|---|---|
+| v2 (1.2K graphs, CPU) | 0.9605 | 0.6733 | 0.5200 | 9K params |
+| v3 single-GPU (100K graphs) | 0.8980 | 0.5200 | 0.2733 | committed as `model_gpu_v3.pt` |
+| v3 DDP (400K graphs, 2×A100) | 0.8312 | 0.1400 | 0.0800 | **regression vs single-GPU** |
+
+**Known regression (honest disclosure):** the DDP-trained checkpoint scores
+*worse* than the single-GPU v3 on this held-out set. Suspected causes: (1)
+checkpoint selection averaged validation τ across ranks whose val splits come
+from different seeds rather than a shared canonical set; (2) per-rank data
+diversity at seed+rank shifts the label distribution. Until retrained with a
+shared canonical held-out set (seed=999), `model_gpu_v3.pt` remains the
+production default; keep `model_ddp_v3.pt` for scale experiments only.

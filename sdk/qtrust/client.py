@@ -56,6 +56,14 @@ class QTrustClient:
     ):
         self.private_key = private_key or os.environ.get("QTRUST_DEPLOYER_PRIVATE_KEY")
         self.rpc_url = rpc_url or os.environ.get("QTRUST_BASE_SEPOLIA_RPC", "http://127.0.0.1:8545")
+        # Audit SDK-07: refuse cleartext RPC for anything but loopback — a
+        # plain-HTTP RPC endpoint leaks every signed transaction in flight.
+        _rpc = self.rpc_url.lower()
+        if _rpc.startswith("http://") and "localhost" not in _rpc and "127.0.0.1" not in _rpc and "[::1]" not in _rpc:
+            raise ValueError(
+                f"Refusing non-HTTPS RPC URL '{self.rpc_url}' — signed transactions would "
+                "traverse the network in cleartext. Use https:// (or loopback for local dev)."
+            )
         self.asset_registry_address = asset_registry_address or os.environ.get(
             "QTRUST_ASSET_REGISTRY_ADDRESS", ""
         )
@@ -140,22 +148,49 @@ class QTrustClient:
             )
         return self.account
 
-    def _send_transaction(self, tx_builder, gas_limit: int = 250_000) -> dict:
+    def _send_transaction(self, tx_builder, gas_limit: int = 250_000, max_nonce_retries: int = 3) -> dict:
+        """Build, sign, send, and await a transaction.
+
+        Audit SDK-08: concurrent submissions from one signer race on the same
+        nonce; the loser reverts on-chain (wasting gas) or is dropped. Retry a
+        bounded number of times with a fresh nonce before giving up.
+        """
         account = self._require_account()
-        nonce = self.w3.eth.get_transaction_count(account.address)
-        tx = tx_builder.build_transaction({
-            "from": account.address,
-            "nonce": nonce,
-            "gas": gas_limit,
-            "gasPrice": self.w3.eth.gas_price,
-            "chainId": self.chain_id,
-        })
-        signed = account.sign_transaction(tx)
-        tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
-        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
-        if receipt["status"] != 1:
-            raise RuntimeError(f"Transaction reverted: {tx_hash.hex()}")
-        return dict(receipt)
+        last_exc: Exception | None = None
+        for attempt in range(max_nonce_retries):
+            nonce = self.w3.eth.get_transaction_count(account.address)
+            tx = tx_builder.build_transaction({
+                "from": account.address,
+                "nonce": nonce,
+                "gas": gas_limit,
+                "gasPrice": self.w3.eth.gas_price,
+                "chainId": self.chain_id,
+            })
+            signed = account.sign_transaction(tx)
+            try:
+                tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
+            except ValueError as exc:
+                # geth/anvil reject replacement-with-same-nonce at the mempool.
+                if attempt < max_nonce_retries - 1 and self._is_nonce_error(exc):
+                    last_exc = exc
+                    continue
+                raise
+            receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+            if receipt["status"] != 1:
+                revert_reason = f"Transaction reverted: {tx_hash.hex()}"
+                if attempt < max_nonce_retries - 1 and self._is_nonce_error(RuntimeError(revert_reason)):
+                    last_exc = RuntimeError(revert_reason)
+                    continue
+                raise RuntimeError(revert_reason)
+            return dict(receipt)
+        raise RuntimeError(f"Transaction failed after {max_nonce_retries} nonce retries") from last_exc
+
+    @staticmethod
+    def _is_nonce_error(exc: Exception) -> bool:
+        """Heuristic: did this failure look like a nonce race?"""
+        text = str(exc).lower()
+        markers = ("nonce", "replacement transaction underpriced", "already known")
+        return any(m in text for m in markers)
 
     @staticmethod
     def _event_args(receipt: dict, contract, event_name: str) -> dict | None:

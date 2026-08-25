@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { createHash, timingSafeEqual } from 'node:crypto';
 
 const PRIVATE_IP_PATTERNS = [
   /^10\./,
@@ -19,29 +20,48 @@ function isPrivateOrBlockedHost(host: string): boolean {
   return PRIVATE_IP_PATTERNS.some((pattern) => pattern.test(lower));
 }
 
-export function requireApiKey(
-  this: FastifyInstance,
+/** Length-independent comparison that never short-circuits on content. */
+function safeEquals(a: string, b: string): boolean {
+  const sha = (s: string) => createHash('sha256').update(s, 'utf8').digest();
+  return timingSafeEqual(sha(a), sha(b)) && a === b;
+}
+
+/**
+ * API-key gate usable both as a route `preHandler` and as an instance hook.
+ * Halting is signaled by returning the (already-sent) reply.
+ *
+ * Policy: fail-closed whenever QTRUST_API_KEYS is configured OR the process
+ * runs in production; pure-local dev with no key management stays open so the
+ * scanner/GPU demo flows work out of the box (mirrors server.ts semantics).
+ */
+export async function requireApiKey(
   request: FastifyRequest,
   reply: FastifyReply,
-): void {
+): Promise<unknown> {
   const configuredKeys = process.env.QTRUST_API_KEYS;
+  const isProduction = process.env.NODE_ENV === 'production';
   if (!configuredKeys) {
-    reply.code(500).send({ error: 'Server misconfigured: no API keys set' });
-    return;
+    if (!isProduction) {
+      // Pure-local dev with no key management configured: keep endpoints open,
+      // mirroring server.ts API_KEY_REQUIRED semantics.
+      return undefined;
+    }
+    return reply.code(500).send({ error: 'Server misconfigured: no API keys set' });
   }
 
-  const validKeys = new Set(
-    configuredKeys
-      .split(',')
-      .map((k) => k.trim())
-      .filter(Boolean),
-  );
+  const validKeys = configuredKeys
+    .split(',')
+    .map((k) => k.trim())
+    .filter(Boolean);
 
   const providedKey = request.headers['x-api-key'];
-  if (typeof providedKey !== 'string' || !validKeys.has(providedKey)) {
-    reply.code(401).send({ error: 'Invalid or missing API key' });
-    return;
+  if (
+    typeof providedKey !== 'string' ||
+    !validKeys.some((k) => safeEquals(k, providedKey))
+  ) {
+    return reply.code(401).send({ error: 'Invalid or missing API key' });
   }
+  return undefined;
 }
 
 export function validateTarget(

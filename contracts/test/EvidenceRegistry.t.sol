@@ -2,6 +2,7 @@
 pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
+import {ProxyDeploy} from "./helpers/ProxyDeploy.sol";
 import "../src/EvidenceRegistry.sol";
 import "../src/lib/StringBounds.sol";
 
@@ -12,8 +13,7 @@ contract EvidenceRegistryTest is Test {
     address registrar = address(0xE0CE);
 
     function setUp() public {
-        registry = new EvidenceRegistry();
-        registry.initialize();
+        registry = ProxyDeploy.evidence();
         registry.grantRole(registry.REGISTRAR_ROLE(), registrar);
     }
 

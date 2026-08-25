@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { requireApiKey } from "../middleware/auth.js";
 import {
   SideChannelAnalyzeSchema,
   AnomalyScoreSchema,
@@ -75,6 +76,9 @@ function fail(reply: FastifyReply, code: number, body: Record<string, unknown>) 
 }
 
 export async function registerGPURoutes(server: FastifyInstance): Promise<void> {
+  // Auth gate for every /v1/gpu/* route (audit B-1: side-channel analyze was an
+  // unauthenticated RCE when QTRUST_GPU_ENABLED=true).
+  server.addHook("preHandler", requireApiKey);
   server.get("/v1/gpu/status", {
     schema: { tags: ["gpu"], summary: "GPU availability and model info" },
     async handler() {

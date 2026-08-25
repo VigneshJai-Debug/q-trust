@@ -17,7 +17,11 @@ from .binary_scanner import scan_binary, scan_binaries_in_directory
 from .risk_engine import RiskScore, QuantumVulnerability, calculate_risk_score
 from .roadmap import CostEstimate, MigrationPhase, generate_roadmap
 from .sarif import generate_sarif, save_sarif
+from .conformance import run_conformance_tests
+from .k8s_policy import generate_gatekeeper_policies, generate_kyverno_policies
+from .remediation import REMEDIATION_DB
 from .scanner import CryptoScanner, scan_directory, scan_host, scan_network, trust_findings_to_dict
+from .tls_probe import probe_tls_endpoint
 from .source_scanner import scan_source_directory, scan_source_file
 
 __version__ = "1.1.0"

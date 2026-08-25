@@ -2,6 +2,7 @@
 pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
+import {ProxyDeploy} from "./helpers/ProxyDeploy.sol";
 import "../src/VendorRegistry.sol";
 
 /// @title VendorRegistrySecurityTest — regression tests for the silent
@@ -59,8 +60,7 @@ contract VendorRegistrySecurityTest is Test {
     }
 
     function setUp() public {
-        registry = new VendorRegistry();
-        registry.initialize();
+        registry = ProxyDeploy.vendor();
         vendorSigner = vm.addr(vendorSk);
         registry.registerVendor(vendorSigner, "SignerCorp", "ipfs://QmS");
     }

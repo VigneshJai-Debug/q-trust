@@ -64,7 +64,10 @@ contract TrustAnchorRegistry is AccessControl, ReentrancyGuard, Pausable, Initia
     bool private _initialized;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {}
+    constructor() {
+        // Prevent initialization of the raw implementation (UUPS best practice).
+        _disableInitializers();
+    }
 
     function initialize() public initializer {
         if (_initialized) revert NotInitialized();

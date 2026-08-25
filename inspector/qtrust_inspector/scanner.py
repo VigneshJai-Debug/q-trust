@@ -623,6 +623,8 @@ def trust_findings_to_dict(finding: Any) -> dict:
 
 def scan_host(host: str, ports: list = None) -> ScanResult:
     """Top-level function for scanning a host."""
+    # Audit I-3: guard every network entry point, not just the CLI.
+    validate_scan_target(host)
     scanner = CryptoScanner()
     if ports is None:
         ports = [443, 8443, 22]

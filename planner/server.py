@@ -328,7 +328,7 @@ def plan(req: PlanRequest) -> dict[str, Any]:
 
     try:
         from qtrust_planner.predict import cbom_to_graph
-        data, asset_records = cbom_to_graph(req.cbom, None if req.deps is None else str(req.deps))
+        data, asset_records = cbom_to_graph(req.cbom, req.deps)
     except (ImportError, ValueError) as exc:
         # Fallback: parse CBOM directly without PyG
         assets = req.cbom.get("assets", [])
@@ -409,6 +409,7 @@ def plan_with_deadline(req: DeadlineRequest) -> dict[str, Any]:
 
 _RL_BUDGET_SECONDS = 2.0
 _RL_MODEL_PATH = Path(__file__).resolve().parent / "rl_agent.pt"
+_RL_AGENT_CACHE: dict[str, Any] | None = None
 
 
 def _rl_migration_order(req: PlanRequest) -> tuple[list[dict[str, Any]], str] | None:
@@ -431,15 +432,23 @@ def _rl_migration_order(req: PlanRequest) -> tuple[list[dict[str, Any]], str] | 
         raise HTTPException(status_code=422, detail="CBOM has no assets")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    agent = MigrationAgent(n_features=6, hidden_dim=128).to(device)
-    try:
-        agent.load_state_dict(
-            torch.load(str(_RL_MODEL_PATH), map_location=device, weights_only=True)
-        )
-    except Exception as exc:
-        logger.warning("rl_agent checkpoint unusable: %s", exc)
-        return None
-    agent.eval()
+    # Audit P-08: cache the loaded agent across requests (checkpoint is read
+    # once; a 30-80ms disk hit per inference adds up under load).
+    global _RL_AGENT_CACHE  # noqa: PLW0603
+    cached = _RL_AGENT_CACHE
+    if cached is not None and cached["path"] == _RL_MODEL_PATH and cached["device"] == device:
+        agent = cached["agent"]
+    else:
+        agent = MigrationAgent(n_features=6, hidden_dim=128).to(device)
+        try:
+            agent.load_state_dict(
+                torch.load(str(_RL_MODEL_PATH), map_location=device, weights_only=True)
+            )
+        except Exception as exc:
+            logger.warning("rl_agent checkpoint unusable: %s", exc)
+            return None
+        agent.eval()
+        _RL_AGENT_CACHE = {"path": _RL_MODEL_PATH, "device": device, "agent": agent}
 
     crit_map = {"low": 1, "medium": 2, "high": 3, "critical": 4}
     from qtrust_planner.model_v3 import encode_algorithm_type

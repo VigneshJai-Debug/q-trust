@@ -628,11 +628,13 @@ def _write_roadmap(result: ScanResult, roadmap_path: Path, daily_rate: float):
         [f.model_dump() for f in result.findings],
         daily_rate_usd=daily_rate,
     )
-    roadmap_path.write_text(json.dumps(roadmap.model_dump(), indent=2))
+    # generate_roadmap returns a plain dict (audit I-01) — access keys, not
+    # attributes.
+    roadmap_path.write_text(json.dumps(roadmap, indent=2))
     console.print(f"\n[green]Migration roadmap saved to {roadmap_path}[/green]")
-    console.print(f"  Total effort: {roadmap.total_effort_days:.1f} days")
-    console.print(f"  Estimated cost: ${roadmap.total_cost_usd:,.0f}")
-    console.print(f"  Timeline: {roadmap.timeline_months:.1f} months")
+    console.print(f"  Total effort: {roadmap.get('total_effort_days', 0):.1f} days")
+    console.print(f"  Estimated cost: ${roadmap.get('total_cost_usd', 0):,.0f}")
+    console.print(f"  Timeline: {roadmap.get('timeline_months', 0):.1f} months")
 
 
 def _register_onchain(scan_result: ScanResult):

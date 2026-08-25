@@ -23,4 +23,8 @@ RUN groupadd -r planner && useradd -r -g planner -m planner
 RUN chown -R planner:planner /app
 USER planner
 
+# Audit D-7: orchestrators need a health signal for restarts/rollouts.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)"] || exit 1
+
 CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]

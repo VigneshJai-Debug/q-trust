@@ -2,6 +2,7 @@
 pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
+import {ProxyDeploy} from "./helpers/ProxyDeploy.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "../src/AuditRegistry.sol";
 import "../src/MigrationRegistry.sol";
@@ -63,14 +64,11 @@ contract AuditRegistryTest is Test {
 
     function setUp() public {
         signerAuditor = vm.addr(auditorKey);
-        assets = new AssetRegistry();
-        assets.initialize();
+        assets = ProxyDeploy.asset();
         assets.grantRole(assets.REGISTRAR_ROLE(), org);
-        migrations = new MigrationRegistry();
-        migrations.initialize(address(assets));
+        migrations = ProxyDeploy.migration(address(assets));
         migrations.grantRole(migrations.MIGRATOR_ROLE(), org);
-        registry = new AuditRegistry();
-        registry.initialize(address(migrations));
+        registry = ProxyDeploy.audit(address(migrations));
         registry.grantRole(registry.AUDITOR_ROLE(), auditor);
         registry.grantRole(registry.AUDITOR_ROLE(), signerAuditor);
 

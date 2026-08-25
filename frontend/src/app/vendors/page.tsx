@@ -14,6 +14,7 @@ import { GateLoading, WalletGate, useMounted } from "@/components/wallet-gate";
 import { AttestationForm } from "@/components/attestation-form";
 import { ShieldCheckIcon, XCircleIcon } from "@/app/icons";
 import { fetchVendorAttestations, checkProductSupport, type VendorAttestationInfo } from "@/lib/api";
+import { sanitizeUri } from "@/lib/sanitize-uri";
 
 function AttestationRow({ att }: { att: VendorAttestationInfo }) {
   return (
@@ -36,14 +37,23 @@ function AttestationRow({ att }: { att: VendorAttestationInfo }) {
         ) : (
           <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500">unsupported</span>
         )}
-        <a
-          href={att.evidence_uri}
-          target="_blank"
-          rel="noreferrer"
-          className="text-xs font-medium text-qtrust-600 hover:underline"
-        >
-          evidence
-        </a>
+        {(() => {
+          const safeHref = sanitizeUri(att.evidence_uri);
+          return safeHref ? (
+            <a
+              href={safeHref}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs font-medium text-qtrust-600 hover:underline"
+            >
+              evidence
+            </a>
+          ) : (
+            <span className="text-xs text-slate-400" title="evidence URI failed scheme validation">
+              evidence unavailable
+            </span>
+          );
+        })()}
       </div>
     </li>
   );

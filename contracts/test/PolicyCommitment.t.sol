@@ -2,6 +2,7 @@
 pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
+import {ProxyDeploy} from "./helpers/ProxyDeploy.sol";
 import "../src/PolicyCommitment.sol";
 import "../src/lib/StringBounds.sol";
 
@@ -12,8 +13,7 @@ contract PolicyCommitmentTest is Test {
     address authority = address(0xB001);
 
     function setUp() public {
-        policy = new PolicyCommitment();
-        policy.initialize();
+        policy = ProxyDeploy.policy();
     }
 
     // ======== Commit Policy ========

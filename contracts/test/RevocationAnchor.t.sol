@@ -2,6 +2,7 @@
 pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
+import {ProxyDeploy} from "./helpers/ProxyDeploy.sol";
 import "../src/RevocationAnchor.sol";
 import "../src/lib/StringBounds.sol";
 
@@ -38,8 +39,7 @@ contract RevocationAnchorTest is Test {
     function setUp() public {
         issuer1 = vm.addr(issuerKey1);
         issuer2 = vm.addr(issuerKey2);
-        anchor = new RevocationAnchor();
-        anchor.initialize();
+        anchor = ProxyDeploy.revocation();
         anchor.registerIssuer(issuer1, "did:web:trailofbits.com");
         anchor.registerIssuer(issuer2, "did:web:digicert.com");
     }

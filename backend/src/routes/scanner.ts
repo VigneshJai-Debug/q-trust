@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { Type } from "@sinclair/typebox";
 import type { FastifyInstance } from "fastify";
+import { requireApiKey } from "../middleware/auth.js";
 import {
   ScanRequestSchema,
   ScanFullRequestSchema,
@@ -62,6 +63,14 @@ async function validateScanDirectory(rawDir: string): Promise<string> {
     throw Object.assign(new Error("path is not a directory"), { statusCode: 400 });
   }
   const allowedRootsRaw = process.env.QTRUST_SCAN_ALLOWED_ROOTS;
+  if (!allowedRootsRaw && process.env.NODE_ENV === "production") {
+    // Fail closed: in production an unset allowlist would let any caller scan
+    // arbitrary absolute paths on this host.
+    throw Object.assign(
+      new Error("QTRUST_SCAN_ALLOWED_ROOTS must be configured in production"),
+      { statusCode: 503 },
+    );
+  }
   if (allowedRootsRaw) {
     const roots = allowedRootsRaw
       .split(",")
@@ -299,6 +308,7 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
   });
 
   app.post("/v1/scan/source", {
+    preHandler: requireApiKey,
     schema: { body: ScanRequestSchema, response: scanResponseSchemas },
   }, async (request, reply) => {
     const { directory } = request.body as { directory: string };
@@ -329,6 +339,7 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
   });
 
   app.post("/v1/scan/manifests", {
+    preHandler: requireApiKey,
     schema: { body: ScanRequestSchema, response: scanResponseSchemas },
   }, async (request, reply) => {
     const { directory } = request.body as { directory: string };
@@ -359,6 +370,7 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
   });
 
   app.post("/v1/scan/full", {
+    preHandler: requireApiKey,
     schema: { body: ScanFullRequestSchema, response: scanResponseSchemas },
   }, async (request, reply) => {
     const { target, includeSource = true, includeManifests = true } = request.body as {

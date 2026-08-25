@@ -29,9 +29,9 @@ contracts/broadcast/
 .env.*
 !.env.example
 
-# ─── Generated code (regenerate via scripts/generate_abis.py) ────────────────
-backend/src/lib/abis.ts
-sdk/qtrust/contracts.py
+# ─── Generated code ───────────────────────────────────────────────────────────
+# abis.ts / contracts.py ARE tracked (regenerate via scripts/generate_abis.py;
+# CI regenerates and fails on drift).
 
 # ─── Planner/inspector model checkpoints ──────────────────────────────────────
 # Trained checkpoints are intentionally tracked (force-added; all <1MB each).
@@ -64,3 +64,11 @@ Q-Trust_Stack_Migration_Checklist.xlsx
 
 # ─── Reference / analysis artifacts ───────────────────────────────────────
 qtrust-gpu-features.zip
+
+# ─── Legal: unpublished patent materials (audit D-1) ────────────────────────
+docs/PATENT/
+
+# ─── Local-only artifacts ─────────────────────────────────────────────────────
+*.zip
+Q-Trust_v2.0.0_Senior_Engineer_Codebase_Audit.pdf
+.ipynb_checkpoints/

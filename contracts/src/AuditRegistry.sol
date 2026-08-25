@@ -79,7 +79,10 @@ contract AuditRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeabl
     uint256 private _cachedChainId;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {}
+    constructor() {
+        // Prevent initialization of the raw implementation (UUPS best practice).
+        _disableInitializers();
+    }
 
     function initialize(address migrationRegistry_) public initializer {
         if (_initialized) revert NotInitialized();

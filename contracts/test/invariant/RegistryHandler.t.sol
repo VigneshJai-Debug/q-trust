@@ -2,6 +2,7 @@
 pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
+import {ProxyDeploy} from "../helpers/ProxyDeploy.sol";
 import "../../src/AssetRegistry.sol";
 import "../../src/VendorRegistry.sol";
 import "../../src/MigrationRegistry.sol";
@@ -42,12 +43,9 @@ contract RegistryHandler is Test {
     bytes32 private immutable _seedAssetId;
 
     constructor() {
-        assets = new AssetRegistry();
-        assets.initialize();
-        vendors = new VendorRegistry();
-        vendors.initialize();
-        migrations = new MigrationRegistry();
-        migrations.initialize(address(assets));
+        assets = ProxyDeploy.asset();
+        vendors = ProxyDeploy.vendor();
+        migrations = ProxyDeploy.migration(address(assets));
 
         // Three actors, unrolled: Halmos treats loops as symbolic path joins
         // ("Multiple paths were found in setUp()"), so setup must be

@@ -11,6 +11,23 @@ const nextConfig = {
   },
   // Security headers
   async headers() {
+    // Next.js dev server needs 'unsafe-eval' for its HMR runtime; production
+    // builds do not. connect-src follows the configured API origin instead of
+    // a hardcoded localhost (audit FE-1 / FE-2).
+    const isDev = process.env.NODE_ENV !== "production";
+    const apiBase = process.env.NEXT_PUBLIC_QTRUST_API_URL ?? "http://localhost:3001";
+    const scriptSrc = isDev ? "'self' 'unsafe-eval'" : "'self'";
+    const csp = [
+      "default-src 'self'",
+      `script-src ${scriptSrc}`,
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src 'self' data: https://fonts.gstatic.com",
+      "img-src 'self' data: https://ipfs.io https://explorer.walletconnect.com",
+      `connect-src 'self' ${apiBase} ${apiBase.replace(/^http/, "ws")} https://sepolia.base.org https://mainnet.base.org wss://relay.walletconnect.com https://relay.walletconnect.com https://explorer.walletconnect.com`,
+      "frame-ancestors 'none'",
+      "object-src 'none'",
+      "base-uri 'self'",
+    ].join("; ");
     return [
       {
         source: "/(.*)",
@@ -20,10 +37,7 @@ const nextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-XSS-Protection", value: "1; mode=block" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
-          {
-            key: "Content-Security-Policy",
-            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https://ipfs.io https://explorer.walletconnect.com; connect-src 'self' https://sepolia.base.org https://mainnet.base.org http://localhost:3001 wss://relay.walletconnect.com https://relay.walletconnect.com https://explorer.walletconnect.com",
-          },
+          { key: "Content-Security-Policy", value: csp },
         ],
       },
     ];

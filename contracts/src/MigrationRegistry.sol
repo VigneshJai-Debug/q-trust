@@ -79,7 +79,10 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard, Pausable, Initiali
     uint256 private _cachedChainId;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {}
+    constructor() {
+        // Prevent initialization of the raw implementation (UUPS best practice).
+        _disableInitializers();
+    }
 
     function initialize(address assetRegistry_) public initializer {
         if (_initialized) revert NotInitialized();
