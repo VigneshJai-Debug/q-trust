@@ -160,6 +160,7 @@ def main() -> None:
                 seed=seed,
                 loss=loss,
             )
+            # nosemgrep: ts.python.pickles-in-pytorch — weights_only=True
             ckpt = torch.load(model_path, map_location="cpu", weights_only=True)
             model = MigrationGNN(**ckpt["model_config"])
             model.load_state_dict(ckpt["model_state_dict"])

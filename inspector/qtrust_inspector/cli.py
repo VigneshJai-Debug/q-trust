@@ -514,6 +514,41 @@ def deep_probe(
         console.print(f"[green]Saved to {output}[/green]")
 
 
+@app.command("scan-source")
+def scan_source(
+    path: Path = typer.Argument(..., help="Directory containing source code"),
+    language: str = typer.Option(None, "--language", "-l", help="Filter by language (e.g. python, javascript, go)"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o"),
+    fmt: str = typer.Option("json", "--format", "-f", help="Output format: json|sarif"),
+    cyclonedx_out: Optional[Path] = typer.Option(None, "--cyclonedx", help="CycloneDX 1.7 CBOM output"),
+    risk: bool = typer.Option(False, "--risk/--no-risk"),
+    compliance: Optional[str] = typer.Option(None, "--compliance", "-c"),
+):
+    """Scan a source tree for cryptographic API usage (PQC readiness).
+
+    Emits SARIF for CI code-scanning with --format sarif.
+    """
+    from .source_scanner import scan_source_directory
+
+    findings = scan_source_directory(str(path))
+    if language:
+        findings = [f for f in findings if f.metadata.get("language") == language]
+
+    result = ScanResult(target=f"source:{path}", findings=[])
+    result.findings.extend(findings)
+
+    if fmt == "sarif":
+        if not output:
+            console.print("[red]--format sarif requires --output[/red]")
+            raise typer.Exit(1)
+        from .sarif import generate_sarif, save_sarif
+        save_sarif(generate_sarif([result]), str(output))
+        console.print(f"[green]SARIF saved to {output} ({len(findings)} findings)[/green]")
+    else:
+        _display(result)
+    _apply_outputs(result, output if fmt != "sarif" else None, risk, compliance, cyclonedx_out, None, False)
+
+
 @mcp_app.command("start")
 def mcp_start():
     """Start the MCP server for AI coding agents (Claude, Copilot, Cursor)."""

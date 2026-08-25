@@ -223,6 +223,7 @@ def _load_model() -> None:
         return
 
     try:
+        # nosemgrep: ts.python.pickles-in-pytorch — weights_only=True
         checkpoint = torch.load(MODEL_PATH, map_location="cpu", weights_only=True)
         config = checkpoint.get("model_config", {"input_features": 6, "hidden_dim": 64, "embedding_dim": 32})
         state_dict = checkpoint.get("model_state_dict")
@@ -442,6 +443,7 @@ def _rl_migration_order(req: PlanRequest) -> tuple[list[dict[str, Any]], str] | 
         agent = MigrationAgent(n_features=6, hidden_dim=128).to(device)
         try:
             agent.load_state_dict(
+                # nosemgrep: ts.python.pickles-in-pytorch — weights_only=True
                 torch.load(str(_RL_MODEL_PATH), map_location=device, weights_only=True)
             )
         except Exception as exc:
