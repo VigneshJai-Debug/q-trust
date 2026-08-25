@@ -32,7 +32,7 @@ jobs:
 
       - name: Upload Slither SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@60168ef1c09374794892c76da6bd402261729386 # v3.28.1
+        uses: github/codeql-action/upload-sarif@0fa1882f994fbd81a47ab0804f93354f5ea40147 # v3.28.17
         with:
           sarif_file: ${{ steps.slither.outputs.sarif }}
           category: slither
@@ -47,9 +47,14 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Run Semgrep scan
+        # The benchmark corpus contains intentionally vulnerable fixtures.
+        # torch.load sites are individually annotated nosemgrep because every
+        # one passes weights_only=True (verified) — a blanket rule exclusion
+        # would hide genuinely unsafe loads added later.
         run: >
           semgrep scan --config auto --error
           --exclude-rule generic.secrets.security.detected-generic-secret
+          --exclude inspector/benchmarks
         continue-on-error: false
 
   codeql:
@@ -64,12 +69,12 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@60168ef1c09374794892c76da6bd402261729386 # v3.28.1
+        uses: github/codeql-action/init@0fa1882f994fbd81a47ab0804f93354f5ea40147 # v3.28.17
         with:
           languages: ${{ matrix.language }}
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@60168ef1c09374794892c76da6bd402261729386 # v3.28.1
+        uses: github/codeql-action/analyze@0fa1882f994fbd81a47ab0804f93354f5ea40147 # v3.28.17
         with:
           category: codeql-${{ matrix.language }}
 
@@ -91,6 +96,9 @@ jobs:
 
       - name: Install component
         run: pip install -e ./${{ matrix.component }}
+
+      - name: Install pip-audit
+        run: pip install pip-audit
 
       - name: Audit installed dependencies
         # No requirements.txt is maintained for inspector/sdk; audit the resolved

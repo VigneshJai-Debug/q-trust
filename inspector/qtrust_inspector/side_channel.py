@@ -269,6 +269,7 @@ class SideChannelAnalyzer:
         self._model_path_used: Optional[str] = None
 
         if model_path and os.path.exists(model_path):
+            # nosemgrep: ts.python.pickles-in-pytorch — weights_only=True
             payload = torch.load(model_path, map_location=self.device, weights_only=True)
             if isinstance(payload, dict) and "state_dict" in payload:
                 self.model.load_state_dict(payload["state_dict"])

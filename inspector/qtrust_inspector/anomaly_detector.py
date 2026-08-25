@@ -139,6 +139,7 @@ class CBOMAnomalyDetector:
 
         if model_path:
             try:
+                # nosemgrep: ts.python.pickles-in-pytorch — weights_only=True
                 payload = torch.load(model_path, map_location=self.device, weights_only=True)
                 if isinstance(payload, dict) and "state_dict" in payload:
                     # Checkpoint format: weights + calibrated threshold.

@@ -13,18 +13,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-import httpx
-from eth_account import Account
-from eth_account.messages import encode_typed_data
 from pydantic import BaseModel, Field
 
 from .did import DIDDocument, DIDResolver
-
 
 # ---------------------------------------------------------------------------
 # Models
@@ -63,7 +58,11 @@ class VerifiableCredential(BaseModel):
             "iss": self.issuer,
             "sub": self.credentialSubject.get("id", ""),
             "iat": int(datetime.now(timezone.utc).timestamp()),
-            "exp": int(datetime.fromisoformat(self.expirationDate).timestamp()) if self.expirationDate else None,
+            "exp": (
+                int(datetime.fromisoformat(self.expirationDate).timestamp())
+                if self.expirationDate
+                else None
+            ),
             "jti": self.id,
             "vc": {
                 "@context": self.context,
@@ -127,8 +126,8 @@ def _ed25519_sign(message: bytes, private_key: bytes) -> bytes:
 def _ed25519_verify(message: bytes, signature: bytes, public_key: bytes) -> bool:
     """Verify an Ed25519 signature."""
     try:
-        from nacl.signing import VerifyKey
         from nacl.exceptions import BadSignatureError
+        from nacl.signing import VerifyKey
         verify_key = VerifyKey(public_key)
         verify_key.verify(message, signature)
         return True

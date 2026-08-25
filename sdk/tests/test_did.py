@@ -1,7 +1,8 @@
 # sdk/tests/test_did.py
 """Tests for did:web resolver."""
 import pytest
-from qtrust.did import DIDResolver, DIDDocument
+
+from qtrust.did import DIDDocument, DIDResolver
 
 
 def test_did_to_url_simple():

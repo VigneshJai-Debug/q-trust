@@ -193,7 +193,9 @@ function loadEvidenceChain(): void {
     raw = readFileSync(EVIDENCE_DB_PATH, "utf8");
   } catch (err) {
     console.warn(
-      `Evidence chain unreadable at ${EVIDENCE_DB_PATH} — starting empty:`,
+      "Evidence chain unreadable at",
+      EVIDENCE_DB_PATH,
+      "— starting empty:",
       err instanceof Error ? err.message : err,
     );
     return;

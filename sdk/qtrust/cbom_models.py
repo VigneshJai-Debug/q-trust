@@ -5,10 +5,9 @@ from __future__ import annotations
 import hashlib
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
-
 
 __all__ = [
     "CycloneDXComponent",
@@ -48,7 +47,7 @@ class CycloneDXBOM(BaseModel):
     version: int = 1
     metadata: dict[str, Any] = Field(default_factory=dict)
     components: list[CycloneDXComponent] = Field(default_factory=list)
-    vulnerabilities: Optional[list[dict[str, Any]]] = None
+    vulnerabilities: list[dict[str, Any]] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the BOM to a dictionary."""

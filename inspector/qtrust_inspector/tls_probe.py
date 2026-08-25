@@ -322,7 +322,9 @@ def probe_tls_endpoint(
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
-        ctx.set_ciphers("ALL")
+        # Deliberate: this tool PROBES endpoints for weak cipher suites, so it
+        # must offer the full cipher range to enumerate what a server accepts.
+        ctx.set_ciphers("ALL")  # nosemgrep: python.lang.security.audit.insecure-transport.ssl.no-set-ciphers.no-set-ciphers
 
         with socket.create_connection((host, port), timeout=timeout) as sock:
             with ctx.wrap_socket(sock, server_hostname=host) as ssock:

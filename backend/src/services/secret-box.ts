@@ -48,7 +48,9 @@ export function encryptSecret(
     return plaintext;
   }
   const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  // Explicit 128-bit auth tag length (semgrep gcm-no-tag-length): the tag is
+  // stored alongside the ciphertext, so its length must be fixed and known.
+  const cipher = createCipheriv("aes-256-gcm", key, iv, { authTagLength: 16 });
   const ct = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   const enc = (b: Buffer) => b.toString("base64url");
@@ -67,7 +69,9 @@ export function decryptSecret(stored: string): string {
     throw new Error(`Cannot decrypt webhook secret: ${KEY_ENV_VAR} not configured`);
   }
   const [, , ivB64, tagB64, ctB64] = parts;
-  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivB64, "base64url"));
+  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivB64, "base64url"), {
+    authTagLength: 16,
+  });
   decipher.setAuthTag(Buffer.from(tagB64, "base64url"));
   const pt = Buffer.concat([
     decipher.update(Buffer.from(ctB64, "base64url")),

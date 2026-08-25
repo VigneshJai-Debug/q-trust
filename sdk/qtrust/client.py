@@ -59,7 +59,8 @@ class QTrustClient:
         # Audit SDK-07: refuse cleartext RPC for anything but loopback — a
         # plain-HTTP RPC endpoint leaks every signed transaction in flight.
         _rpc = self.rpc_url.lower()
-        if _rpc.startswith("http://") and "localhost" not in _rpc and "127.0.0.1" not in _rpc and "[::1]" not in _rpc:
+        loopback = "localhost" in _rpc or "127.0.0.1" in _rpc or "[::1]" in _rpc
+        if _rpc.startswith("http://") and not loopback:
             raise ValueError(
                 f"Refusing non-HTTPS RPC URL '{self.rpc_url}' — signed transactions would "
                 "traverse the network in cleartext. Use https:// (or loopback for local dev)."
@@ -148,7 +149,9 @@ class QTrustClient:
             )
         return self.account
 
-    def _send_transaction(self, tx_builder, gas_limit: int = 250_000, max_nonce_retries: int = 3) -> dict:
+    def _send_transaction(
+        self, tx_builder, gas_limit: int = 250_000, max_nonce_retries: int = 3
+    ) -> dict:
         """Build, sign, send, and await a transaction.
 
         Audit SDK-08: concurrent submissions from one signer race on the same
@@ -178,12 +181,17 @@ class QTrustClient:
             receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
             if receipt["status"] != 1:
                 revert_reason = f"Transaction reverted: {tx_hash.hex()}"
-                if attempt < max_nonce_retries - 1 and self._is_nonce_error(RuntimeError(revert_reason)):
+                retryable = attempt < max_nonce_retries - 1 and self._is_nonce_error(
+                    RuntimeError(revert_reason)
+                )
+                if retryable:
                     last_exc = RuntimeError(revert_reason)
                     continue
                 raise RuntimeError(revert_reason)
             return dict(receipt)
-        raise RuntimeError(f"Transaction failed after {max_nonce_retries} nonce retries") from last_exc
+        raise RuntimeError(
+            f"Transaction failed after {max_nonce_retries} nonce retries"
+        ) from last_exc
 
     @staticmethod
     def _is_nonce_error(exc: Exception) -> bool:
@@ -435,7 +443,6 @@ class QTrustClient:
     @staticmethod
     def recover_attestation_signer(typed_data: dict, signature: str) -> str:
         """Recover the signer of an EIP-712 attestation (off-chain verification)."""
-        from eth_account.messages import encode_typed_data
 
         encoded = encode_typed_data(full_message=typed_data)
         return Account.recover_message(encoded, signature=signature)

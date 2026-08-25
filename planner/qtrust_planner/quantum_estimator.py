@@ -300,20 +300,31 @@ class QuantumThreatEstimator:
 
     @staticmethod
     def _pollard_rho(N: int) -> list[int]:
-        """Factor N = p*q via Pollard's rho; returns [] on failure."""
+        """Factor N = p*q via Pollard's rho; returns [] on failure.
+
+        Uses Floyd cycle detection with parameter randomization: a single
+        (x, c) pair can enter a degenerate cycle where x == y before any
+        factor is found (e.g. N = 21, c = 1) — retry with a different c
+        instead of aborting (CI failure: factoring 21 returned []).
+        """
         if N % 2 == 0:
             return sorted([2, N // 2])
-        x = 2
-        y = 2
-        d = 1
-        f = lambda v: (v * v + 1) % N
-        while d == 1:
-            x = f(x)
-            y = f(f(y))
-            d = gcd(abs(x - y), N)
-        if d == N or d == 1:
-            return []
-        return sorted([d, N // d])
+        for c in range(1, 128):
+            x = y = 2
+            d = 1
+
+            def f(v: int, c: int = c) -> int:
+                return (v * v + c) % N
+
+            while d == 1:
+                x = f(x)
+                y = f(f(y))
+                if x == y:
+                    break  # degenerate cycle — retry with the next c
+                d = gcd(abs(x - y), N)
+            if 1 < d < N:
+                return sorted([d, N // d])
+        return []
 
     def _factor_estimate(self, N: int) -> FactorResult:
         """Return an estimate for large N (cannot actually factor)."""

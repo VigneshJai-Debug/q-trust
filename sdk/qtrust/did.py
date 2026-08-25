@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import ipaddress
-import json
 import os
 import socket
 import time
 from typing import Any
-from urllib.parse import urlparse
 
 import httpx
 from pydantic import BaseModel, Field

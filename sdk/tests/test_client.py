@@ -73,7 +73,10 @@ def test_cbom_summary():
 def test_readonly_mode_constructor(monkeypatch):
     """A client without a private key is read-only: constructors work, writes guard."""
     monkeypatch.delenv("QTRUST_DEPLOYER_PRIVATE_KEY", raising=False)
-    monkeypatch.setenv("QTRUST_ASSET_REGISTRY_ADDRESS", "0x0000000000000000000000000000000000000001")
+    monkeypatch.setenv(
+        "QTRUST_ASSET_REGISTRY_ADDRESS",
+        "0x0000000000000000000000000000000000000001",
+    )
     try:
         client = QTrustClient(rpc_url="http://127.0.0.1:8545", chain_id=84532)
     except ConnectionError:
@@ -86,7 +89,13 @@ def test_readonly_mode_constructor(monkeypatch):
     except ValueError as e:
         assert "private key" in str(e)
 
-    client2 = QTrustClient(private_key="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
-                           rpc_url="http://127.0.0.1:8545", chain_id=84532)
+    client2 = QTrustClient(
+        private_key=(
+            "0xac0974bec39a17e36ba4a6b4d238ff944"
+            "bacb478cbed5efcae784d7bf4f2ff80"
+        ),
+        rpc_url="http://127.0.0.1:8545",
+        chain_id=84532,
+    )
     assert client2.account is not None
     assert client2._require_account() is client2.account

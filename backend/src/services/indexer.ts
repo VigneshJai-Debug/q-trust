@@ -355,7 +355,8 @@ function watchLive(spec: EventSpec): void {
         try {
           head = await getPublicClient().getBlockNumber();
         } catch (err) {
-          console.warn(`Indexer: getBlockNumber failed for ${spec.key}, skipping batch:`, err);
+          // Args passed separately (not interpolated) — semgrep unsafe-formatstring.
+          console.warn("Indexer: getBlockNumber failed for", spec.key, "— skipping batch:", err);
           return;
         }
       }

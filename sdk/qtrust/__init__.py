@@ -12,7 +12,7 @@ from .cbom_models import (
     generate_migration_roadmap,
 )
 from .client import QTrustClient
-from .did import DIDResolver, DIDDocument
+from .did import DIDDocument, DIDResolver
 from .ipfs import PinataClient
 from .risk import (
     ComplianceEngine,
@@ -20,18 +20,18 @@ from .risk import (
     ComplianceResult,
     ComplianceRule,
     QuantumVulnerability,
-    RiskScoringEngine,
     RiskScore,
+    RiskScoringEngine,
 )
 from .schema import CBOM, AssetRecord, CBOMEntry, MigrationRecord, ProductAttestation, VendorInfo
-from .trust import TrustAssessment, TrustEvaluator, EvidenceContribution, Conflict
+from .trust import Conflict, EvidenceContribution, TrustAssessment, TrustEvaluator
 from .vc import (
     VCIssuer,
     VCPresenter,
+    VCVerificationResult,
     VCVerifier,
     VerifiableCredential,
     VerifiablePresentation,
-    VCVerificationResult,
 )
 
 __version__ = "1.1.0"

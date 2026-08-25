@@ -12,7 +12,6 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from web3 import Web3
 
 from qtrust import QTrustClient
 from qtrust.schema import CBOM, CBOMEntry
@@ -244,9 +243,17 @@ def main() -> None:
         if "reverted" in str(e):
             # Timelock path: deployer cannot directly deactivate; vendor remains active.
             # Verify that governance correctly blocks direct deactivation.
-            assert client.is_vendor_active(org), "vendor should remain active under timelock governance"
-            print("  deactivate_vendor: blocked by timelock governance (vendor remains active — expected)")
-            print("  (governance deactivation requires 2-day timelock; direct attest still succeeds)")
+            assert client.is_vendor_active(org), (
+                "vendor should remain active under timelock governance"
+            )
+            print(
+                "  deactivate_vendor: blocked by timelock governance"
+                " (vendor remains active — expected)"
+            )
+            print(
+                "  (governance deactivation requires 2-day timelock;"
+                " direct attest still succeeds)"
+            )
         else:
             raise
 

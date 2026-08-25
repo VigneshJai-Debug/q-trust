@@ -1,7 +1,6 @@
 # sdk/tests/test_trust.py
 """Tests for Trust Assessment."""
-import pytest
-from qtrust.trust import TrustAssessment, TrustEvaluator, EvidenceContribution, Conflict
+from qtrust.trust import Conflict, EvidenceContribution, TrustAssessment, TrustEvaluator
 
 
 def test_basic_evaluation():
@@ -11,11 +10,31 @@ def test_basic_evaluation():
         policy_id="ncua_part_748_pqc",
         policy_version="1.0.0",
         evidence=[
-            {"evidence_id": "cred-1", "evidence_type": "credential", "claims": {"no_rsa_1024": True}},
-            {"evidence_id": "cred-2", "evidence_type": "credential", "claims": {"tls_min_key_bits": 2048}},
-            {"evidence_id": "cred-3", "evidence_type": "credential", "claims": {"migration_plan_date": "2026-12-31"}},
-            {"evidence_id": "cred-4", "evidence_type": "credential", "claims": {"no_md5_sha1_signing": True}},
-            {"evidence_id": "cred-5", "evidence_type": "credential", "claims": {"vendor_pqc_ready_count": 3}},
+            {
+                "evidence_id": "cred-1",
+                "evidence_type": "credential",
+                "claims": {"no_rsa_1024": True},
+            },
+            {
+                "evidence_id": "cred-2",
+                "evidence_type": "credential",
+                "claims": {"tls_min_key_bits": 2048},
+            },
+            {
+                "evidence_id": "cred-3",
+                "evidence_type": "credential",
+                "claims": {"migration_plan_date": "2026-12-31"},
+            },
+            {
+                "evidence_id": "cred-4",
+                "evidence_type": "credential",
+                "claims": {"no_md5_sha1_signing": True},
+            },
+            {
+                "evidence_id": "cred-5",
+                "evidence_type": "credential",
+                "claims": {"vendor_pqc_ready_count": 3},
+            },
         ],
     )
 
@@ -35,7 +54,11 @@ def test_partial_evaluation():
         policy_id="ncua_part_748_pqc",
         policy_version="1.0.0",
         evidence=[
-            {"evidence_id": "cred-1", "evidence_type": "credential", "claims": {"no_rsa_1024": True}},
+            {
+                "evidence_id": "cred-1",
+                "evidence_type": "credential",
+                "claims": {"no_rsa_1024": True},
+            },
         ],
     )
 

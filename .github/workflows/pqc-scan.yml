@@ -46,7 +46,7 @@ jobs:
 
       - name: Upload SARIF to GitHub Security
         if: always()
-        uses: github/codeql-action/upload-sarif@60168ef1c09374794892c76da6bd402261729386 # v3.28.1
+        uses: github/codeql-action/upload-sarif@0fa1882f994fbd81a47ab0804f93354f5ea40147 # v3.28.17
         with:
           sarif_file: scan-${{ matrix.language }}.sarif
           category: pqc-${{ matrix.language }}
@@ -101,7 +101,7 @@ jobs:
 
       - name: Upload TLS SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@60168ef1c09374794892c76da6bd402261729386 # v3.28.1
+        uses: github/codeql-action/upload-sarif@0fa1882f994fbd81a47ab0804f93354f5ea40147 # v3.28.17
         with:
           sarif_file: tls-scan.sarif
           category: pqc-tls

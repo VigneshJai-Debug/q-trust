@@ -1,10 +1,15 @@
 # sdk/tests/test_vc.py
 """Tests for W3C Verifiable Credentials."""
 import json
+
 import pytest
+
 from qtrust.vc import (
-    VCIssuer, VCPresenter, VCVerifier,
-    VerifiableCredential, VerifiablePresentation, VCVerificationResult,
+    VCIssuer,
+    VCPresenter,
+    VCVerificationResult,
+    VCVerifier,
+    VerifiableCredential,
 )
 
 
