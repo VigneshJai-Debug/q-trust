@@ -6,9 +6,9 @@ Q-Trust is a post-quantum trust infrastructure platform: Solidity contracts, a N
 
 | Version | Supported          | Notes                                          |
 |---------|--------------------|------------------------------------------------|
-| 1.1.x   | :white_check_mark: | Current release line; receives fixes           |
-| 1.0.x   | :white_check_mark: | Security fixes only until 2027-01-31           |
-| < 1.0   | :x:                | Pre-GA; upgrade to a supported release         |
+| 2.0.x   | :white_check_mark: | Current release line; receives fixes           |
+| 1.1.x   | :white_check_mark: | Security fixes only until 2027-01-31           |
+| < 1.1   | :x:                | Pre-GA; upgrade to a supported release         |
 
 ## Reporting a Vulnerability
 

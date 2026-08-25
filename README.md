@@ -1,12 +1,16 @@
 # Q-Trust v2.0.0 — Enterprise PQC Migration Protocol
 
+![Q-Trust banner](.github/assets/banner.svg)
+
 [![CI](https://github.com/humoge7502/q-trust/actions/workflows/ci.yml/badge.svg)](https://github.com/humoge7502/q-trust/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/humoge7502/q-trust)](https://github.com/humoge7502/q-trust/releases/tag/v2.0.0)
 [![Documentation](https://img.shields.io/badge/docs-mkdocs%20material-blue)](https://humoge7502.github.io/q-trust)
+[![Discussions](https://img.shields.io/github/discussions/humoge7502/q-trust)](https://github.com/humoge7502/q-trust/discussions)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 **The world's most comprehensive post-quantum cryptography migration protocol.** Enterprise-grade scanning, risk scoring, compliance verification, AI-powered planning, and blockchain-anchored attestation on Base L2.
 
-## What's New in v1.0.0
+## What's New in v2.0.0
 
 | Feature | Description |
 |---------|-------------|
@@ -39,7 +43,7 @@ docs/             Whitepaper, phase docs, patent materials
 
 ## Quick Start
 
-### 1. Scanner (v1.0.0 — NEW)
+### 1. Scanner (v2.0.0)
 ```bash
 cd inspector && pip install -e .
 crypto-inspector scan /path/to/project --cyclonedx cbom.json --sarif results.sarif --risk --compliance nist,cnsa
@@ -175,7 +179,7 @@ See [docs/GPU_FEATURES.md](docs/GPU_FEATURES.md),
 | `QTRUST_REDIS_URL` | Redis for webhook service |
 | `NEXT_PUBLIC_QTRUST_API_URL` | Frontend → backend base URL |
 
-## API Endpoints (v1.0.0)
+## API Endpoints (v2.0.0)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|

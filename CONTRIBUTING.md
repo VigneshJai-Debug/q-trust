@@ -12,7 +12,7 @@ Thank you for your interest in contributing to Q-Trust. This protocol helps orga
 # Fork the repository on GitHub, then:
 git clone https://github.com/<your-username>/q-trust.git
 cd q-trust
-git remote add upstream https://github.com/q-trust/q-trust.git
+git remote add upstream https://github.com/humoge7502/q-trust.git
 ```
 
 ### Prerequisites
