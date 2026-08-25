@@ -1,0 +1,33 @@
+{
+  "generated_at": "2026-08-25T06:29:02Z",
+  "key_sizes": {
+    "RSA-1024": {
+      "rsa_key_size": 1024,
+      "logical_qubits_needed": 2051,
+      "physical_qubits_needed": 2051000,
+      "estimated_breakable_year": null,
+      "based_on": "Gidney & Eker\u00e5 2019; IBM/Google/IonQ roadmaps"
+    },
+    "RSA-2048": {
+      "rsa_key_size": 2048,
+      "logical_qubits_needed": 4099,
+      "physical_qubits_needed": 4099000,
+      "estimated_breakable_year": null,
+      "based_on": "Gidney & Eker\u00e5 2019; IBM/Google/IonQ roadmaps"
+    },
+    "RSA-3072": {
+      "rsa_key_size": 3072,
+      "logical_qubits_needed": 6147,
+      "physical_qubits_needed": 6147000,
+      "estimated_breakable_year": null,
+      "based_on": "Gidney & Eker\u00e5 2019; IBM/Google/IonQ roadmaps"
+    },
+    "RSA-4096": {
+      "rsa_key_size": 4096,
+      "logical_qubits_needed": 8195,
+      "physical_qubits_needed": 8195000,
+      "estimated_breakable_year": null,
+      "based_on": "Gidney & Eker\u00e5 2019; IBM/Google/IonQ roadmaps"
+    }
+  }
+}

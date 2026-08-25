@@ -107,6 +107,7 @@ def main() -> None:
     candidates = [
         ("v2 (1.2K graphs, 64-dim)", _load_v2(here / "model.pt")),
         ("v3 (GPU-trained, 256-dim)", _load_v3(here / "model_gpu_v3.pt")),
+        ("v3 DDP (400K graphs, 256-dim)", _load_v3(here / "model_ddp_v3.pt")),
     ]
     present = [(n, m) for n, m in candidates if m is not None]
     missing = [n for n, m in candidates if m is None]

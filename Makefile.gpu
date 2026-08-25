@@ -10,7 +10,7 @@
 #   make -f Makefile.gpu anomaly         — train + test anomaly detector
 #   make -f Makefile.gpu parallel-scan   — run parallel enterprise scan demo
 
-.PHONY: help install train-gnn train-gnn-quick train-rl train-rl-quick side-channel-train side-channel quantum anomaly parallel-scan all
+.PHONY: help install train-gnn train-gnn-quick train-ddp train-rl train-rl-quick side-channel-train side-channel quantum anomaly parallel-scan all
 
 help:
 	@echo "Q-Trust GPU Feature Targets:"
@@ -34,6 +34,17 @@ train-gnn:
 
 train-gnn-quick:
 	cd planner && python -m qtrust_planner.train_gpu --quick
+
+# Multi-GPU DDP training — override DDP_GPUS to pick GPUs, e.g.:
+#   make -f Makefile.gpu train-ddp DDP_GPUS=1,2 NGRAPHS=400000
+DDP_GPUS ?= 1,2
+NGRAPHS ?= 400000
+EPOCHS ?= 200
+train-ddp:
+	cd planner && CUDA_VISIBLE_DEVICES=$(DDP_GPUS) python -m torch.distributed.run \
+		--nproc_per_node=$$(echo $(DDP_GPUS) | tr ',' '\n' | wc -l) \
+		-m qtrust_planner.train_ddp --epochs $(EPOCHS) --n-graphs $(NGRAPHS) \
+		--model-path model_ddp_v3.pt
 
 train-rl:
 	cd planner && python -m qtrust_planner.rl_agent --episodes 10000 --save-path rl_agent.pt
