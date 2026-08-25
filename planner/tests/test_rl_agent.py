@@ -79,3 +79,60 @@ def test_train_agent_saves_checkpoint(tmp_path):
     assert out.exists()
     sd = torch.load(out, map_location="cpu", weights_only=True)
     assert any("conv1" in k for k in sd.keys())
+
+
+REAL_CBOM = {
+    "schema_version": "qtrust.cbom.v1",
+    "target": "example.edu",
+    "assets": [
+        {"host": "example.edu", "algorithm": "RSA-2048", "key_size": 2048,
+         "criticality": "critical", "expired": False, "not_after": "2027-01-01T00:00:00+00:00"},
+        {"host": "mail.example.edu", "algorithm": "ECDSA-P256", "key_size": 256,
+         "criticality": "high"},
+        {"host": "vpn.example.edu", "algorithm": "ML-DSA-659", "key_size": 659,
+         "criticality": "medium"},
+    ],
+}
+
+
+def test_from_cbom_pins_real_assets():
+    env = MigrationEnvironment.from_cbom(REAL_CBOM, seed=7)
+    env.reset()
+    assert env.n_assets == 3
+    assert [a["algorithm"] for a in env.assets] == ["RSA-2048", "ECDSA-P256", "ML-DSA-659"]
+    # PQC asset is detected as ready; classical ones are not.
+    assert env.assets[2]["pqc_ready"] is True
+    assert env.assets[0]["pqc_ready"] is False
+
+
+def test_from_cbom_host_affinity_edges_are_dag():
+    env = MigrationEnvironment.from_cbom(REAL_CBOM, seed=7)
+    for dep, target in env.dependencies:
+        assert dep < target  # acyclic: dependency migrates before dependent
+    x, _edge_index = state_to_tensors(env.reset())
+    assert x.shape == (3, 6)
+
+
+def test_from_cbom_explicit_dependencies():
+    cbom = {
+        "assets": [
+            {"host": "h1", "algorithm": "RSA-4096", "key_size": 4096,
+             "criticality": "low", "depends_on": []},
+            {"host": "h1", "algorithm": "ECC-P256", "key_size": 256,
+             "criticality": "high", "depends_on": [0]},
+        ]
+    }
+    env = MigrationEnvironment.from_cbom(cbom)
+    assert (0, 1) in env.dependencies
+
+
+def test_train_agent_with_real_cbom_env_factory(tmp_path):
+    from qtrust_planner.rl_agent import train_agent
+
+    out = tmp_path / "agent_real.pt"
+
+    def factory():
+        return MigrationEnvironment.from_cbom(REAL_CBOM, seed=1)
+
+    train_agent(n_episodes=2, save_path=str(out), env_factory=factory)
+    assert out.exists()

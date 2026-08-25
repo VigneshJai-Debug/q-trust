@@ -18,14 +18,15 @@ from __future__ import annotations
 
 import argparse
 import os
+import random
 import time
 
 import torch
 import torch.nn.functional as F
 from torch_geometric.loader import DataLoader
 
-from .model_v3 import MigrationGNNv3
 from .data_generator import generate_dataset
+from .model_v3 import MigrationGNNv3
 
 
 def listMLE_loss(order_logits: torch.Tensor, y_order: torch.Tensor) -> torch.Tensor:
@@ -96,8 +97,15 @@ def train_gpu(
     seed: int = 42,
     val_split: float = 0.1,
     device_name: str | None = None,
+    extra_graphs: list | None = None,
 ) -> str:
     """Train MigrationGNNv3 with BF16 mixed precision.
+
+    Args:
+        extra_graphs: Optional list of real-data graphs (e.g. from
+            cbom_to_dependency_graph) mixed into the synthetic dataset.
+            The combined dataset is shuffled so real graphs land in both
+            train and validation splits.
 
     Returns the path the best model was saved to.
     """
@@ -120,6 +128,10 @@ def train_gpu(
     print(f"Generating {n_graphs:,} synthetic graphs...")
     gen_start = time.time()
     dataset = generate_dataset(n_graphs=n_graphs, seed=seed)
+    if extra_graphs:
+        dataset = dataset + list(extra_graphs)
+        random.Random(seed).shuffle(dataset)
+        print(f"Added {len(extra_graphs)} real-data graphs (total {len(dataset):,})")
     print(f"Generation took {time.time() - gen_start:.1f}s")
 
     if len(dataset) < batch_size * 2:

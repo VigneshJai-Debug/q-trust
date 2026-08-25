@@ -26,7 +26,9 @@ from __future__ import annotations
 
 import os
 import random
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import ClassVar
 
 import numpy as np
 import torch
@@ -56,43 +58,121 @@ class MigrationEnvironment:
 
     The agent observes the CBOM state and selects which asset to migrate next.
     After each migration, the state updates (dependencies satisfied, time advances).
+
+    Supports two modes:
+        - Random mode (default): reset() generates a fresh synthetic CBOM.
+        - Real-CBOM mode: constructed via ``from_cbom()``; reset() replays the
+          real assets/dependencies so training happens on real scan data.
     """
 
-    def __init__(self, n_assets: int = 50, seed: int = 42):
+    def __init__(self, n_assets: int = 50, seed: int = 42, cbom: dict | None = None):
         self.rng = np.random.default_rng(seed)
         self.n_assets = n_assets
+        self._cbom = cbom
+        if cbom is not None:
+            self._assets_template, self._cbom_dependencies = self._assets_from_cbom(cbom)
+            self.n_assets = len(self._assets_template)
         self.reset()
 
+    @classmethod
+    def from_cbom(cls, cbom: dict, seed: int = 42) -> MigrationEnvironment:
+        """Build an environment from a real CBOM document.
+
+        Accepts ``qtrust.cbom.v1`` dicts (crypto-inspector output) or any dict
+        with an ``assets`` list. Dependency edges come from explicit
+        ``depends_on`` lists when present; otherwise a deterministic
+        host-affinity fallback is used, matching cbom_to_dependency_graph().
+        """
+        return cls(n_assets=0, seed=seed, cbom=cbom)
+
+    # Default migration-effort estimates for real assets lacking the fields.
+    _CRIT_WEIGHT: ClassVar[dict] = {"low": 1, "medium": 2, "high": 3, "critical": 4}
+    _DEFAULT_KEY_SIZE: ClassVar[dict] = {"ECC": 256, "ECDSA": 256, "ECDH": 256, "EdDSA": 256, "SHA": 256}
+
+    def _normalize_asset(self, idx: int, asset: dict) -> dict:
+        algorithm = str(asset.get("algorithm") or "Unknown").upper()
+        key_size = asset.get("key_size")
+        if not key_size:
+            key_size = self._DEFAULT_KEY_SIZE.get(algorithm.split("-")[0], 2048)
+        key_size = int(key_size)
+        criticality = str(asset.get("criticality", "medium")).lower()
+        if criticality not in self._CRIT_WEIGHT:
+            criticality = "medium"
+        pqc_ready = bool(asset.get("pqc_ready", False)) or algorithm.startswith(
+            ("ML-KEM", "ML-DSA", "SLH-DSA", "HQC", "FALCON")
+        )
+        crit_w = self._CRIT_WEIGHT[criticality]
+        complexity = 1 if pqc_ready else max(1, min(key_size // 1024 + 1, 6))
+        return {
+            "id": idx,
+            "algorithm": algorithm,
+            "key_size": key_size,
+            "criticality": criticality,
+            "pqc_ready": pqc_ready,
+            "migration_time_days": int(complexity + self.rng.integers(0, 7)),
+            "downtime_hours": float(self.rng.uniform(0.5, crit_w * 6)),
+        }
+
+    def _assets_from_cbom(self, cbom: dict) -> tuple[list[dict], list[tuple[int, int]]]:
+        raw_assets = cbom.get("assets") or []
+        if not raw_assets:
+            raise ValueError("CBOM contains no assets")
+
+        assets = [self._normalize_asset(i, a) for i, a in enumerate(raw_assets)]
+
+        dependencies: list[tuple[int, int]] = []
+        has_explicit_deps = any(a.get("depends_on") for a in raw_assets)
+        first_index_by_host: dict[str, int] = {}
+        for i, raw in enumerate(raw_assets):
+            if has_explicit_deps:
+                for dep in raw.get("depends_on") or []:
+                    try:
+                        dep_idx = int(dep)
+                    except (TypeError, ValueError):
+                        continue
+                    if dep_idx != i and 0 <= dep_idx < len(assets):
+                        dependencies.append((dep_idx, i))
+            else:
+                host = str(raw.get("host") or raw.get("location") or "")
+                anchor = first_index_by_host.setdefault(host, i)
+                if anchor != i:
+                    dependencies.append((anchor, i))
+        return assets, dependencies
+
     def reset(self) -> MigrationState:
-        """Reset to a new random CBOM."""
-        # Generate random assets
-        algorithms = ["RSA-2048", "RSA-4096", "ECC-P256", "Ed25519"]
-        criticalities = ["low", "medium", "high", "critical"]
+        """Reset to the initial CBOM state (real assets if pinned via from_cbom)."""
+        if self._cbom is not None:
+            self.assets = [dict(a) for a in self._assets_template]
+            self.dependencies = list(self._cbom_dependencies)
+        else:
+            # Generate random assets
+            algorithms = ["RSA-2048", "RSA-4096", "ECC-P256", "Ed25519"]
+            criticalities = ["low", "medium", "high", "critical"]
 
-        self.assets = []
-        for i in range(self.n_assets):
-            alg = self.rng.choice(algorithms)
-            tail = alg.split("-")[-1]
-            key_size = int(tail) if tail.isdigit() else 256
-            self.assets.append({
-                "id": i,
-                "algorithm": alg,
-                "key_size": key_size,
-                "criticality": self.rng.choice(criticalities, p=[0.2, 0.4, 0.3, 0.1]),
-                "pqc_ready": False,
-                "migration_time_days": int(self.rng.integers(1, 14)),
-                "downtime_hours": float(self.rng.uniform(0, 24)),
-            })
+            self.assets = []
+            for i in range(self.n_assets):
+                alg = self.rng.choice(algorithms)
+                tail = alg.split("-")[-1]
+                key_size = int(tail) if tail.isdigit() else 256
+                self.assets.append({
+                    "id": i,
+                    "algorithm": alg,
+                    "key_size": key_size,
+                    "criticality": self.rng.choice(criticalities, p=[0.2, 0.4, 0.3, 0.1]),
+                    "pqc_ready": False,
+                    "migration_time_days": int(self.rng.integers(1, 14)),
+                    "downtime_hours": float(self.rng.uniform(0, 24)),
+                })
 
-        # Generate dependency edges as a DAG: edges always point from an
-        # earlier asset to a later one, guaranteeing a feasible order exists.
-        self.dependencies = []
-        for i in range(self.n_assets):
-            n_deps = int(self.rng.integers(0, 3))
-            if i > 0 and n_deps > 0:
-                deps = self.rng.choice(i, size=min(n_deps, i), replace=False)
-                for dep in np.atleast_1d(deps):
-                    self.dependencies.append((int(dep), i))  # dep must migrate before i
+            # Generate dependency edges as a DAG: edges always point from an
+            # earlier asset to a later one, guaranteeing a feasible order exists.
+            self.dependencies = []
+            for i in range(self.n_assets):
+                n_deps = int(self.rng.integers(0, 3))
+                if i > 0 and n_deps > 0:
+                    deps = self.rng.choice(i, size=min(n_deps, i), replace=False)
+                    for dep in np.atleast_1d(deps):
+                        self.dependencies.append((int(dep), i))  # dep must migrate before i
 
         # Initial state
         self.migrated = [False] * self.n_assets
@@ -307,6 +387,7 @@ def train_agent(
     gamma: float = 0.99,
     save_path: str = "rl_agent.pt",
     seed: int = 42,
+    env_factory: Callable[[], MigrationEnvironment] | None = None,
 ):
     """Train the RL migration agent.
 
@@ -318,6 +399,9 @@ def train_agent(
         gamma: Discount factor.
         save_path: Where to save the trained model.
         seed: Random seed.
+        env_factory: Optional callable returning a fresh MigrationEnvironment
+            per episode (e.g. cycling through real scanned CBOMs). When None,
+            random synthetic environments are generated as before.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.manual_seed(seed)
@@ -328,10 +412,14 @@ def train_agent(
     best_avg_reward = float('-inf')
 
     for episode in range(n_episodes):
-        # Generate a random environment
-        n_assets = random.randint(20, 100)
-        env = MigrationEnvironment(n_assets=n_assets, seed=episode)
-        state = env.reset()
+        # Use the provided environment factory (real CBOMs) or a random one
+        if env_factory is not None:
+            env = env_factory()
+            state = env.reset()
+        else:
+            n_assets = random.randint(20, 100)
+            env = MigrationEnvironment(n_assets=n_assets, seed=episode)
+            state = env.reset()
 
         log_probs = []
         values = []
