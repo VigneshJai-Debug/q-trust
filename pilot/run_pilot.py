@@ -39,8 +39,13 @@ DEFAULT_ADDRS = {
 }
 for k, v in DEFAULT_ADDRS.items():
     os.environ.setdefault(k, v)
-os.environ.setdefault("QTRUST_DEPLOYER_PRIVATE_KEY",
-                      "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")
+# The well-known Anvil account #0 key must come from the environment, never be
+# hardcoded here — this script may be pointed at a public RPC via QTRUST_BASE_SEPOLIA_RPC.
+if not os.environ.get("QTRUST_DEPLOYER_PRIVATE_KEY"):
+    sys.exit(
+        "Refusing to run: set QTRUST_DEPLOYER_PRIVATE_KEY explicitly "
+        "(use the Anvil default 0xac0974...ff80 ONLY against http://127.0.0.1:8545)."
+    )
 os.environ.setdefault("QTRUST_BASE_SEPOLIA_RPC", "http://127.0.0.1:8545")
 
 BANNER = "=" * 70

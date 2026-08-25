@@ -108,3 +108,32 @@ jobs:
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  dev-key-guard:
+    name: Reject Known Dev Keys Outside Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Scan for well-known Anvil/Hardhat dev keys in non-test files
+        # The Anvil account #0 key is public and safe in test fixtures only.
+        # pilot/run_pilot.py now requires QTRUST_DEPLOYER_PRIVATE_KEY from the
+        # environment, so any literal reappearance outside tests/ fails the build.
+        run: |
+          set -e
+          KEY='0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
+          VIOLATIONS=$(git grep -l "$KEY" -- \
+            ':(exclude)*.test.*' \
+            ':(exclude)**/tests/**' \
+            ':(exclude)**/test/**' \
+            ':(exclude)scripts/**' \
+            ':(exclude).github/**' \
+            ':(exclude)docs/**' \
+            ':(exclude)CHANGELOG.md' \
+            ':(exclude)SECURITY.md' || true)
+          if [ -n "$VIOLATIONS" ]; then
+            echo "::error::Known Anvil dev key found outside test contexts:"
+            echo "$VIOLATIONS"
+            exit 1
+          fi
+          echo "No dev keys outside test files."

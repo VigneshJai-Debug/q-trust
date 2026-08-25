@@ -37,6 +37,7 @@ import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import { createHash } from "node:crypto";
+import { encryptSecret } from "./services/secret-box.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import * as dotenv from "dotenv";
@@ -782,10 +783,18 @@ server.post("/v1/webhooks/subscribe", { preHandler: requireApiKey }, async (requ
     return reply.status(503).send({ error: "Redis unavailable — webhook service not running" });
   }
   const eventList = events && events.length ? events : ["*"];
-  const payload = JSON.stringify({ url, address, secret: secret ?? "" });
+  const stored = JSON.stringify({
+    url,
+    address,
+    secret: encryptSecret(secret ?? "", () =>
+      server.log.warn(
+        "QTRUST_WEBHOOK_ENC_KEY not set — webhook secrets are stored UNENCRYPTED in Redis"
+      )
+    ),
+  });
   for (const event of eventList) {
     const key = event === "*" ? "subscribers:*" : `subscribers:${event}`;
-    await redis.sadd(key, payload);
+    await redis.sadd(key, stored);
   }
   return { subscribed: true, subscriber: { address, url, events: eventList, secret: secret ? "•••" : "" } };
 });
@@ -799,12 +808,26 @@ server.post("/v1/webhooks/unsubscribe", { preHandler: requireApiKey }, async (re
   if (!redis) {
     return reply.status(503).send({ error: "Redis unavailable" });
   }
+  if (!address || !url) {
+    return reply.status(400).send({ error: "address and url are required" });
+  }
   const eventList = events && events.length ? events : ["*"];
-  const payload = JSON.stringify({ url, address });
   let removed = 0;
   for (const event of eventList) {
     const key = event === "*" ? "subscribers:*" : `subscribers:${event}`;
-    removed += await redis.srem(key, payload);
+    // Records may or may not carry an encrypted secret, so exact-string srem
+    // cannot match. Remove by identity (url + address) instead.
+    const records = await redis.smembers(key);
+    for (const raw of records) {
+      try {
+        const parsed = JSON.parse(raw) as { url?: string; address?: string };
+        if (parsed.url === url && parsed.address === address) {
+          removed += await redis.srem(key, raw);
+        }
+      } catch {
+        continue; // malformed record — leave untouched
+      }
+    }
   }
   return { unsubscribed: true, removed };
 });

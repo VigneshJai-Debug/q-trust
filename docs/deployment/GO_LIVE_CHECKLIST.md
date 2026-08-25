@@ -54,6 +54,6 @@ Workflows are merged (`.github/workflows/publish-pypi.yml`,
    vendor verification bot)
 
 Multi-week builds tracked in
-[`QTrust_Implementation_Gap_Report.md`](../../QTrust_Implementation_Gap_Report.md)
+[`QTrust_Implementation_Gap_Report.md`](../assessments/QTrust_Implementation_Gap_Report.md)
 (Tier 4). The side-channel analyzer + bridge (Gap 22's core) already exist;
 the bot reduces to an OQS-download loop around it.
