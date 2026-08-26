@@ -242,7 +242,9 @@ function persistEvidenceEntry(entry: LedgerEntry): void {
     appendFileSync(EVIDENCE_DB_PATH, `${JSON.stringify(entry)}\n`, "utf8");
   } catch (err) {
     console.warn(
-      `Evidence chain persistence failed at ${EVIDENCE_DB_PATH} — continuing in memory only:`,
+      "Evidence chain persistence failed at",
+      EVIDENCE_DB_PATH,
+      "— continuing in memory only:",
       err instanceof Error ? err.message : err,
     );
   }

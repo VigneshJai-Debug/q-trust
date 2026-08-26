@@ -283,7 +283,7 @@ async function backfill(spec: EventSpec): Promise<void> {
   // Reorg check first: if previously indexed blocks are no longer canonical,
   // purge forked rows and resume from the fork point.
   await detectAndHandleReorg(spec).catch((err) => {
-    console.warn(`Indexer: reorg check failed for ${spec.key}:`, err);
+    console.warn("Indexer: reorg check failed for", spec.key, ":", err);
   });
 
   let from = await getCursor(spec.key);
@@ -345,7 +345,7 @@ function watchLive(spec: EventSpec): void {
         try {
           await detectAndHandleReorg(spec);
         } catch (err) {
-          console.warn(`Indexer: reorg check failed for ${spec.key}:`, err);
+          console.warn("Indexer: reorg check failed for", spec.key, ":", err);
         }
       }
       let head: bigint | null = null;
@@ -393,7 +393,7 @@ function watchLive(spec: EventSpec): void {
             // Webhook delivery is best-effort — do not block indexing.
           }
         } catch (err) {
-          console.error(`Indexer applyLog failed for ${spec.key} at block ${blockNum}:`, err);
+          console.error("Indexer applyLog failed for", spec.key, "at block", blockNum, ":", err);
           // Do not advance the cursor — backfill will retry on next restart.
         }
       }

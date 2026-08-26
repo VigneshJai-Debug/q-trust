@@ -9,10 +9,10 @@ updates:
   # ── Backend (npm) ─────────────────────────────────────────────
   - package-ecosystem: npm
     directory: /backend
-    schedule:
-      interval: weekly
     cooldown:
       default-days: 5
+    schedule:
+      interval: weekly
     groups:
       minor-and-patch:
         update-types:
@@ -25,10 +25,10 @@ updates:
   # ── Frontend (npm) ────────────────────────────────────────────
   - package-ecosystem: npm
     directory: /frontend
-    schedule:
-      interval: weekly
     cooldown:
       default-days: 5
+    schedule:
+      interval: weekly
     groups:
       minor-and-patch:
         update-types:
@@ -41,10 +41,10 @@ updates:
   # ── Inspector (pip) ───────────────────────────────────────────
   - package-ecosystem: pip
     directory: /inspector
-    schedule:
-      interval: weekly
     cooldown:
       default-days: 5
+    schedule:
+      interval: weekly
     groups:
       minor-and-patch:
         update-types:
@@ -57,10 +57,10 @@ updates:
   # ── SDK (pip) ─────────────────────────────────────────────────
   - package-ecosystem: pip
     directory: /sdk
-    schedule:
-      interval: weekly
     cooldown:
       default-days: 5
+    schedule:
+      interval: weekly
     groups:
       minor-and-patch:
         update-types:
@@ -73,10 +73,10 @@ updates:
   # ── Dockerfiles / compose base images ─────────────────────────
   - package-ecosystem: docker
     directory: /
-    schedule:
-      interval: weekly
     cooldown:
       default-days: 5
+    schedule:
+      interval: weekly
     groups:
       minor-and-patch:
         update-types:
@@ -89,10 +89,10 @@ updates:
   # ── GitHub Actions versions ───────────────────────────────────
   - package-ecosystem: github-actions
     directory: /
-    schedule:
-      interval: weekly
     cooldown:
       default-days: 5
+    schedule:
+      interval: weekly
     groups:
       minor-and-patch:
         update-types:
