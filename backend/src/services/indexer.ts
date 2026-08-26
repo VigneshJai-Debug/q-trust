@@ -330,10 +330,15 @@ let lastReorgCheckAt = 0;
 /** Subscribe to live events after the initial backfill. */
 const unwatchers: Array<() => void> = [];
 
-function watchLive(spec: EventSpec): void {
+async function watchLive(spec: EventSpec): Promise<void> {
   const address = spec.contract();
   if (address === "0x0") return;
-  const unwatch = getPublicClient().watchEvent({
+  // Audit H-6: the rpc-pool Proxy wraps every method call in a Promise,
+  // including viem's synchronous watchEvent (which returns an unwatch
+  // function). Without `await`, unwatchers collected Promise objects and
+  // stopIndexer silently failed to unsubscribe — duplicate subscriptions
+  // accumulated across restarts, doubling event delivery.
+  const unwatch = await getPublicClient().watchEvent({
     address,
     event: parseAbiItem(spec.event) as AbiEvent,
     onLogs: async (logs) => {
@@ -343,7 +348,15 @@ function watchLive(spec: EventSpec): void {
       if (now - lastReorgCheckAt >= REORG_CHECK_INTERVAL_MS) {
         lastReorgCheckAt = now;
         try {
-          await detectAndHandleReorg(spec);
+          const forkBlock = await detectAndHandleReorg(spec);
+          // Audit M-8: after a reorg purge the cursor is rewound but
+          // watchEvent is forward-only — without a catch-up backfill here,
+          // re-executed canonical events were silently lost until the next
+          // process restart.
+          if (forkBlock !== null) {
+            console.log(`Indexer: re-scanning ${spec.key} from fork block ${forkBlock}`);
+            await backfill(spec);
+          }
         } catch (err) {
           console.warn("Indexer: reorg check failed for", spec.key, ":", err);
         }
@@ -408,7 +421,8 @@ let started = false;
 export function stopIndexer(): void {
   for (const unwatch of unwatchers.splice(0)) {
     try {
-      unwatch();
+      // Audit H-6 regression guard: only real unwatch functions are stored.
+      if (typeof unwatch === "function") unwatch();
     } catch {
       // best-effort during shutdown
     }
@@ -424,7 +438,7 @@ export async function startIndexer(): Promise<void> {
     await initSchema();
     for (const spec of EVENTS) {
       await backfill(spec as unknown as EventSpec);
-      watchLive(spec as unknown as EventSpec);
+      await watchLive(spec as unknown as EventSpec);
     }
     console.log("Indexer started (Postgres read model live)");
   } catch (err) {

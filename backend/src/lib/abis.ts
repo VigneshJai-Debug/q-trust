@@ -191,6 +191,25 @@ export const AssetRegistryAbi = [
     },
     {
       type: "function",
+      name: "getAssetCountByOrg",
+      inputs: [
+            {
+                  name: "orgDid",
+                  type: "address",
+                  internalType: "address",
+                },
+          ],
+      outputs: [
+            {
+                  name: "",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+          ],
+      stateMutability: "view",
+    },
+    {
+      type: "function",
       name: "getAssetsByOrg",
       inputs: [
             {
@@ -204,6 +223,40 @@ export const AssetRegistryAbi = [
                   name: "",
                   type: "bytes32[]",
                   internalType: "bytes32[]",
+                },
+          ],
+      stateMutability: "view",
+    },
+    {
+      type: "function",
+      name: "getAssetsByOrgPaged",
+      inputs: [
+            {
+                  name: "orgDid",
+                  type: "address",
+                  internalType: "address",
+                },
+            {
+                  name: "offset",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+            {
+                  name: "limit",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+          ],
+      outputs: [
+            {
+                  name: "page",
+                  type: "bytes32[]",
+                  internalType: "bytes32[]",
+                },
+            {
+                  name: "total",
+                  type: "uint256",
+                  internalType: "uint256",
                 },
           ],
       stateMutability: "view",
@@ -945,13 +998,19 @@ export const AssetRegistryAbi = [
     },
     {
       type: "error",
-      name: "NotInitialized",
+      name: "NotInitializing",
       inputs: [],
     },
     {
       type: "error",
-      name: "NotInitializing",
-      inputs: [],
+      name: "NotOwnerOrAdmin",
+      inputs: [
+            {
+                  name: "caller",
+                  type: "address",
+                  internalType: "address",
+                },
+          ],
     },
     {
       type: "error",
@@ -1363,6 +1422,25 @@ export const VendorRegistryAbi = [
     },
     {
       type: "function",
+      name: "getAttestationCountByVendor",
+      inputs: [
+            {
+                  name: "vendorDid",
+                  type: "address",
+                  internalType: "address",
+                },
+          ],
+      outputs: [
+            {
+                  name: "",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+          ],
+      stateMutability: "view",
+    },
+    {
+      type: "function",
       name: "getAttestationsByProduct",
       inputs: [
             {
@@ -1405,6 +1483,40 @@ export const VendorRegistryAbi = [
                   name: "",
                   type: "bytes32[]",
                   internalType: "bytes32[]",
+                },
+          ],
+      stateMutability: "view",
+    },
+    {
+      type: "function",
+      name: "getAttestationsByVendorPaged",
+      inputs: [
+            {
+                  name: "vendorDid",
+                  type: "address",
+                  internalType: "address",
+                },
+            {
+                  name: "offset",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+            {
+                  name: "limit",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+          ],
+      outputs: [
+            {
+                  name: "page",
+                  type: "bytes32[]",
+                  internalType: "bytes32[]",
+                },
+            {
+                  name: "total",
+                  type: "uint256",
+                  internalType: "uint256",
                 },
           ],
       stateMutability: "view",
@@ -2212,11 +2324,6 @@ export const VendorRegistryAbi = [
     },
     {
       type: "error",
-      name: "NotInitialized",
-      inputs: [],
-    },
-    {
-      type: "error",
       name: "NotInitializing",
       inputs: [],
     },
@@ -2458,6 +2565,25 @@ export const MigrationRegistryAbi = [
     },
     {
       type: "function",
+      name: "getMigrationCountByOrg",
+      inputs: [
+            {
+                  name: "orgDid",
+                  type: "address",
+                  internalType: "address",
+                },
+          ],
+      outputs: [
+            {
+                  name: "",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+          ],
+      stateMutability: "view",
+    },
+    {
+      type: "function",
       name: "getMigrationsByAsset",
       inputs: [
             {
@@ -2490,6 +2616,40 @@ export const MigrationRegistryAbi = [
                   name: "",
                   type: "bytes32[]",
                   internalType: "bytes32[]",
+                },
+          ],
+      stateMutability: "view",
+    },
+    {
+      type: "function",
+      name: "getMigrationsByOrgPaged",
+      inputs: [
+            {
+                  name: "orgDid",
+                  type: "address",
+                  internalType: "address",
+                },
+            {
+                  name: "offset",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+            {
+                  name: "limit",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+          ],
+      outputs: [
+            {
+                  name: "page",
+                  type: "bytes32[]",
+                  internalType: "bytes32[]",
+                },
+            {
+                  name: "total",
+                  type: "uint256",
+                  internalType: "uint256",
                 },
           ],
       stateMutability: "view",
@@ -2943,6 +3103,31 @@ export const MigrationRegistryAbi = [
     },
     {
       type: "event",
+      name: "MigrationVerified",
+      inputs: [
+            {
+                  name: "migrationId",
+                  type: "bytes32",
+                  indexed: true,
+                  internalType: "bytes32",
+                },
+            {
+                  name: "verifiedBy",
+                  type: "address",
+                  indexed: true,
+                  internalType: "address",
+                },
+            {
+                  name: "timestamp",
+                  type: "uint256",
+                  indexed: false,
+                  internalType: "uint256",
+                },
+          ],
+      anonymous: false,
+    },
+    {
+      type: "event",
       name: "Paused",
       inputs: [
             {
@@ -3227,8 +3412,19 @@ export const MigrationRegistryAbi = [
     },
     {
       type: "error",
-      name: "NotInitialized",
-      inputs: [],
+      name: "NotAssetOwner",
+      inputs: [
+            {
+                  name: "caller",
+                  type: "address",
+                  internalType: "address",
+                },
+            {
+                  name: "assetId",
+                  type: "bytes32",
+                  internalType: "bytes32",
+                },
+          ],
     },
     {
       type: "error",
@@ -3435,6 +3631,44 @@ export const AuditRegistryAbi = [
     },
     {
       type: "function",
+      name: "getAuditCountByAuditor",
+      inputs: [
+            {
+                  name: "auditorDid",
+                  type: "address",
+                  internalType: "address",
+                },
+          ],
+      outputs: [
+            {
+                  name: "",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+          ],
+      stateMutability: "view",
+    },
+    {
+      type: "function",
+      name: "getAuditCountByOrg",
+      inputs: [
+            {
+                  name: "orgDid",
+                  type: "address",
+                  internalType: "address",
+                },
+          ],
+      outputs: [
+            {
+                  name: "",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+          ],
+      stateMutability: "view",
+    },
+    {
+      type: "function",
       name: "getAuditsByAuditor",
       inputs: [
             {
@@ -3454,6 +3688,40 @@ export const AuditRegistryAbi = [
     },
     {
       type: "function",
+      name: "getAuditsByAuditorPaged",
+      inputs: [
+            {
+                  name: "auditorDid",
+                  type: "address",
+                  internalType: "address",
+                },
+            {
+                  name: "offset",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+            {
+                  name: "limit",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+          ],
+      outputs: [
+            {
+                  name: "page",
+                  type: "bytes32[]",
+                  internalType: "bytes32[]",
+                },
+            {
+                  name: "total",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+          ],
+      stateMutability: "view",
+    },
+    {
+      type: "function",
       name: "getAuditsByOrg",
       inputs: [
             {
@@ -3467,6 +3735,40 @@ export const AuditRegistryAbi = [
                   name: "",
                   type: "bytes32[]",
                   internalType: "bytes32[]",
+                },
+          ],
+      stateMutability: "view",
+    },
+    {
+      type: "function",
+      name: "getAuditsByOrgPaged",
+      inputs: [
+            {
+                  name: "orgDid",
+                  type: "address",
+                  internalType: "address",
+                },
+            {
+                  name: "offset",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+            {
+                  name: "limit",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+          ],
+      outputs: [
+            {
+                  name: "page",
+                  type: "bytes32[]",
+                  internalType: "bytes32[]",
+                },
+            {
+                  name: "total",
+                  type: "uint256",
+                  internalType: "uint256",
                 },
           ],
       stateMutability: "view",
@@ -4247,12 +4549,12 @@ export const AuditRegistryAbi = [
     },
     {
       type: "error",
-      name: "NotInitialized",
+      name: "NotInitializing",
       inputs: [],
     },
     {
       type: "error",
-      name: "NotInitializing",
+      name: "ReentrancyGuardReentrantCall",
       inputs: [],
     },
     {
@@ -4328,6 +4630,19 @@ export const QTrustGovernanceAbi = [
     },
     {
       type: "function",
+      name: "DEFAULT_ADMIN_ROLE",
+      inputs: [],
+      outputs: [
+            {
+                  name: "",
+                  type: "bytes32",
+                  internalType: "bytes32",
+                },
+          ],
+      stateMutability: "view",
+    },
+    {
+      type: "function",
       name: "DEFAULT_DELAY",
       inputs: [],
       outputs: [
@@ -4335,6 +4650,19 @@ export const QTrustGovernanceAbi = [
                   name: "",
                   type: "uint256",
                   internalType: "uint256",
+                },
+          ],
+      stateMutability: "view",
+    },
+    {
+      type: "function",
+      name: "PROPOSER_ROLE",
+      inputs: [],
+      outputs: [
+            {
+                  name: "",
+                  type: "bytes32",
+                  internalType: "bytes32",
                 },
           ],
       stateMutability: "view",
@@ -4390,6 +4718,67 @@ export const QTrustGovernanceAbi = [
     },
     {
       type: "function",
+      name: "getRoleAdmin",
+      inputs: [
+            {
+                  name: "role",
+                  type: "bytes32",
+                  internalType: "bytes32",
+                },
+          ],
+      outputs: [
+            {
+                  name: "",
+                  type: "bytes32",
+                  internalType: "bytes32",
+                },
+          ],
+      stateMutability: "view",
+    },
+    {
+      type: "function",
+      name: "grantRole",
+      inputs: [
+            {
+                  name: "role",
+                  type: "bytes32",
+                  internalType: "bytes32",
+                },
+            {
+                  name: "account",
+                  type: "address",
+                  internalType: "address",
+                },
+          ],
+      outputs: [],
+      stateMutability: "nonpayable",
+    },
+    {
+      type: "function",
+      name: "hasRole",
+      inputs: [
+            {
+                  name: "role",
+                  type: "bytes32",
+                  internalType: "bytes32",
+                },
+            {
+                  name: "account",
+                  type: "address",
+                  internalType: "address",
+                },
+          ],
+      outputs: [
+            {
+                  name: "",
+                  type: "bool",
+                  internalType: "bool",
+                },
+          ],
+      stateMutability: "view",
+    },
+    {
+      type: "function",
       name: "migrationRegistry",
       inputs: [],
       outputs: [
@@ -4400,6 +4789,42 @@ export const QTrustGovernanceAbi = [
                 },
           ],
       stateMutability: "view",
+    },
+    {
+      type: "function",
+      name: "renounceRole",
+      inputs: [
+            {
+                  name: "role",
+                  type: "bytes32",
+                  internalType: "bytes32",
+                },
+            {
+                  name: "callerConfirmation",
+                  type: "address",
+                  internalType: "address",
+                },
+          ],
+      outputs: [],
+      stateMutability: "nonpayable",
+    },
+    {
+      type: "function",
+      name: "revokeRole",
+      inputs: [
+            {
+                  name: "role",
+                  type: "bytes32",
+                  internalType: "bytes32",
+                },
+            {
+                  name: "account",
+                  type: "address",
+                  internalType: "address",
+                },
+          ],
+      outputs: [],
+      stateMutability: "nonpayable",
     },
     {
       type: "function",
@@ -4472,12 +4897,58 @@ export const QTrustGovernanceAbi = [
     },
     {
       type: "function",
+      name: "scheduleGrantRoleOn",
+      inputs: [
+            {
+                  name: "target",
+                  type: "address",
+                  internalType: "address",
+                },
+            {
+                  name: "role",
+                  type: "bytes32",
+                  internalType: "bytes32",
+                },
+            {
+                  name: "account",
+                  type: "address",
+                  internalType: "address",
+                },
+            {
+                  name: "salt",
+                  type: "bytes32",
+                  internalType: "bytes32",
+                },
+          ],
+      outputs: [],
+      stateMutability: "nonpayable",
+    },
+    {
+      type: "function",
       name: "schedulePause",
       inputs: [
             {
                   name: "registryIndex",
                   type: "uint256",
                   internalType: "uint256",
+                },
+            {
+                  name: "salt",
+                  type: "bytes32",
+                  internalType: "bytes32",
+                },
+          ],
+      outputs: [],
+      stateMutability: "nonpayable",
+    },
+    {
+      type: "function",
+      name: "schedulePauseOn",
+      inputs: [
+            {
+                  name: "target",
+                  type: "address",
+                  internalType: "address",
                 },
             {
                   name: "salt",
@@ -4523,6 +4994,43 @@ export const QTrustGovernanceAbi = [
           ],
       outputs: [],
       stateMutability: "nonpayable",
+    },
+    {
+      type: "function",
+      name: "scheduleUnpauseOn",
+      inputs: [
+            {
+                  name: "target",
+                  type: "address",
+                  internalType: "address",
+                },
+            {
+                  name: "salt",
+                  type: "bytes32",
+                  internalType: "bytes32",
+                },
+          ],
+      outputs: [],
+      stateMutability: "nonpayable",
+    },
+    {
+      type: "function",
+      name: "supportsInterface",
+      inputs: [
+            {
+                  name: "interfaceId",
+                  type: "bytes4",
+                  internalType: "bytes4",
+                },
+          ],
+      outputs: [
+            {
+                  name: "",
+                  type: "bool",
+                  internalType: "bool",
+                },
+          ],
+      stateMutability: "view",
     },
     {
       type: "function",
@@ -4580,6 +5088,102 @@ export const QTrustGovernanceAbi = [
                 },
           ],
       anonymous: false,
+    },
+    {
+      type: "event",
+      name: "RoleAdminChanged",
+      inputs: [
+            {
+                  name: "role",
+                  type: "bytes32",
+                  indexed: true,
+                  internalType: "bytes32",
+                },
+            {
+                  name: "previousAdminRole",
+                  type: "bytes32",
+                  indexed: true,
+                  internalType: "bytes32",
+                },
+            {
+                  name: "newAdminRole",
+                  type: "bytes32",
+                  indexed: true,
+                  internalType: "bytes32",
+                },
+          ],
+      anonymous: false,
+    },
+    {
+      type: "event",
+      name: "RoleGranted",
+      inputs: [
+            {
+                  name: "role",
+                  type: "bytes32",
+                  indexed: true,
+                  internalType: "bytes32",
+                },
+            {
+                  name: "account",
+                  type: "address",
+                  indexed: true,
+                  internalType: "address",
+                },
+            {
+                  name: "sender",
+                  type: "address",
+                  indexed: true,
+                  internalType: "address",
+                },
+          ],
+      anonymous: false,
+    },
+    {
+      type: "event",
+      name: "RoleRevoked",
+      inputs: [
+            {
+                  name: "role",
+                  type: "bytes32",
+                  indexed: true,
+                  internalType: "bytes32",
+                },
+            {
+                  name: "account",
+                  type: "address",
+                  indexed: true,
+                  internalType: "address",
+                },
+            {
+                  name: "sender",
+                  type: "address",
+                  indexed: true,
+                  internalType: "address",
+                },
+          ],
+      anonymous: false,
+    },
+    {
+      type: "error",
+      name: "AccessControlBadConfirmation",
+      inputs: [],
+    },
+    {
+      type: "error",
+      name: "AccessControlUnauthorizedAccount",
+      inputs: [
+            {
+                  name: "account",
+                  type: "address",
+                  internalType: "address",
+                },
+            {
+                  name: "neededRole",
+                  type: "bytes32",
+                  internalType: "bytes32",
+                },
+          ],
     },
     {
       type: "error",
@@ -5686,6 +6290,35 @@ export const RevocationAnchorAbi = [
     },
     {
       type: "function",
+      name: "getAllIssuersPaged",
+      inputs: [
+            {
+                  name: "offset",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+            {
+                  name: "limit",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+          ],
+      outputs: [
+            {
+                  name: "page",
+                  type: "address[]",
+                  internalType: "address[]",
+                },
+            {
+                  name: "total",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+          ],
+      stateMutability: "view",
+    },
+    {
+      type: "function",
       name: "getIssuer",
       inputs: [
             {
@@ -6101,6 +6734,25 @@ export const RevocationAnchorAbi = [
     },
     {
       type: "event",
+      name: "IssuerDeactivated",
+      inputs: [
+            {
+                  name: "issuer",
+                  type: "address",
+                  indexed: true,
+                  internalType: "address",
+                },
+            {
+                  name: "timestamp",
+                  type: "uint256",
+                  indexed: false,
+                  internalType: "uint256",
+                },
+          ],
+      anonymous: false,
+    },
+    {
+      type: "event",
       name: "IssuerRegistered",
       inputs: [
             {
@@ -6397,7 +7049,7 @@ export const RevocationAnchorAbi = [
     },
     {
       type: "error",
-      name: "IssuerNotRegistered",
+      name: "IssuerInactive",
       inputs: [
             {
                   name: "issuer",
@@ -6408,8 +7060,14 @@ export const RevocationAnchorAbi = [
     },
     {
       type: "error",
-      name: "NotInitialized",
-      inputs: [],
+      name: "IssuerNotRegistered",
+      inputs: [
+            {
+                  name: "issuer",
+                  type: "address",
+                  internalType: "address",
+                },
+          ],
     },
     {
       type: "error",
@@ -7163,12 +7821,23 @@ export const PolicyCommitmentAbi = [
     },
     {
       type: "error",
-      name: "InvalidInitialization",
-      inputs: [],
+      name: "InvalidFirstVersion",
+      inputs: [
+            {
+                  name: "policyId",
+                  type: "string",
+                  internalType: "string",
+                },
+            {
+                  name: "version",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+          ],
     },
     {
       type: "error",
-      name: "NotInitialized",
+      name: "InvalidInitialization",
       inputs: [],
     },
     {
@@ -8047,11 +8716,6 @@ export const SchemaRegistryAbi = [
     },
     {
       type: "error",
-      name: "NotInitialized",
-      inputs: [],
-    },
-    {
-      type: "error",
       name: "NotInitializing",
       inputs: [],
     },
@@ -8288,6 +8952,35 @@ export const TrustAnchorRegistryAbi = [
                   name: "",
                   type: "address[]",
                   internalType: "address[]",
+                },
+          ],
+      stateMutability: "view",
+    },
+    {
+      type: "function",
+      name: "getAllAccreditedIssuersPaged",
+      inputs: [
+            {
+                  name: "offset",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+            {
+                  name: "limit",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+          ],
+      outputs: [
+            {
+                  name: "page",
+                  type: "address[]",
+                  internalType: "address[]",
+                },
+            {
+                  name: "total",
+                  type: "uint256",
+                  internalType: "uint256",
                 },
           ],
       stateMutability: "view",
@@ -8893,11 +9586,6 @@ export const TrustAnchorRegistryAbi = [
                   internalType: "address",
                 },
           ],
-    },
-    {
-      type: "error",
-      name: "NotInitialized",
-      inputs: [],
     },
     {
       type: "error",

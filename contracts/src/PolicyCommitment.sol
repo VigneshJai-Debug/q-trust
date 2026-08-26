@@ -17,9 +17,9 @@ contract PolicyCommitment is AccessControl, ReentrancyGuard, Pausable, Initializ
 
     error PolicyNotFound(string policyId);
     error PolicyAlreadyExists(string policyId, uint256 version);
+    error InvalidFirstVersion(string policyId, uint256 version);
     error EmptyPolicyHash();
     error NotPolicyAuthority(address caller);
-    error NotInitialized();
 
     event PolicyCommitted(
         string  indexed policyId,
@@ -59,7 +59,6 @@ contract PolicyCommitment is AccessControl, ReentrancyGuard, Pausable, Initializ
 
     bytes32 public constant POLICY_AUTHORITY_ROLE = keccak256("POLICY_AUTHORITY_ROLE");
 
-    bool private _initialized;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -68,8 +67,6 @@ contract PolicyCommitment is AccessControl, ReentrancyGuard, Pausable, Initializ
     }
 
     function initialize() public initializer {
-        if (_initialized) revert NotInitialized();
-        _initialized = true;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(POLICY_AUTHORITY_ROLE, msg.sender);
     }
@@ -92,7 +89,13 @@ contract PolicyCommitment is AccessControl, ReentrancyGuard, Pausable, Initializ
         if (policyHash == bytes32(0)) revert EmptyPolicyHash();
 
         PolicyInfo storage info = _policyInfos[policyId];
-        if (info.exists && version <= info.latestVersion) {
+        // Audit M-5: strict version sequencing. A new policy must start at
+        // version 1 and every subsequent commit must be exactly latest + 1 —
+        // otherwise a malicious authority could register v=type(uint256).max
+        // for a fresh policy and permanently brick all future commits.
+        if (!info.exists) {
+            if (version != 1) revert InvalidFirstVersion(policyId, version);
+        } else if (version != info.latestVersion + 1) {
             revert PolicyAlreadyExists(policyId, version);
         }
 

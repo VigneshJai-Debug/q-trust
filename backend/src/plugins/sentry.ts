@@ -29,10 +29,47 @@ export function initSentry(): void {
   if (!dsn || initialized) return;
   initialized = true;
 
+  // Audit H-4: never transmit credentials to Sentry infrastructure.
+  const SENSITIVE_HEADERS = new Set(["x-api-key", "authorization", "cookie"]);
+  const KEY_PATTERN = /0x[0-9a-fA-F]{64}/g;
+  const scrub = (value: unknown): unknown => {
+    if (typeof value === "string") {
+      return value.replace(KEY_PATTERN, "[redacted-private-key]");
+    }
+    if (Array.isArray(value)) return value.map(scrub);
+    if (value && typeof value === "object") {
+      return Object.fromEntries(
+        Object.entries(value as Record<string, unknown>).map(([k, v]) => [
+          k,
+          SENSITIVE_HEADERS.has(k.toLowerCase()) ? "[redacted]" : scrub(v),
+        ]),
+      );
+    }
+    return value;
+  };
+
   Sentry.init({
     dsn,
     release: release(),
     tracesSampleRate: 0.1,
+    sendDefaultPii: false,
+    beforeSend(event) {
+      if (event.request?.headers) {
+        for (const header of Object.keys(event.request.headers)) {
+          if (SENSITIVE_HEADERS.has(header.toLowerCase())) {
+            event.request.headers[header] = "[redacted]";
+          }
+        }
+      }
+      // Request bodies may contain signed payloads or relayer secrets —
+      // never capture them.
+      if (event.request?.data) {
+        event.request.data = "[redacted]";
+      }
+      // Belt-and-braces: scrub any 32-byte hex private key shape anywhere in
+      // the event (breadcrumbs, extra, contexts, ...).
+      return scrub(event) as typeof event;
+    },
   });
 }
 

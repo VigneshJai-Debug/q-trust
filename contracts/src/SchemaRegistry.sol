@@ -19,7 +19,6 @@ contract SchemaRegistry is AccessControl, ReentrancyGuard, Pausable, Initializab
     error SchemaAlreadyExists(string schemaId);
     error EmptySchemaHash();
     error NotSchemaAuthority(address caller);
-    error NotInitialized();
 
     event SchemaRegistered(
         string  indexed schemaId,
@@ -70,7 +69,6 @@ contract SchemaRegistry is AccessControl, ReentrancyGuard, Pausable, Initializab
 
     bytes32 public constant SCHEMA_AUTHORITY_ROLE = keccak256("SCHEMA_AUTHORITY_ROLE");
 
-    bool private _initialized;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -79,8 +77,6 @@ contract SchemaRegistry is AccessControl, ReentrancyGuard, Pausable, Initializab
     }
 
     function initialize() public initializer {
-        if (_initialized) revert NotInitialized();
-        _initialized = true;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(SCHEMA_AUTHORITY_ROLE, msg.sender);
     }
@@ -136,14 +132,20 @@ contract SchemaRegistry is AccessControl, ReentrancyGuard, Pausable, Initializab
     }
 
     /// @notice Add a cross-domain equivalence mapping (admin only)
+    /// Audit H-2: added whenNotPaused + nonReentrant so the Pausable
+    /// circuit-breaker freezes this mutation during an incident.
     function addEquivalence(
         string calldata fromSchemaId,
         string calldata toSchemaId,
         string calldata equivalenceType
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    ) external nonReentrant whenNotPaused onlyRole(DEFAULT_ADMIN_ROLE) {
         StringBounds.checkDID(fromSchemaId);
         StringBounds.checkDID(toSchemaId);
         StringBounds.checkID(equivalenceType);
+        // Audit L-6: refuse equivalence mappings that reference schemas which
+        // were never registered — they pollute the equivalence graph.
+        if (!_schemas[fromSchemaId].exists) revert SchemaNotFound(fromSchemaId);
+        if (!_schemas[toSchemaId].exists) revert SchemaNotFound(toSchemaId);
         _equivalences[fromSchemaId].push(EquivalenceMapping({
             fromSchemaId: fromSchemaId,
             toSchemaId: toSchemaId,
@@ -157,7 +159,7 @@ contract SchemaRegistry is AccessControl, ReentrancyGuard, Pausable, Initializab
     function deactivateSchema(
         string calldata schemaId,
         uint256 version
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    ) external whenNotPaused onlyRole(DEFAULT_ADMIN_ROLE) {
         SchemaInfo storage sv = _schemaVersions[schemaId][version];
         if (sv.timestamp == 0) revert SchemaNotFound(schemaId);
         sv.active = false;

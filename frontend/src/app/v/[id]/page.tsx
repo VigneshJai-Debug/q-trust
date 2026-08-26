@@ -18,6 +18,7 @@ import { ArrowTopRightOnSquareIcon, ShieldCheckIcon, XCircleIcon, ClockIcon } fr
 import { ProvenanceGraph } from "@/components/provenance-graph";
 
 import { fetchAsset, fetchAssetVerification, fetchIpfsJson, type AssetInfo, type AssetVerification } from "@/lib/api";
+import { parseAssetId } from "@/lib/config";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -51,6 +52,17 @@ export default async function VerificationPage({ params }: Props) {
 
   const status = verification.active ? "VALID" : "REVOKED";
   const timestamp = new Date(asset.timestamp * 1000).toISOString();
+
+  // Audit H-7: asset.asset_id is server-controlled but must never be trusted
+  // blindly — it is interpolated into copy-pastable shell/Python snippets
+  // below. Only render the CLI block when the ID strictly matches
+  // 0x + 64 hex chars (parseAssetId enforces this).
+  let safeAssetId: string | null = null;
+  try {
+    safeAssetId = parseAssetId(asset.asset_id);
+  } catch {
+    safeAssetId = null;
+  }
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
@@ -116,16 +128,24 @@ export default async function VerificationPage({ params }: Props) {
           <p className="mb-3 text-sm text-slate-600">
             Anyone can verify this attestation without trusting Q-Trust. Run the CLI:
           </p>
-          <pre className="overflow-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-100">
-            <code>{`# Install the Q-Trust SDK
+          {safeAssetId ? (
+            <pre className="overflow-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-100">
+              <code>{`# Install the Q-Trust SDK
 pip install qtrust-sdk
 
 # Verify on-chain
-python -c "from qtrust import QTrustClient; print(QTrustClient().verify_asset('${asset.asset_id}'))"
+python -c "from qtrust import QTrustClient; print(QTrustClient().verify_asset('${safeAssetId}'))"
 
 # Or use the scanner CLI
-crypto-inspector verify ${asset.asset_id}`}</code>
-          </pre>
+crypto-inspector verify ${safeAssetId}`}</code>
+            </pre>
+          ) : (
+            <p className="rounded-lg bg-amber-50 p-4 text-xs text-amber-800 ring-1 ring-inset ring-amber-600/20">
+              The asset ID for this record is not in the expected format, so the
+              copy-paste verification commands are hidden. Copy the Asset ID from
+              the table above and pass it to <code>crypto-inspector verify</code> manually.
+            </p>
+          )}
           <p className="mt-3 text-xs text-slate-500">
             The CLI calls the AssetRegistry contract directly on {verification.chain_name} —
             no central server involved.

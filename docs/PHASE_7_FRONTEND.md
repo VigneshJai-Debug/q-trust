@@ -1,3 +1,5 @@
+> **⚠ SUPERSEDED (2026-08-26).** Phase snapshot — parts are stale (service list, wallet stack). Current architecture: docs/ARCHITECTURE.md and backend/openapi.yaml.
+
 # Phase 7: Frontend Dashboard
 
 ## Status: DONE

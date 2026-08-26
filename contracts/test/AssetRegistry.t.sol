@@ -108,9 +108,11 @@ contract AssetRegistryTest is Test {
         vm.prank(registrar);
         bytes32 assetId = registry.registerCBOM(CBOM_HASH, METADATA_URI);
 
+        // Audit I-1: retire requires the asset owner or an admin — the error
+        // is now NotOwnerOrAdmin, not the misleading NotRegistrar.
         vm.prank(unauthorized);
         vm.expectRevert(
-            abi.encodeWithSelector(AssetRegistry.NotRegistrar.selector, unauthorized)
+            abi.encodeWithSelector(AssetRegistry.NotOwnerOrAdmin.selector, unauthorized)
         );
         registry.retireAsset(assetId);
     }

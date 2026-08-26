@@ -174,6 +174,21 @@ interface LedgerEntry {
 
 const GENESIS_HASH = "0".repeat(64);
 
+/** Audit M-6: hard cap on in-memory chain length. Beyond this the oldest
+ *  entries must be persisted externally; verify keeps working on recent
+ *  history instead of growing without bound. */
+const MAX_EVIDENCE_CHAIN_LENGTH = 10_000;
+
+function pushEvidenceEntry(entry: LedgerEntry): void {
+  evidenceChain.push(entry);
+  if (evidenceChain.length > MAX_EVIDENCE_CHAIN_LENGTH) {
+    console.warn(
+      `Evidence chain exceeded ${MAX_EVIDENCE_CHAIN_LENGTH} entries — oldest entry evicted from memory (file log retains full history)`,
+    );
+    evidenceChain.shift();
+  }
+}
+
 // Evidence chain persistence: JSONL append-only log so the SHA-256 chain
 // survives restarts. Primary store is the file below; if persistence fails
 // (read-only fs, bad path) the chain degrades gracefully to in-memory only.
@@ -216,7 +231,7 @@ function loadEvidenceChain(): void {
       ) {
         throw new Error("entry missing chain metadata");
       }
-      evidenceChain.push(entry);
+      pushEvidenceEntry(entry);
     } catch {
       // A torn final write (crash mid-append) leaves a partial trailing line —
       // skip it quietly-ish; corruption elsewhere is worth a louder warning.
@@ -277,7 +292,7 @@ function generateEvidenceLedger(data: {
     chainIndex: last ? last.chainIndex + 1 : 0,
   };
   const full: LedgerEntry = { ...entry, integrityHash: computeIntegrityHash(entry) };
-  evidenceChain.push(full);
+  pushEvidenceEntry(full);
   persistEvidenceEntry(full);
   return full;
 }
@@ -302,6 +317,12 @@ function verifyEvidenceChain(entries: LedgerEntry[]): { valid: boolean; reason?:
     }
   }
   return { valid: true };
+}
+
+/** Audit M-7: only a keyed hash of each scan target is retained for stats —
+ *  never the raw absolute path. */
+function hashTarget(resolvedPath: string): string {
+  return createHash("sha256").update(resolvedPath).digest("hex").slice(0, 16);
 }
 
 export async function registerScannerRoutes(app: FastifyInstance): Promise<void> {
@@ -338,7 +359,7 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
       return { error: `Cryptographic scanner failed: ${result.error}` };
     }
     const findings = Array.isArray(result.findings) ? result.findings : [];
-    scanHistory.push({ target: resolvedDir, type: "source", timestamp: new Date().toISOString(), count: findings.length });
+    scanHistory.push({ targetHash: hashTarget(resolvedDir), type: "source", timestamp: new Date().toISOString(), count: findings.length });
     return { directory: resolvedDir, findings, scanType: "source", timestamp: new Date().toISOString() };
   });
 
@@ -369,7 +390,7 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
       return { error: `Cryptographic scanner failed: ${result.error}` };
     }
     const findings = Array.isArray(result.findings) ? result.findings : [];
-    scanHistory.push({ target: resolvedDir, type: "manifests", timestamp: new Date().toISOString(), count: findings.length });
+    scanHistory.push({ targetHash: hashTarget(resolvedDir), type: "manifests", timestamp: new Date().toISOString(), count: findings.length });
     return { directory: resolvedDir, findings, scanType: "manifests", timestamp: new Date().toISOString() };
   });
 
@@ -410,7 +431,7 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
       return { error: `Cryptographic scanner failed: ${result.error}` };
     }
     const allFindings = Array.isArray(result.findings) ? result.findings : [];
-    scanHistory.push({ target: resolvedTarget, type: "full", timestamp: new Date().toISOString(), count: allFindings.length });
+    scanHistory.push({ targetHash: hashTarget(resolvedTarget), type: "full", timestamp: new Date().toISOString(), count: allFindings.length });
     return { target: resolvedTarget, findings: allFindings, scanType: "full", timestamp: new Date().toISOString() };
   });
 
@@ -497,6 +518,10 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
   });
 
   app.post("/v1/evidence/create", {
+    // Audit M-6: this route appends to the on-disk JSONL chain and grows an
+    // in-memory array — it must not be anonymous/unbounded.
+    preHandler: requireApiKey,
+    config: { rateLimit: { max: 5, timeWindow: "1 minute" } },
     schema: { body: EvidenceCreateSchema, response: { 200: EvidenceCreateResponseSchema } },
   }, async (request) => {
     const { scanResultHash, scanTarget, findingsCount, riskSummary } = request.body as {
@@ -618,7 +643,11 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
     };
   });
 
-  app.get("/v1/stats", async () => {
+  app.get("/v1/stats", {
+    // Audit M-7: scanHistory previously exposed absolute resolved filesystem
+    // paths of every scanned directory to unauthenticated callers.
+    preHandler: requireApiKey,
+  }, async () => {
     const totalScans = scanHistory.length;
     const totalFindings = scanHistory.reduce((sum, s) => sum + s.count, 0);
     return {

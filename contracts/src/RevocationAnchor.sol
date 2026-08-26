@@ -21,7 +21,6 @@ contract RevocationAnchor is AccessControl, ReentrancyGuard, Pausable, Initializ
     error EmptyRoot();
     error InvalidNonce(address signer, uint256 provided, uint256 expected);
     error InvalidSignature();
-    error NotInitialized();
 
     event RevocationRootUpdated(
         address indexed issuer,
@@ -35,6 +34,10 @@ contract RevocationAnchor is AccessControl, ReentrancyGuard, Pausable, Initializ
         string  issuerDid,
         uint256 timestamp
     );
+
+    /// Audit L-1: deactivation is a trust-relevant state change — emit an
+    /// event so off-chain indexers and verifiers can observe it.
+    event IssuerDeactivated(address indexed issuer, uint256 timestamp);
 
     struct IssuerInfo {
         string  issuerDid;
@@ -63,7 +66,6 @@ contract RevocationAnchor is AccessControl, ReentrancyGuard, Pausable, Initializ
 
     mapping(address => uint256) public nonces;
 
-    bool private _initialized;
     uint256 private _cachedChainId;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -73,8 +75,6 @@ contract RevocationAnchor is AccessControl, ReentrancyGuard, Pausable, Initializ
     }
 
     function initialize() public initializer {
-        if (_initialized) revert NotInitialized();
-        _initialized = true;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(ISSUER_ADMIN_ROLE, msg.sender);
         _cachedChainId = block.chainid;
@@ -213,8 +213,11 @@ contract RevocationAnchor is AccessControl, ReentrancyGuard, Pausable, Initializ
     }
 
     /// @notice Deactivate an issuer (admin only)
-    function deactivateIssuer(address issuer) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function deactivateIssuer(address issuer) external onlyRole(DEFAULT_ADMIN_ROLE) whenNotPaused {
+        if (bytes(_issuers[issuer].issuerDid).length == 0) revert IssuerNotRegistered(issuer);
         _issuers[issuer].active = false;
+        // Audit L-1: emit an event for this state transition.
+        emit IssuerDeactivated(issuer, block.timestamp);
     }
 
     /// @notice Pause all operations
@@ -246,8 +249,25 @@ contract RevocationAnchor is AccessControl, ReentrancyGuard, Pausable, Initializ
     }
 
     /// @notice Get all registered issuer addresses
+    /// Audit M-1: unbounded return array; prefer issuerCount +
+    /// getAllIssuersPaged for programmatic consumption.
     function getAllIssuers() external view returns (address[] memory) {
         return _allIssuers;
+    }
+
+    /// @notice Paginated registered issuer addresses (audit M-1).
+    function getAllIssuersPaged(uint256 offset, uint256 limit)
+        external view returns (address[] memory page, uint256 total)
+    {
+        total = _allIssuers.length;
+        if (offset >= total || limit == 0) return (new address[](0), total);
+        uint256 end = offset + limit;
+        if (end > total) end = total;
+        uint256 pageSize = end - offset;
+        page = new address[](pageSize);
+        for (uint256 i = 0; i < pageSize; i++) {
+            page[i] = _allIssuers[offset + i];
+        }
     }
 
     /// @notice Total number of registered issuers

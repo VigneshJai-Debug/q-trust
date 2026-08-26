@@ -158,3 +158,14 @@ jobs:
             exit 1
           fi
           echo "No dev keys outside test files."
+
+  model-integrity:
+    name: Verify .pt Checkpoint Manifest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Verify models.sha256
+        # Audit remediation: the tracked model checkpoints are binary blobs —
+        # without an integrity manifest a supply-chain swap is undetectable.
+        run: ./scripts/verify_models.sh

@@ -5,7 +5,7 @@
  *  - Bounded retries with exponential backoff + jitter
  *  - Fan-out to all registered webhooks for an org
  */
-import { randomUUID, createHmac, timingSafeEqual } from "node:crypto";
+import { randomUUID, createHmac } from "node:crypto";
 import * as dns from "node:dns";
 import * as https from "node:https";
 
@@ -14,6 +14,9 @@ const BASE_BACKOFF_MS = 500;
 const MAX_BACKOFF_MS = 10_000;
 const TIMEOUT_MS = 5_000;
 const MAX_BODY_BYTES = 256 * 1024;
+/** Audit M-9: deliveries expire after 5 minutes — recipients can use this to
+ *  reject captured-then-replayed payloads. */
+export const DELIVERY_TTL_MS = 5 * 60_000;
 
 interface WebhookEvent {
   type: string;
@@ -141,18 +144,20 @@ function signPayload(body: string, secret: string): string {
   return createHmac("sha256", secret).update(body).digest("hex");
 }
 
-function verifySignature(body: string, secret: string, signature: string): boolean {
-  if (!secret || !signature) return false;
-  const expected = signPayload(body, secret);
-  try {
-    return timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(signature, "hex"));
-  } catch {
-    return false;
-  }
-}
+// Audit I-2: the unused verifySignature helper was removed (recipients verify
+// signatures; this service only signs).
 
 function deliverOnce(url: string, event: WebhookEvent, secret?: string): Promise<boolean> {
-  const body = JSON.stringify({ id: randomUUID(), ...event });
+  // Audit M-9: include freshness metadata — HMAC protects integrity but not
+  // replay. Recipients SHOULD reject deliveries whose timestamp is older
+  // than expires_at.
+  const now = Date.now();
+  const body = JSON.stringify({
+    id: randomUUID(),
+    timestamp: now,
+    expires_at: now + DELIVERY_TTL_MS,
+    ...event,
+  });
   return new Promise<boolean>((resolve) => {
     (async () => {
       try {

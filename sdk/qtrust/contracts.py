@@ -191,6 +191,25 @@ ASSET_REGISTRY_ABI = [
   },
   {
     "type": "function",
+    "name": "getAssetCountByOrg",
+    "inputs": [
+      {
+        "name": "orgDid",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getAssetsByOrg",
     "inputs": [
       {
@@ -204,6 +223,40 @@ ASSET_REGISTRY_ABI = [
         "name": "",
         "type": "bytes32[]",
         "internalType": "bytes32[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getAssetsByOrgPaged",
+    "inputs": [
+      {
+        "name": "orgDid",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "offset",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "limit",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "page",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      },
+      {
+        "name": "total",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -945,13 +998,19 @@ ASSET_REGISTRY_ABI = [
   },
   {
     "type": "error",
-    "name": "NotInitialized",
+    "name": "NotInitializing",
     "inputs": []
   },
   {
     "type": "error",
-    "name": "NotInitializing",
-    "inputs": []
+    "name": "NotOwnerOrAdmin",
+    "inputs": [
+      {
+        "name": "caller",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
   },
   {
     "type": "error",
@@ -1363,6 +1422,25 @@ VENDOR_REGISTRY_ABI = [
   },
   {
     "type": "function",
+    "name": "getAttestationCountByVendor",
+    "inputs": [
+      {
+        "name": "vendorDid",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getAttestationsByProduct",
     "inputs": [
       {
@@ -1405,6 +1483,40 @@ VENDOR_REGISTRY_ABI = [
         "name": "",
         "type": "bytes32[]",
         "internalType": "bytes32[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getAttestationsByVendorPaged",
+    "inputs": [
+      {
+        "name": "vendorDid",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "offset",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "limit",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "page",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      },
+      {
+        "name": "total",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -2212,11 +2324,6 @@ VENDOR_REGISTRY_ABI = [
   },
   {
     "type": "error",
-    "name": "NotInitialized",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "NotInitializing",
     "inputs": []
   },
@@ -2458,6 +2565,25 @@ MIGRATION_REGISTRY_ABI = [
   },
   {
     "type": "function",
+    "name": "getMigrationCountByOrg",
+    "inputs": [
+      {
+        "name": "orgDid",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getMigrationsByAsset",
     "inputs": [
       {
@@ -2490,6 +2616,40 @@ MIGRATION_REGISTRY_ABI = [
         "name": "",
         "type": "bytes32[]",
         "internalType": "bytes32[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getMigrationsByOrgPaged",
+    "inputs": [
+      {
+        "name": "orgDid",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "offset",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "limit",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "page",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      },
+      {
+        "name": "total",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -2943,6 +3103,31 @@ MIGRATION_REGISTRY_ABI = [
   },
   {
     "type": "event",
+    "name": "MigrationVerified",
+    "inputs": [
+      {
+        "name": "migrationId",
+        "type": "bytes32",
+        "indexed": True,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "verifiedBy",
+        "type": "address",
+        "indexed": True,
+        "internalType": "address"
+      },
+      {
+        "name": "timestamp",
+        "type": "uint256",
+        "indexed": False,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": False
+  },
+  {
+    "type": "event",
     "name": "Paused",
     "inputs": [
       {
@@ -3227,8 +3412,19 @@ MIGRATION_REGISTRY_ABI = [
   },
   {
     "type": "error",
-    "name": "NotInitialized",
-    "inputs": []
+    "name": "NotAssetOwner",
+    "inputs": [
+      {
+        "name": "caller",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "assetId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ]
   },
   {
     "type": "error",
@@ -3435,6 +3631,44 @@ AUDIT_REGISTRY_ABI = [
   },
   {
     "type": "function",
+    "name": "getAuditCountByAuditor",
+    "inputs": [
+      {
+        "name": "auditorDid",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getAuditCountByOrg",
+    "inputs": [
+      {
+        "name": "orgDid",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getAuditsByAuditor",
     "inputs": [
       {
@@ -3454,6 +3688,40 @@ AUDIT_REGISTRY_ABI = [
   },
   {
     "type": "function",
+    "name": "getAuditsByAuditorPaged",
+    "inputs": [
+      {
+        "name": "auditorDid",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "offset",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "limit",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "page",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      },
+      {
+        "name": "total",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getAuditsByOrg",
     "inputs": [
       {
@@ -3467,6 +3735,40 @@ AUDIT_REGISTRY_ABI = [
         "name": "",
         "type": "bytes32[]",
         "internalType": "bytes32[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getAuditsByOrgPaged",
+    "inputs": [
+      {
+        "name": "orgDid",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "offset",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "limit",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "page",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      },
+      {
+        "name": "total",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -4247,12 +4549,12 @@ AUDIT_REGISTRY_ABI = [
   },
   {
     "type": "error",
-    "name": "NotInitialized",
+    "name": "NotInitializing",
     "inputs": []
   },
   {
     "type": "error",
-    "name": "NotInitializing",
+    "name": "ReentrancyGuardReentrantCall",
     "inputs": []
   },
   {
@@ -4328,6 +4630,19 @@ Q_TRUST_GOVERNANCE_ABI = [
   },
   {
     "type": "function",
+    "name": "DEFAULT_ADMIN_ROLE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "DEFAULT_DELAY",
     "inputs": [],
     "outputs": [
@@ -4335,6 +4650,19 @@ Q_TRUST_GOVERNANCE_ABI = [
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "PROPOSER_ROLE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "stateMutability": "view"
@@ -4390,6 +4718,67 @@ Q_TRUST_GOVERNANCE_ABI = [
   },
   {
     "type": "function",
+    "name": "getRoleAdmin",
+    "inputs": [
+      {
+        "name": "role",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "grantRole",
+    "inputs": [
+      {
+        "name": "role",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "hasRole",
+    "inputs": [
+      {
+        "name": "role",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "migrationRegistry",
     "inputs": [],
     "outputs": [
@@ -4400,6 +4789,42 @@ Q_TRUST_GOVERNANCE_ABI = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "renounceRole",
+    "inputs": [
+      {
+        "name": "role",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "callerConfirmation",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "revokeRole",
+    "inputs": [
+      {
+        "name": "role",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -4472,12 +4897,58 @@ Q_TRUST_GOVERNANCE_ABI = [
   },
   {
     "type": "function",
+    "name": "scheduleGrantRoleOn",
+    "inputs": [
+      {
+        "name": "target",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "role",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "salt",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "schedulePause",
     "inputs": [
       {
         "name": "registryIndex",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "salt",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "schedulePauseOn",
+    "inputs": [
+      {
+        "name": "target",
+        "type": "address",
+        "internalType": "address"
       },
       {
         "name": "salt",
@@ -4523,6 +4994,43 @@ Q_TRUST_GOVERNANCE_ABI = [
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "scheduleUnpauseOn",
+    "inputs": [
+      {
+        "name": "target",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "salt",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "supportsInterface",
+    "inputs": [
+      {
+        "name": "interfaceId",
+        "type": "bytes4",
+        "internalType": "bytes4"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -4580,6 +5088,102 @@ Q_TRUST_GOVERNANCE_ABI = [
       }
     ],
     "anonymous": False
+  },
+  {
+    "type": "event",
+    "name": "RoleAdminChanged",
+    "inputs": [
+      {
+        "name": "role",
+        "type": "bytes32",
+        "indexed": True,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "previousAdminRole",
+        "type": "bytes32",
+        "indexed": True,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "newAdminRole",
+        "type": "bytes32",
+        "indexed": True,
+        "internalType": "bytes32"
+      }
+    ],
+    "anonymous": False
+  },
+  {
+    "type": "event",
+    "name": "RoleGranted",
+    "inputs": [
+      {
+        "name": "role",
+        "type": "bytes32",
+        "indexed": True,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": True,
+        "internalType": "address"
+      },
+      {
+        "name": "sender",
+        "type": "address",
+        "indexed": True,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": False
+  },
+  {
+    "type": "event",
+    "name": "RoleRevoked",
+    "inputs": [
+      {
+        "name": "role",
+        "type": "bytes32",
+        "indexed": True,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": True,
+        "internalType": "address"
+      },
+      {
+        "name": "sender",
+        "type": "address",
+        "indexed": True,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": False
+  },
+  {
+    "type": "error",
+    "name": "AccessControlBadConfirmation",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "AccessControlUnauthorizedAccount",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "neededRole",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ]
   },
   {
     "type": "error",
@@ -5686,6 +6290,35 @@ REVOCATION_ANCHOR_ABI = [
   },
   {
     "type": "function",
+    "name": "getAllIssuersPaged",
+    "inputs": [
+      {
+        "name": "offset",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "limit",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "page",
+        "type": "address[]",
+        "internalType": "address[]"
+      },
+      {
+        "name": "total",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getIssuer",
     "inputs": [
       {
@@ -6101,6 +6734,25 @@ REVOCATION_ANCHOR_ABI = [
   },
   {
     "type": "event",
+    "name": "IssuerDeactivated",
+    "inputs": [
+      {
+        "name": "issuer",
+        "type": "address",
+        "indexed": True,
+        "internalType": "address"
+      },
+      {
+        "name": "timestamp",
+        "type": "uint256",
+        "indexed": False,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": False
+  },
+  {
+    "type": "event",
     "name": "IssuerRegistered",
     "inputs": [
       {
@@ -6397,7 +7049,7 @@ REVOCATION_ANCHOR_ABI = [
   },
   {
     "type": "error",
-    "name": "IssuerNotRegistered",
+    "name": "IssuerInactive",
     "inputs": [
       {
         "name": "issuer",
@@ -6408,8 +7060,14 @@ REVOCATION_ANCHOR_ABI = [
   },
   {
     "type": "error",
-    "name": "NotInitialized",
-    "inputs": []
+    "name": "IssuerNotRegistered",
+    "inputs": [
+      {
+        "name": "issuer",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
   },
   {
     "type": "error",
@@ -7163,12 +7821,23 @@ POLICY_COMMITMENT_ABI = [
   },
   {
     "type": "error",
-    "name": "InvalidInitialization",
-    "inputs": []
+    "name": "InvalidFirstVersion",
+    "inputs": [
+      {
+        "name": "policyId",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "version",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   },
   {
     "type": "error",
-    "name": "NotInitialized",
+    "name": "InvalidInitialization",
     "inputs": []
   },
   {
@@ -8047,11 +8716,6 @@ SCHEMA_REGISTRY_ABI = [
   },
   {
     "type": "error",
-    "name": "NotInitialized",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "NotInitializing",
     "inputs": []
   },
@@ -8288,6 +8952,35 @@ TRUST_ANCHOR_REGISTRY_ABI = [
         "name": "",
         "type": "address[]",
         "internalType": "address[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getAllAccreditedIssuersPaged",
+    "inputs": [
+      {
+        "name": "offset",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "limit",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "page",
+        "type": "address[]",
+        "internalType": "address[]"
+      },
+      {
+        "name": "total",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -8893,11 +9586,6 @@ TRUST_ANCHOR_REGISTRY_ABI = [
         "internalType": "address"
       }
     ]
-  },
-  {
-    "type": "error",
-    "name": "NotInitialized",
-    "inputs": []
   },
   {
     "type": "error",

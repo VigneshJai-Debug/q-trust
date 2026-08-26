@@ -67,3 +67,31 @@ describe("secret-box", () => {
     expect(() => decryptSecret(parts.join("."))).toThrow();
   });
 });
+
+// Audit H-5 regression: production must refuse plaintext-at-rest fallback.
+describe("secret-box fail-closed (audit H-5)", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    delete process.env.QTRUST_WEBHOOK_ENC_KEY;
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it("throws in production when QTRUST_WEBHOOK_ENC_KEY is unset", async () => {
+    process.env.NODE_ENV = "production";
+    const { encryptSecret } = await import("../src/services/secret-box.js");
+    expect(() => encryptSecret("hmac-secret")).toThrow(
+      /refusing to store webhook secrets unencrypted/i
+    );
+  });
+
+  it("still allows the dev fallback outside production", async () => {
+    process.env.NODE_ENV = "development";
+    const { encryptSecret } = await import("../src/services/secret-box.js");
+    expect(encryptSecret("dev-secret")).toBe("dev-secret");
+  });
+});

@@ -7,6 +7,139 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security — external codebase audit remediation (2026-08-26)
+
+Remediates the 2026-08-26 Z.ai engineering audit (`docs/Q-Trust_Codebase_Audit.pdf`).
+All Critical and High findings are fixed with regression tests; all Medium,
+Low, and Informational code findings are fixed unless explicitly noted below.
+
+**Critical**
+
+- **C-1 — deployer retained unilateral governance control.** `Deploy.s.sol` now
+  transfers `QTrustGovernance.DEFAULT_ADMIN_ROLE` to the timelock, then the
+  deployer renounces timelock admin/proposer/executor/canceller roles and
+  governance admin. Regression test
+  (`contracts/test/AuditRemediations.t.sol::test_C1_*`) runs the actual deploy
+  script and asserts zero residual deployer roles.
+- **C-2 — `schedule()` allowed UUPS upgrade bypass.** `_isRoleMutationCall`
+  now also rejects `upgradeTo` (0x3659cfe6) and `upgradeToAndCall` (0x4f1ef286)
+  selectors, closing implementation-swap-after-delay.
+
+**High**
+
+- **H-1 — `attestProductSigned` skipped the VENDOR_ROLE check** (the only
+  signed path in the codebase without a post-recovery role check). Added;
+  regression test revokes the role from a still-active vendor and expects
+  `NotVendor`.
+- **H-2 — missing `whenNotPaused`** on `TrustAnchorRegistry.revokeAccreditation`,
+  `reaccreditIssuer`, `SchemaRegistry.addEquivalence`, `deactivateSchema`.
+- **H-3 — `/v1/relay/*` gas-griefing.** All four relay POST routes now require
+  an API key, and the relayer pre-checks the signer's on-chain role before
+  broadcasting (failed txs no longer cost relayer gas). Operators must issue
+  API keys to relaying clients (see `.env.example`); dev mode without keys is
+  unchanged.
+- **H-4 — Sentry could capture secrets.** `beforeSend` scrubs `x-api-key`/
+  `authorization`/cookie headers, redacts request bodies, masks any
+  64-hex private-key-shaped string anywhere in the event; `sendDefaultPii: false`.
+- **H-5 — webhook secrets stored plaintext when `QTRUST_WEBHOOK_ENC_KEY`
+  unset.** Production now refuses to store unencrypted subscriber secrets
+  (fail-closed); dev fallback retained.
+- **H-6 — RPC-pool Proxy broke `watchEvent` unsubscription.** The indexer now
+  awaits the pooled `watchEvent` Promise so real unwatch functions are stored;
+  new test asserts `stopIndexer` unsubscribes all seven streams.
+- **H-7 — `/v/[id]` interpolated server-controlled `asset_id` into copy-paste
+  shell commands.** `parseAssetId` enforces strict `^0x[0-9a-fA-F]{64}$`; the
+  CLI block renders only for valid IDs, otherwise a warning explains how to
+  verify manually.
+- **Planner HIGH-1 — inference endpoints unauthenticated.** New
+  `ApiKeyMiddleware` enforces `X-Auth… X-Api-Key` (`QTRUST_PLANNER_API_KEY`);
+  fail-closed 503 in production when unset. Backend proxies forward the key.
+  First-ever planner HTTP tests added (`planner/tests/test_server.py`).
+
+**Medium**
+
+- M-1: count-only + paginated views across Asset/Vendor/Migration/Audit/
+  Compliance/Revocation/TrustAnchor registries; `AuditRegistry._postAudit`
+  reads a count instead of copying the full per-org array.
+- M-2: `MigrationRegistry._recordMigration` uses the `orgDid` already returned
+  by `verifyAsset` (one cross-contract call instead of two).
+- M-3: operational role grants restricted to the timelock only (proposer-to-
+  proposer lateral grants removed).
+- M-4: `ComplianceAttestation.getOrgComplianceStatus` is O(1) via a latest-
+  attestation pointer; revocation clears it.
+- M-5: `PolicyCommitment.commitPolicy` enforces version == 1 for new policies
+  and latest+1 afterwards (a v=type(uint256).max brick is impossible).
+- M-6/M-7: `/v1/evidence/create` API-key gated with a 5/min route limit and a
+  bounded in-memory chain; `/v1/stats` gated and scan targets stored as keyed
+  hashes (no absolute paths).
+- M-8 (reorg): after a reorg purge the indexer re-runs backfill so re-executed
+  events are indexed immediately, not on next restart.
+- M-8 (docker): runtime image installs production-only node_modules (dev deps
+  no longer shipped); inspector installed into a venv (PEP 668 respected).
+- M-9: webhook payloads carry `timestamp` + `expires_at` (5-minute TTL) so
+  recipients can reject replays.
+- M-10: single shared `requireApiKey` (per-call env read, cached 30s, uniform
+  401 semantics); the divergent server.ts copy was deleted.
+
+**Low / Informational**
+
+- L-1: `MigrationVerified` and `IssuerDeactivated` events emitted; deactivateIssuer
+  also validates registration and pauses.
+- L-2: `EvidenceRegistry` batch IDs use OZ `Strings.toHexString` (batch ID
+  format gains `0x` prefixes — off-chain parsers of `batchId` must adjust).
+- L-3: address-addressed `scheduleGrantRoleOn/schedulePauseOn/scheduleUnpauseOn`
+  wrappers reach all ten registries, not just the core four.
+- L-4: redundant contract-level `_initialized` guards removed from all ten
+  registries (OZ Initializable suffices). **Storage layout shifted — redeploy
+  via Deploy.s.sol rather than upgrading existing staging proxies.**
+- L-6: schema equivalences require both endpoints to exist.
+- L-7: reaccreditation clears stale `revocationReason`.
+- L-8: default RPC endpoint is `https://sepolia.base.org`; production refuses
+  plaintext `http://` RPC at boot.
+- L-9: Dockerfile creates/chowns `/var/lib/qtrust` so the evidence chain
+  persists for the non-root user.
+- I-1/I-2/I-4: misleading `NotRegistrar` error split out as
+  `NotOwnerOrAdmin`; dead `verifySignature` and unused auth helpers deleted.
+- SDK M-3/M-4: loopback-RPC guard parses hostnames properly (userinfo-substring
+  bypass blocked); malformed VC `proofValue` returns `invalid_signature`
+  instead of raising.
+- Inspector pcap DoS bounds documented; MAX_CONNS tightening tracked upstream.
+
+### Added
+
+- `contracts/test/AuditRemediations.t.sol` — C-1/C-2/H-1/H-2/L-6/M-4/M-5
+  regressions (contract suite now 211 tests).
+- `backend/tests/indexer.test.ts` — H-6 unsubscription regression.
+- `backend/tests/secret-box.test.ts` additions — H-5 production fail-closed.
+- `frontend/src/components/__tests__/attestation-form.test.tsx` — first tests
+  for the signing component: domain pinning, nonce fetch → sign → relay
+  round-trip, chain-switch behavior, error surfacing.
+- `planner/tests/test_server.py` — first tests for the FastAPI surface:
+  health shape, plan happy path/validation, API-key auth matrix, prod fail-closed.
+- `models.sha256` + `scripts/verify_models.sh` + CI `model-integrity` job —
+  committed `.pt` checkpoints are now tamper-evident.
+- CI `abi-drift` job — regenerates `abis.ts`/`contracts.py` from Forge
+  artifacts and fails on drift (previously claimed but not implemented).
+- CI `golive-preflight` job (release tags only) — fails releases that still
+  carry `_PLACEHOLDER_` escalation contacts or the placeholder security email.
+- Pre-commit hooks pinned to commit SHAs (supply-chain parity with CI).
+
+### Changed
+
+- Docs: WHITEPAPER §6.5 benchmark numbers refreshed to the corrected Kendall
+  protocol (τ=0.89 → τ=0.961 canonical); PHASE_6/PHASE_7 marked SUPERSEDED;
+  QTrust_Implementation_Guide.md marked HISTORICAL and excluded from mkdocs.
+- ABIs regenerated from Forge artifacts (new views/events above).
+
+### Known remaining blockers (external — cannot be closed from code)
+
+- Base Sepolia faucet funding, frontend/backend hosting accounts
+  (Implementation Gaps #2–#4).
+- Real incident-response contacts and security mailbox (CI gate enforces
+  replacement before any release).
+- `docs/PATENT/` remains tracked pending a legal decision.
+
+
 ### Fixed
 
 - **Benchmark Kendall-tau protocol bug (`benchmark.score_order`)** — tau was

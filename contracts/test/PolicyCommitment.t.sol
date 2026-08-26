@@ -69,9 +69,33 @@ contract PolicyCommitmentTest is Test {
     }
 
     function test_CommitPolicy_Revert_VersionNotIncremented() public {
-        policy.commitPolicy("test", 2, keccak256("v2"), "ipfs://v2");
-        vm.expectRevert(abi.encodeWithSelector(PolicyCommitment.PolicyAlreadyExists.selector, "test", 1));
         policy.commitPolicy("test", 1, keccak256("v1"), "ipfs://v1");
+        vm.expectRevert(abi.encodeWithSelector(PolicyCommitment.PolicyAlreadyExists.selector, "test", 1));
+        policy.commitPolicy("test", 1, keccak256("v1b"), "ipfs://v1b");
+    }
+
+    /// Audit M-5: a new policy MUST start at version 1 — arbitrary first
+    /// versions (e.g. type(uint256).max) would permanently brick the policy.
+    function test_CommitPolicy_Revert_FirstVersionMustBeOne() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(PolicyCommitment.InvalidFirstVersion.selector, "test", 2)
+        );
+        policy.commitPolicy("test", 2, keccak256("v2"), "ipfs://v2");
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                PolicyCommitment.InvalidFirstVersion.selector,
+                "test",
+                type(uint256).max
+            )
+        );
+        policy.commitPolicy("test", type(uint256).max, keccak256("vmax"), "ipfs://max");
+    }
+
+    /// Audit M-5: existing policies must commit exactly latest + 1.
+    function test_CommitPolicy_Revert_VersionMustBeLatestPlusOne() public {
+        policy.commitPolicy("seq", 1, keccak256("v1"), "ipfs://v1");
+        vm.expectRevert(abi.encodeWithSelector(PolicyCommitment.PolicyAlreadyExists.selector, "seq", 3));
+        policy.commitPolicy("seq", 3, keccak256("v3"), "ipfs://v3");
     }
 
     // ======== Deactivation ========

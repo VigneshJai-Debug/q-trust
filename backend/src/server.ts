@@ -36,7 +36,7 @@ import rateLimit from "@fastify/rate-limit";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash } from "node:crypto";
 import { encryptSecret, decryptSecret } from "./services/secret-box.js";
 import { setSubscriberResolver } from "./services/webhook.js";
 import { readFileSync } from "node:fs";
@@ -75,7 +75,9 @@ import { startIndexer, stopIndexer, pool as pgPool } from "./services/indexer.js
 import { evaluate } from "./services/evaluate.js";
 import { registerScannerRoutes } from "./routes/scanner.js";
 import { registerGPURoutes } from "./services/gpu-service.js";
-import { gracefulShutdown } from "./middleware/auth.js";
+// Audit M-10: single shared API-key gate — the previous local copy in this
+// file had divergent env-read semantics and error codes.
+import { gracefulShutdown, requireApiKey } from "./middleware/auth.js";
 import { initSentry, registerSentryHooks } from "./plugins/sentry.js";
 import { registerMetrics } from "./plugins/metrics.js";
 import {
@@ -85,7 +87,7 @@ import {
   RelayCBOMBodySchema,
   RelayMigrationBodySchema,
 } from "./schemas/index.js";
-import { CORS_ORIGINS, API_KEYS, API_KEY_REQUIRED, PLANNER_URL, CHAIN, CHAIN_ID, publicClient, CONTRACTS } from "./config.js";
+import { CORS_ORIGINS, PLANNER_URL, PLANNER_API_KEY, CHAIN, CHAIN_ID, publicClient, CONTRACTS } from "./config.js";
 import {
   RevocationAnchorAbi,
   PolicyCommitmentAbi,
@@ -189,33 +191,6 @@ await server.register(swagger, {
 await server.register(swaggerUi, {
   routePrefix: "/docs",
 });
-
-/** Timing-safe API key comparison: hash both sides to fixed-length digests so
- *  neither length nor content short-circuits the comparison. */
-function safeApiKeyEquals(a: string, b: string): boolean {
-  const sha = (s: string) => createHash("sha256").update(s, "utf8").digest();
-  return timingSafeEqual(sha(a), sha(b)) && a === b;
-}
-
-/** Require a valid admin API key on write routes. Fail-closed in production. */
-function requireApiKey(request: FastifyRequest, reply: FastifyReply, done: () => void): void {
-  const key = request.headers["x-api-key"] as string | undefined;
-  if (!API_KEY_REQUIRED) {
-    // Dev mode (no keys configured and not production) — allow writes.
-    done();
-    return;
-  }
-  if (!API_KEYS.length) {
-    // Production with no keys configured — refuse all writes.
-    reply.status(401).send({ error: "API keys not configured — write routes disabled" });
-    return;
-  }
-  if (!key || !API_KEYS.some((k) => safeApiKeyEquals(k, key))) {
-    reply.status(401).send({ error: "Invalid or missing API key" });
-    return;
-  }
-  done();
-}
 
 // ------------------------------------------------------------------
 // Health
@@ -338,7 +313,11 @@ server.post("/v1/plans", async (request, reply) => {
   try {
     const res = await fetch(`${PLANNER_URL}/plan`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        // Planner HIGH-1: the planner now authenticates inference calls.
+        ...(PLANNER_API_KEY ? { "x-api-key": PLANNER_API_KEY } : {}),
+      },
       body: JSON.stringify({ cbom: body.cbom, deadline: body.deadline ?? null }),
       signal: AbortSignal.timeout(60_000),
     });
@@ -359,7 +338,10 @@ server.get("/v1/plans/:did", async (request, reply) => {
     const did = (request.params as { did: string }).did;
     const q = request.query as { deadline?: string };
     const url = `${PLANNER_URL}/plans/${encodeURIComponent(did)}${q.deadline ? `?deadline=${encodeURIComponent(q.deadline)}` : ""}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(30_000),
+      ...(PLANNER_API_KEY ? { headers: { "x-api-key": PLANNER_API_KEY } as Record<string, string> } : {}),
+    });
     if (!res.ok) {
       return reply.status(res.status).send({ error: `Planner service error: ${res.status}` });
     }
@@ -467,6 +449,10 @@ server.post("/v1/write/migrations", {
   // EIP-712 gasless relay — rate limited to prevent gas abuse
   // ------------------------------------------------------------------
   server.post("/v1/relay/attestation", {
+    // Audit H-3: requireApiKey on every relay POST — without it anyone can
+    // mint valid EIP-712 signatures for addresses they control and drain the
+    // relayer wallet (per-IP limits are trivially bypassed with a botnet).
+    preHandler: requireApiKey,
     config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
     schema: {
       body: RelayAttestationBodySchema,
@@ -504,6 +490,7 @@ server.get("/v1/relay/nonce/:did", async (request, reply) => {
 
   // EIP-712 gasless CBOM registration
   server.post("/v1/relay/cbom", {
+    preHandler: requireApiKey, // Audit H-3
     config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
     schema: {
       body: RelayCBOMBodySchema,
@@ -529,6 +516,7 @@ server.get("/v1/relay/nonce/:did", async (request, reply) => {
 
   // EIP-712 gasless migration recording
   server.post("/v1/relay/migration", {
+    preHandler: requireApiKey, // Audit H-3
     config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
     schema: {
       body: RelayMigrationBodySchema,
@@ -565,6 +553,7 @@ server.get("/v1/relay/cbom-nonce/:did", async (request, reply) => {
 
   // EIP-712 gasless audit posting
   server.post("/v1/relay/audit", {
+    preHandler: requireApiKey, // Audit H-3
     config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
     schema: {
       body: RelayAuditBodySchema,

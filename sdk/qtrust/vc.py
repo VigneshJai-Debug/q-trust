@@ -374,7 +374,13 @@ class VCVerifier:
         failure reason (public_key_unavailable | invalid_signature).
         """
         message = self._signed_message(vc)
-        signature = bytes.fromhex(vc.proof["proofValue"])
+        try:
+            signature = bytes.fromhex(vc.proof["proofValue"])
+        except (ValueError, TypeError, KeyError):
+            # Audit M-4: malformed proofValue from an untrusted source must
+            # return a failure reason, not raise ValueError (which becomes a
+            # 500 in server contexts).
+            return "invalid_signature"
 
         auth_key = self.resolver.get_authentication_key(issuer_doc)
         public_key_bytes = self._extract_public_key(auth_key)

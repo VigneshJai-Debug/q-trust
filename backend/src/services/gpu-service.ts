@@ -200,7 +200,13 @@ export async function registerGPURoutes(server: FastifyInstance): Promise<void> 
       try {
         const resp = await fetch(`${PLANNER_URL}/rl/plan`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            // Planner HIGH-1: forward shared key to authenticated planner.
+            ...(process.env.QTRUST_PLANNER_API_KEY
+              ? { "x-api-key": process.env.QTRUST_PLANNER_API_KEY }
+              : {}),
+          },
           body: JSON.stringify(request.body.cbom),
           signal: AbortSignal.timeout(30_000),
         });

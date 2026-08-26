@@ -25,7 +25,6 @@ contract AuditRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
     error ZeroMigrationRegistry();
     error InvalidSignature();
     error InvalidNonce(address signer, uint256 provided, uint256 expected);
-    error NotInitialized();
 
     event AuditPosted(
         bytes32 indexed auditId,
@@ -76,7 +75,6 @@ contract AuditRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
 
     mapping(address => uint256) public nonces;
 
-    bool private _initialized;
     uint256 private _cachedChainId;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -86,9 +84,7 @@ contract AuditRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
     }
 
     function initialize(address migrationRegistry_) public initializer {
-        if (_initialized) revert NotInitialized();
         if (migrationRegistry_ == address(0)) revert ZeroMigrationRegistry();
-        _initialized = true;
         migrationRegistry = MigrationRegistry(migrationRegistry_);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _cachedChainId = block.chainid;
@@ -254,7 +250,9 @@ contract AuditRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
 
         // Audit-state binding: an auditor cannot claim more migrated assets than
         // exist on-chain for the org.
-        uint256 onChainMigrations = migrationRegistry.getMigrationsByOrg(orgDid).length;
+        // Audit M-1: use the count-only view — fetching the full dynamic array
+        // just to read .length was O(N) gas on every audit posting.
+        uint256 onChainMigrations = migrationRegistry.getMigrationCountByOrg(orgDid);
         if (assetsMigrated > onChainMigrations) {
             revert MigratedCountExceedsOnChain(assetsMigrated, onChainMigrations);
         }
@@ -305,13 +303,56 @@ contract AuditRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
     }
 
     /// @notice Get all audits for an org
+    /// Audit M-1: unbounded return array; prefer getAuditCountByOrg +
+    /// getAuditsByOrgPaged for programmatic consumption.
     function getAuditsByOrg(address orgDid) external view returns (bytes32[] memory) {
         return _auditsByOrg[orgDid];
     }
 
     /// @notice Get all audits by an auditor
+    /// Audit M-1: unbounded return array; prefer getAuditCountByAuditor +
+    /// getAuditsByAuditorPaged for programmatic consumption.
     function getAuditsByAuditor(address auditorDid) external view returns (bytes32[] memory) {
         return _auditsByAuditor[auditorDid];
+    }
+
+    /// @notice Number of audits posted against an org (audit M-1).
+    function getAuditCountByOrg(address orgDid) external view returns (uint256) {
+        return _auditsByOrg[orgDid].length;
+    }
+
+    /// @notice Number of audits posted by an auditor (audit M-1).
+    function getAuditCountByAuditor(address auditorDid) external view returns (uint256) {
+        return _auditsByAuditor[auditorDid].length;
+    }
+
+    /// @notice Paginated audit IDs for an org (audit M-1).
+    function getAuditsByOrgPaged(address orgDid, uint256 offset, uint256 limit)
+        external view returns (bytes32[] memory page, uint256 total)
+    {
+        return _paged(_auditsByOrg[orgDid], offset, limit);
+    }
+
+    /// @notice Paginated audit IDs by an auditor (audit M-1).
+    function getAuditsByAuditorPaged(address auditorDid, uint256 offset, uint256 limit)
+        external view returns (bytes32[] memory page, uint256 total)
+    {
+        return _paged(_auditsByAuditor[auditorDid], offset, limit);
+    }
+
+    /// @dev Shared pagination helper (audit M-1).
+    function _paged(bytes32[] storage ids, uint256 offset, uint256 limit)
+        internal view returns (bytes32[] memory page, uint256 total)
+    {
+        total = ids.length;
+        if (offset >= total || limit == 0) return (new bytes32[](0), total);
+        uint256 end = offset + limit;
+        if (end > total) end = total;
+        uint256 pageSize = end - offset;
+        page = new bytes32[](pageSize);
+        for (uint256 i = 0; i < pageSize; i++) {
+            page[i] = ids[offset + i];
+        }
     }
 
     /// @notice Get the latest audit for an org

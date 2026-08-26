@@ -58,11 +58,13 @@ export const CONTRACTS = {
 
 /** Resolve a 0x-prefixed hex asset ID into a bytes32 for ABI calls. */
 export function parseAssetId(id: string): `0x${string}` {
-  if (!id.startsWith("0x")) {
-    throw new Error(`Asset ID must be 0x-prefixed hex, got: ${id}`);
-  }
-  if (id.length !== 66) {
-    throw new Error(`Asset ID must be 32 bytes (66 chars including 0x), got: ${id.length}`);
+  // Audit H-7: enforce full hex charset — this value gets interpolated into
+  // copy-pastable shell/CLI snippets on /v/[id], so a poisoned ID like
+  // "0xdead...'); import os; os.system(...)" must be rejected here.
+  if (!/^0x[0-9a-fA-F]{64}$/.test(id)) {
+    throw new Error(
+      `Asset ID must be 0x-prefixed 64-char hex, got: ${id.slice(0, 24)}…`
+    );
   }
   return id as `0x${string}`;
 }

@@ -19,7 +19,6 @@ contract TrustAnchorRegistry is AccessControl, ReentrancyGuard, Pausable, Initia
     error IssuerAlreadyAccredited(address issuer);
     error EmptyIssuerDid();
     error NotGovernance(address caller);
-    error NotInitialized();
 
     event IssuerAccredited(
         address indexed issuer,
@@ -61,7 +60,6 @@ contract TrustAnchorRegistry is AccessControl, ReentrancyGuard, Pausable, Initia
 
     bytes32 public constant GOVERNANCE_ROLE = keccak256("GOVERNANCE_ROLE");
 
-    bool private _initialized;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -70,8 +68,6 @@ contract TrustAnchorRegistry is AccessControl, ReentrancyGuard, Pausable, Initia
     }
 
     function initialize() public initializer {
-        if (_initialized) revert NotInitialized();
-        _initialized = true;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(GOVERNANCE_ROLE, msg.sender);
     }
@@ -113,10 +109,12 @@ contract TrustAnchorRegistry is AccessControl, ReentrancyGuard, Pausable, Initia
     }
 
     /// @notice Revoke an issuer's accreditation (requires GOVERNANCE_ROLE)
+    /// Audit H-2: added whenNotPaused + nonReentrant so the Pausable
+    /// circuit-breaker freezes these mutations during an incident.
     function revokeAccreditation(
         address issuer,
         string calldata reason
-    ) external onlyRole(GOVERNANCE_ROLE) {
+    ) external nonReentrant whenNotPaused onlyRole(GOVERNANCE_ROLE) {
         StringBounds.checkLen(reason, StringBounds.REASON_MAX);
         if (!_isAccredited[issuer]) revert IssuerNotAccredited(issuer);
 
@@ -131,11 +129,14 @@ contract TrustAnchorRegistry is AccessControl, ReentrancyGuard, Pausable, Initia
     function reaccreditIssuer(
         address issuer,
         uint256 additionalTime
-    ) external onlyRole(GOVERNANCE_ROLE) {
+    ) external nonReentrant whenNotPaused onlyRole(GOVERNANCE_ROLE) {
         if (!_isAccredited[issuer]) revert IssuerNotAccredited(issuer);
 
         _accreditations[issuer].validUntil += additionalTime;
         _accreditations[issuer].active = true;
+        // Audit L-7: clear the stale revocation reason — a verifier reading
+        // getAccreditation must not see active=true with a non-empty reason.
+        _accreditations[issuer].revocationReason = "";
 
         emit IssuerReaccredited(issuer, _accreditations[issuer].validUntil, block.timestamp);
     }
@@ -167,8 +168,25 @@ contract TrustAnchorRegistry is AccessControl, ReentrancyGuard, Pausable, Initia
     }
 
     /// @notice Get all accredited issuer addresses
+    /// Audit M-1: unbounded return array; prefer accreditedIssuerCount +
+    /// getAllAccreditedIssuersPaged for programmatic consumption.
     function getAllAccreditedIssuers() external view returns (address[] memory) {
         return _allAccreditedIssuers;
+    }
+
+    /// @notice Paginated accredited issuer addresses (audit M-1).
+    function getAllAccreditedIssuersPaged(uint256 offset, uint256 limit)
+        external view returns (address[] memory page, uint256 total)
+    {
+        total = _allAccreditedIssuers.length;
+        if (offset >= total || limit == 0) return (new address[](0), total);
+        uint256 end = offset + limit;
+        if (end > total) end = total;
+        uint256 pageSize = end - offset;
+        page = new address[](pageSize);
+        for (uint256 i = 0; i < pageSize; i++) {
+            page[i] = _allAccreditedIssuers[offset + i];
+        }
     }
 
     /// @notice Total number of ever-accredited issuers

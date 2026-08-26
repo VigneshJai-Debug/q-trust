@@ -199,10 +199,19 @@ For each migration target, the planner produces:
 
 ### 6.5 Benchmark Results
 
-On synthetic test sets, the planner achieves:
-- Kendall tau: 0.89 (strong rank correlation with optimal ordering)
+On synthetic test sets, the planner achieves (corrected per-node-rank Kendall
+protocol — see README "Trained checkpoints & measured results" and the
+CHANGELOG v2.1 notes; numbers refreshed 2026-08-26 after the ranking-metric
+protocol bug fix):
+
+- Kendall tau: **0.961** for GNN v2 on the canonical held-out set
+  (`results/benchmark.json`; earlier revisions of this section quoted τ=0.89
+  computed with the pre-fix index-correlation protocol)
+- GNN v3 GPU/DDP variants: held-out τ 0.898 / 0.831 at larger training scale
+  (`results/benchmark_v3.json`, `results/benchmark_ddp.json`) — v2 remains the
+  default shipped model pending the BatchNorm→LayerNorm retrain
 - Top-5 overlap: 0.94 (94% of top-5 targets match optimal set)
-- Node-rank accuracy: 0.87 (within ±2 of optimal rank for 87% of nodes)
+- Node-rank accuracy: within ±2 of optimal rank for the large majority of nodes
 
 ## 7. On-Chain Layer (Base L2)
 

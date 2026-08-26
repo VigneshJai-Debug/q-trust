@@ -57,3 +57,4 @@ exclude_docs: |
   playbook_review.md
   demo_run_of_show.md
   *Audit*
+  QTrust_Implementation_Guide.md

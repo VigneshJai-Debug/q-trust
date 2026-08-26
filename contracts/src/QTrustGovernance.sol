@@ -84,22 +84,48 @@ contract QTrustGovernance is AccessControl {
         _schedule(address(assetRegistry), data, salt);
     }
 
-    /** @notice Schedule a role grant on any registry. */
+    /** @notice Schedule a role grant on any registry (address-addressed variant).
+     *  Audit L-3: the index-addressed wrappers below only know the four core
+     *  registries; this variant lets governance reach operational roles on
+     *  compliance, evidence, revocation, policy, schema, and trustAnchor. */
+    function scheduleGrantRoleOn(
+        address target,
+        bytes32 role,
+        address account,
+        bytes32 salt
+    ) external onlyRole(PROPOSER_ROLE) {
+        if (role == _DEFAULT_ADMIN_ROLE) revert ForbiddenGovernanceCall();
+        // Operational roles may ONLY land on the timelock itself — never on
+        // an EOA proposed by a (possibly compromised or malicious) proposer.
+        // Audit M-3: previously any account already holding PROPOSER_ROLE was
+        // accepted, letting a proposer grant operational roles to itself or
+        // any other proposer (lateral privilege escalation).
+        if (account != address(timelock)) revert ForbiddenGovernanceCall();
+        bytes memory data = abi.encodeCall(IAccessControl.grantRole, (role, account));
+        _schedule(target, data, salt);
+    }
+
+    /** @notice Schedule pausing an arbitrary registry (audit L-3). */
+    function schedulePauseOn(address target, bytes32 salt) external onlyRole(PROPOSER_ROLE) {
+        _schedule(target, abi.encodeCall(IPausable.pause, ()), salt);
+    }
+
+    /** @notice Schedule unpausing an arbitrary registry (audit L-3). */
+    function scheduleUnpauseOn(address target, bytes32 salt) external onlyRole(PROPOSER_ROLE) {
+        _schedule(target, abi.encodeCall(IPausable.unpause, ()), salt);
+    }
+
+    /** @notice Schedule a role grant on one of the four core registries. */
     function scheduleGrantRole(
         uint256 registryIndex,
         bytes32 role,
         address account,
         bytes32 salt
     ) external onlyRole(PROPOSER_ROLE) {
-        // Prevent governance from escalating itself to full admin.
         if (role == _DEFAULT_ADMIN_ROLE) revert ForbiddenGovernanceCall();
-        // Operational roles must be granted to the timelock (or an explicitly
-        // provisioned operator) — never to an arbitrary account proposed by a
-        // compromised or malicious proposer.
-        if (!_isTimelockOrProposed(account)) revert ForbiddenGovernanceCall();
-        address target = _getRegistry(registryIndex);
+        if (account != address(timelock)) revert ForbiddenGovernanceCall();
         bytes memory data = abi.encodeCall(IAccessControl.grantRole, (role, account));
-        _schedule(target, data, salt);
+        _schedule(_getRegistry(registryIndex), data, salt);
     }
 
     /** @notice Schedule pausing a registry. */
@@ -133,12 +159,22 @@ contract QTrustGovernance is AccessControl {
 
     /// @dev True when calldata invokes grantRole/revokeRole/renounceRole,
     ///      regardless of which role is targeted.
+    // Audit C-2: also block the UUPS upgrade selectors — every registry's
+    // _authorizeUpgrade only checks DEFAULT_ADMIN_ROLE, which the timelock
+    // holds, so without this guard any single proposer could schedule
+    // upgradeToAndCall(proxy, maliciousImpl, "") and swap a registry
+    // implementation after the 7-day delay.
+    bytes4 private constant _UPGRADE_TO_SELECTOR = 0x3659cfe6; // UUPSUpgradeable.upgradeTo(address)
+    bytes4 private constant _UPGRADE_TO_AND_CALL_SELECTOR = 0x4f1ef286; // UUPSUpgradeable.upgradeToAndCall(address,bytes)
+
     function _isRoleMutationCall(bytes memory data) internal pure returns (bool) {
         if (data.length < 4) return false;
         bytes4 selector = bytes4(data);
         return selector == IAccessControl.grantRole.selector ||
             selector == IAccessControl.revokeRole.selector ||
-            selector == IAccessControl.renounceRole.selector;
+            selector == IAccessControl.renounceRole.selector ||
+            selector == _UPGRADE_TO_SELECTOR ||
+            selector == _UPGRADE_TO_AND_CALL_SELECTOR;
     }
 
     /** @notice Execute a previously scheduled call (after its delay elapses). */
@@ -152,13 +188,5 @@ contract QTrustGovernance is AccessControl {
         else if (registryIndex == 2) return address(migrationRegistry);
         else if (registryIndex == 3) return address(auditRegistry);
         else revert("QTrustGovernance: invalid registry index");
-    }
-
-    /// @dev Operational roles may only land on the timelock itself or on an
-    ///      account the proposer has been explicitly authorized to provision.
-    ///      The timelock is always allowed (it is the governance executor);
-    ///      any other account must already hold PROPOSER_ROLE.
-    function _isTimelockOrProposed(address account) internal view returns (bool) {
-        return account == address(timelock) || hasRole(PROPOSER_ROLE, account);
     }
 }

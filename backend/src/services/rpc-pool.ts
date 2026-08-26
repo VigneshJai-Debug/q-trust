@@ -20,7 +20,8 @@ function loadRpcUrls(): string[] {
   for (const url of pooled.split(",").map((s) => s.trim()).filter(Boolean)) {
     if (!urls.includes(url)) urls.push(url);
   }
-  const fallback = process.env.QTRUST_BASE_SEPOLIA_RPC || "http://127.0.0.1:8545";
+  // Audit L-8: HTTPS public default instead of plaintext local HTTP.
+  const fallback = process.env.QTRUST_BASE_SEPOLIA_RPC || "https://sepolia.base.org";
   if (!urls.includes(fallback)) urls.push(fallback);
   return urls;
 }

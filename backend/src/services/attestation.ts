@@ -8,7 +8,7 @@
  * signature, recovers the signer, and submits it — vendors never need to
  * hold funds or run a node. The contract records the SIGNER as the vendor.
  */
-import { recoverTypedDataAddress, type Address } from "viem";
+import { recoverTypedDataAddress, keccak256, toBytes, type Address } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import * as dotenv from "dotenv";
 import {
@@ -74,6 +74,35 @@ function getWalletClient() {
 }
 
 const publicClient = getPublicClient();
+
+// Audit H-3 (defense in depth): pre-check the signer's on-chain role BEFORE
+// broadcasting. The contracts already enforce roles, but a failed tx still
+// costs the relayer gas — rejecting early makes gas-griefing asymmetric.
+const VENDOR_ROLE = keccak256(toBytes("VENDOR_ROLE"));
+const REGISTRAR_ROLE = keccak256(toBytes("REGISTRAR_ROLE"));
+const MIGRATOR_ROLE = keccak256(toBytes("MIGRATOR_ROLE"));
+const AUDITOR_ROLE = keccak256(toBytes("AUDITOR_ROLE"));
+
+async function assertHasRole(
+  registry: Address,
+  abi: unknown,
+  role: `0x${string}`,
+  roleName: string,
+  signer: Address,
+): Promise<void> {
+  const has = await publicClient.readContract({
+    address: registry,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    abi: abi as any,
+    functionName: "hasRole",
+    args: [role, signer],
+  });
+  if (!has) {
+    throw new Error(
+      `Relay rejected: signer ${signer} must hold ${roleName} on the target registry`,
+    );
+  }
+}
 
 export function relayerAddress(): Address {
   return getRelayerAccount().address;
@@ -228,6 +257,8 @@ export async function relaySignedAttestation(
         `Nonce mismatch: signed ${payload.nonce}, on-chain ${onChainNonce} — signature is stale or replayed`,
       );
     }
+    // Audit H-3: reject signers without VENDOR_ROLE before spending gas.
+    await assertHasRole(VENDOR_REGISTRY, VendorRegistryAbi, VENDOR_ROLE, "VENDOR_ROLE", signer);
 
     const txHash = await getWalletClient().writeContract({
       address: VENDOR_REGISTRY,
@@ -337,6 +368,8 @@ export async function relaySignedCBOMRegistration(
         `Nonce mismatch: signed ${payload.nonce}, on-chain ${onChainNonce}`,
       );
     }
+    // Audit H-3: reject signers without REGISTRAR_ROLE before spending gas.
+    await assertHasRole(ASSET_REGISTRY, AssetRegistryAbi, REGISTRAR_ROLE, "REGISTRAR_ROLE", signer);
 
     const txHash = await getWalletClient().writeContract({
       address: ASSET_REGISTRY,
@@ -455,6 +488,8 @@ export async function relaySignedMigration(
         `Nonce mismatch: signed ${payload.nonce}, on-chain ${onChainNonce}`,
       );
     }
+    // Audit H-3: reject signers without MIGRATOR_ROLE before spending gas.
+    await assertHasRole(MIGRATION_REGISTRY, MigrationRegistryAbi, MIGRATOR_ROLE, "MIGRATOR_ROLE", signer);
 
     const txHash = await getWalletClient().writeContract({
       address: MIGRATION_REGISTRY,
@@ -572,6 +607,8 @@ export async function relaySignedAudit(
         `Nonce mismatch: signed ${payload.nonce}, on-chain ${onChainNonce}`,
       );
     }
+    // Audit H-3: reject signers without AUDITOR_ROLE before spending gas.
+    await assertHasRole(AUDIT_REGISTRY, AuditRegistryAbi, AUDITOR_ROLE, "AUDITOR_ROLE", signer);
 
     const txHash = await getWalletClient().writeContract({
       address: AUDIT_REGISTRY,

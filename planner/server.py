@@ -180,6 +180,59 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(RateLimitMiddleware)
 
+
+# ---------------------------------------------------------------------------
+# Audit HIGH-1 (planner): the GNN/RL inference endpoints are CPU/GPU-heavy
+# and were completely unauthenticated — anyone who could reach the service
+# could submit unbounded CBOMs and deny-wallet the host. A shared static key
+# (QTRUST_PLANNER_API_KEY) is now enforced on every inference route.
+#
+# Fail behavior:
+#   * key configured  → requests must present a matching X-Api-Key header
+#                       (constant-time compare).
+#   * no key, dev     → endpoints stay open for local docker-compose usage.
+#   * no key, prod    → inference routes return 503 (fail closed).
+# ---------------------------------------------------------------------------
+_PLANNER_API_KEY = os.environ.get("QTRUST_PLANNER_API_KEY", "")
+_IS_PROD = os.environ.get("NODE_ENV", "").lower() in {"production", "prod"} or \
+    os.environ.get("QTRUST_ENV", "").lower() == "production"
+
+
+class ApiKeyMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path in {"/health"} or request.method == "GET":
+            # Liveness stays open; all inference routes are POSTs below.
+            return await call_next(request)
+
+        if _PLANNER_API_KEY:
+            provided = request.headers.get("x-api-key", "")
+            if not _constant_time_equals(provided, _PLANNER_API_KEY):
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Invalid or missing X-Api-Key"},
+                )
+        elif _IS_PROD:
+            logger.error(
+                json.dumps({
+                    "event": "planner_auth_disabled_in_production",
+                    "level": "ERROR",
+                    "message": "QTRUST_PLANNER_API_KEY not set — inference routes disabled",
+                })
+            )
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "Planner authentication is not configured (set QTRUST_PLANNER_API_KEY)"},
+            )
+        return await call_next(request)
+
+
+def _constant_time_equals(a: str, b: str) -> bool:
+    import hmac
+    return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
+
+
+app.add_middleware(ApiKeyMiddleware)
+
 MODEL_PATH = os.environ.get("QTRUST_MODEL_PATH", str(Path(__file__).resolve().parents[1] / "model.pt"))
 DEADLINES_PATH = os.environ.get(
     "QTRUST_DEADLINES_PATH", str(Path(__file__).resolve().parents[1] / "data" / "algorithms.json")

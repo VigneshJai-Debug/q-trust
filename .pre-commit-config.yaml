@@ -1,6 +1,9 @@
+# Supply-chain note (audit LOW): every hook repo is pinned to an immutable
+# commit SHA, matching the CI workflows' SHA-pinning posture. The comment
+# records the tag each SHA corresponds to.
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: 2c9f875913ee60ca25ce70243dc24d5b6415598c # v4.6.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -11,14 +14,14 @@ repos:
       - id: detect-private-key
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.5.0
+    rev: 1dc9eb131c2ea4816c708e4d85820d2cc8542683 # v0.5.0
     hooks:
       - id: ruff
         args: [--fix]
       - id: ruff-format
 
   - repo: https://github.com/pre-commit/mirrors-eslint
-    rev: v9.5.0
+    rev: 2c40a899d09a5768e2e5164cce82126495619860 # v9.5.0
     hooks:
       - id: eslint
         files: \.(ts|tsx)$
@@ -29,7 +32,7 @@ repos:
           - '@typescript-eslint/parser@8.0.0'
 
   - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v4.0.0-alpha.8
+    rev: f12edd9c7be1c20cfa42420fd0e6df71e42b51ea # v4.0.0-alpha.8
     hooks:
       - id: prettier
         files: \.(ts|tsx|json|md)$

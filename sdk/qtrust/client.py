@@ -56,10 +56,22 @@ class QTrustClient:
     ):
         self.private_key = private_key or os.environ.get("QTRUST_DEPLOYER_PRIVATE_KEY")
         self.rpc_url = rpc_url or os.environ.get("QTRUST_BASE_SEPOLIA_RPC", "http://127.0.0.1:8545")
-        # Audit SDK-07: refuse cleartext RPC for anything but loopback — a
-        # plain-HTTP RPC endpoint leaks every signed transaction in flight.
+        # Audit SDK-07 (re-confirmed as audit M-3): refuse cleartext RPC for
+        # anything but loopback — a plain-HTTP RPC endpoint leaks every signed
+        # transaction in flight.
+        #
+        # Audit M-3 remediation: the old substring check ("127.0.0.1" in url)
+        # was bypassable via userinfo syntax — http://127.0.0.1@evil.com:8545/
+        # contains the substring but connects to evil.com per RFC 3986. Parse
+        # properly and compare the HOSTNAME against loopback literals.
+        from urllib.parse import urlparse
+
         _rpc = self.rpc_url.lower()
-        loopback = "localhost" in _rpc or "127.0.0.1" in _rpc or "[::1]" in _rpc
+        try:
+            _host = (urlparse(_rpc).hostname or "").lower()
+        except ValueError:
+            _host = ""
+        loopback = _host in {"localhost", "127.0.0.1", "::1"} or _host.endswith(".localhost")
         if _rpc.startswith("http://") and not loopback:
             raise ValueError(
                 f"Refusing non-HTTPS RPC URL '{self.rpc_url}' — signed transactions would "

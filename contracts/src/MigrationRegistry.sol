@@ -26,7 +26,6 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard, Pausable, Initiali
     error ZeroAssetRegistry();
     error InvalidSignature();
     error InvalidNonce(address signer, uint256 provided, uint256 expected);
-    error NotInitialized();
 
     event MigrationRecorded(
         bytes32 indexed migrationId,
@@ -36,6 +35,12 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard, Pausable, Initiali
         string  toAlgorithm,
         bytes32 evidenceHash,
         string  evidenceURI,
+        uint256 timestamp
+    );
+
+    event MigrationVerified(
+        bytes32 indexed migrationId,
+        address indexed verifiedBy,
         uint256 timestamp
     );
 
@@ -76,7 +81,6 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard, Pausable, Initiali
 
     mapping(address => uint256) public nonces;
 
-    bool private _initialized;
     uint256 private _cachedChainId;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -86,9 +90,7 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard, Pausable, Initiali
     }
 
     function initialize(address assetRegistry_) public initializer {
-        if (_initialized) revert NotInitialized();
         if (assetRegistry_ == address(0)) revert ZeroAssetRegistry();
-        _initialized = true;
         assetRegistry = AssetRegistry(assetRegistry_);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(MIGRATOR_ROLE, msg.sender);
@@ -262,10 +264,12 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard, Pausable, Initiali
         // Cross-contract integrity: the asset must exist, be active, AND be
         // owned by the recording org (audit M-1 — without the ownership
         // check any migrator could record migrations against foreign assets).
-        (bool exists, bool active, ) = assetRegistry.verifyAsset(assetId);
+        // Audit M-2: verifyAsset already returns orgDid — use it instead of
+        // issuing a second getAsset cross-contract call just to read owner.
+        (bool exists, bool active, address assetOrg) = assetRegistry.verifyAsset(assetId);
         if (!exists) revert AssetNotRegistered(assetId);
         if (!active) revert AssetInactive(assetId);
-        if (assetRegistry.getAsset(assetId).orgDid != orgDid) {
+        if (assetOrg != orgDid) {
             revert NotAssetOwner(orgDid, assetId);
         }
 
@@ -301,6 +305,9 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard, Pausable, Initiali
     function verifyMigration(bytes32 migrationId) external onlyRole(AUDITOR_ROLE) whenNotPaused {
         if (_migrations[migrationId].orgDid == address(0)) revert MigrationNotFound(migrationId);
         _migrations[migrationId].verified = true;
+        // Audit L-1: the verified transition is trust-critical — auditors and
+        // off-chain indexers must be able to observe it via event logs.
+        emit MigrationVerified(migrationId, msg.sender, block.timestamp);
     }
 
     /// @notice Pause all operations
@@ -326,6 +333,28 @@ contract MigrationRegistry is AccessControl, ReentrancyGuard, Pausable, Initiali
 
     function getMigrationsByOrg(address orgDid) external view returns (bytes32[] memory) {
         return _migrationsByOrg[orgDid];
+    }
+
+    /// @notice Number of migrations recorded by an org (audit M-1). Also used
+    ///         by AuditRegistry to bound claims without copying the full array.
+    function getMigrationCountByOrg(address orgDid) external view returns (uint256) {
+        return _migrationsByOrg[orgDid].length;
+    }
+
+    /// @notice Paginated migration IDs for an org (audit M-1).
+    function getMigrationsByOrgPaged(address orgDid, uint256 offset, uint256 limit)
+        external view returns (bytes32[] memory page, uint256 total)
+    {
+        bytes32[] storage ids = _migrationsByOrg[orgDid];
+        total = ids.length;
+        if (offset >= total || limit == 0) return (new bytes32[](0), total);
+        uint256 end = offset + limit;
+        if (end > total) end = total;
+        uint256 pageSize = end - offset;
+        page = new bytes32[](pageSize);
+        for (uint256 i = 0; i < pageSize; i++) {
+            page[i] = ids[offset + i];
+        }
     }
 
     /// @notice Total number of migrations recorded across all orgs

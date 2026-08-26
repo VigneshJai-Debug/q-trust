@@ -13,9 +13,20 @@ process.env.QTRUST_VENDOR_REGISTRY_ADDRESS = "0x" + "22".repeat(20);
 process.env.QTRUST_MIGRATION_REGISTRY_ADDRESS = "0x" + "44".repeat(20);
 process.env.QTRUST_AUDIT_REGISTRY_ADDRESS = AUDIT_REGISTRY;
 
+// Mutable per-test state consumed by the readContract implementation
+// (mockResolvedValue would clobber the hasRole/nonces branching).
+let nonceValue = 0n;
+let signerHasRole = true;
 vi.mock("../src/services/rpc-pool.js", () => {
   const calls = {
-    readContract: vi.fn(),
+    readContract: vi.fn().mockImplementation(async ({ functionName }) => {
+      // Audit H-3 role pre-check: hasRole answered from signerHasRole;
+      // nonces from nonceValue.
+      if (functionName === "hasRole") {
+        return signerHasRole;
+      }
+      return nonceValue;
+    }),
     writeContract: vi.fn(),
     waitForTransactionReceipt: vi.fn(),
   };
@@ -60,7 +71,8 @@ function validPayload() {
 describe("relaySignedAudit (EIP-712 gasless audit posting)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    calls.readContract.mockResolvedValue(0n);
+    nonceValue = 0n;
+    signerHasRole = true;
     calls.writeContract.mockResolvedValue(TX_HASH);
     calls.waitForTransactionReceipt.mockResolvedValue({
       logs: [{ eventName: "AuditPosted", args: { auditId: AUDIT_ID } }],
@@ -118,7 +130,7 @@ describe("relaySignedAudit (EIP-712 gasless audit posting)", () => {
   });
 
   it("rejects a stale/replayed nonce without submitting", async () => {
-    calls.readContract.mockResolvedValue(5n);
+    nonceValue = 5n;
     await expect(relaySignedAudit(validPayload())).rejects.toThrow(/Nonce mismatch/);
     expect(calls.writeContract).not.toHaveBeenCalled();
   });
@@ -140,8 +152,14 @@ describe("relaySignedAudit (EIP-712 gasless audit posting)", () => {
     expect(result.txHash).toBe(TX_HASH);
   });
 
+  it("audit H-3: rejects signers without AUDITOR_ROLE before broadcasting", async () => {
+    signerHasRole = false;
+    await expect(relaySignedAudit(validPayload())).rejects.toThrow(/AUDITOR_ROLE/);
+    expect(calls.writeContract).not.toHaveBeenCalled();
+  });
+
   it("getAuditNonce reads the on-chain nonce for an auditor", async () => {
-    calls.readContract.mockResolvedValue(7n);
+    nonceValue = 7n;
     const nonce = await getAuditNonce(SIGNER as `0x${string}`);
     expect(nonce).toBe(7n);
     expect(calls.readContract).toHaveBeenCalledWith(

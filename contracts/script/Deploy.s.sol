@@ -17,6 +17,11 @@ import "../src/SchemaRegistry.sol";
 import "../src/TrustAnchorRegistry.sol";
 
 contract Deploy is Script {
+    // Result handles for regression tests (AuditRemediations.t.sol) and
+    // post-deploy verification scripts. Ephemeral per-run script storage.
+    TimelockController public lastTimelock;
+    QTrustGovernance public lastGovernance;
+
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("QTRUST_DEPLOYER_PRIVATE_KEY");
         address deployer = vm.addr(deployerPrivateKey);
@@ -52,7 +57,52 @@ contract Deploy is Script {
         // Deploy new trust infrastructure contracts
         _deployTrustInfrastructure(deployer, timelock);
 
+        // Audit C-1 remediation: hand full control of the timelock and the
+        // governance wrapper to the timelock itself, then renounce every
+        // deployer role. Without this, the deployer retains permanent
+        // unilateral control of all registries on a 7-day timer.
+        _renounceGovernanceControl(governance, timelock, deployer);
+
+        lastTimelock = timelock;
+        lastGovernance = governance;
+
         vm.stopBroadcast();
+    }
+
+    /// @dev Audit C-1: the deployer must NOT retain DEFAULT_ADMIN_ROLE /
+    ///      PROPOSER_ROLE / EXECUTOR_ROLE / CANCELLER_ROLE on the
+    ///      TimelockController, nor DEFAULT_ADMIN_ROLE on QTrustGovernance.
+    function _renounceGovernanceControl(
+        QTrustGovernance governance,
+        TimelockController timelock,
+        address deployer
+    ) internal {
+        bytes32 adminRole = 0x00;
+
+        // Governance's own role administration moves behind the 7-day
+        // timelock: future changes to the proposer set must be scheduled and
+        // executed like any other governance operation.
+        governance.grantRole(adminRole, address(timelock));
+        governance.renounceRole(adminRole, deployer);
+        console2.log("QTrustGovernance.DEFAULT_ADMIN_ROLE ->", address(timelock));
+
+        // The timelock is self-administered by construction (OZ grants
+        // DEFAULT_ADMIN_ROLE to the timelock itself); drop the extra deployer
+        // grant plus every deployer operational role on the timelock.
+        timelock.renounceRole(adminRole, deployer);
+        timelock.renounceRole(timelock.PROPOSER_ROLE(), deployer);
+        timelock.renounceRole(timelock.EXECUTOR_ROLE(), deployer);
+        timelock.renounceRole(timelock.CANCELLER_ROLE(), deployer);
+        console2.log("Deployer roles renounced on timelock + governance");
+
+        // Post-renouncement sanity: the deployment is only safe if the
+        // deployer truly holds nothing on the governance layer.
+        if (
+            timelock.hasRole(adminRole, deployer) ||
+            governance.hasRole(adminRole, deployer)
+        ) {
+            revert("C-1 remediation failed: deployer still holds an admin role");
+        }
     }
 
     function _deployRegistries(address deployer)

@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 import "./lib/StringBounds.sol";
 
 /// @title EvidenceRegistry — hash-chained evidence ledger roots
@@ -24,7 +25,6 @@ contract EvidenceRegistry is AccessControl, ReentrancyGuard, Pausable, Initializ
     error AlreadyRevoked(bytes32 evidenceId);
     error InvalidSignature();
     error InvalidNonce(address signer, uint256 provided, uint256 expected);
-    error NotInitialized();
 
     event EvidenceRegistered(
         bytes32 indexed evidenceId,
@@ -72,7 +72,6 @@ contract EvidenceRegistry is AccessControl, ReentrancyGuard, Pausable, Initializ
 
     mapping(address => uint256) public nonces;
 
-    bool private _initialized;
     uint256 private _cachedChainId;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -82,8 +81,6 @@ contract EvidenceRegistry is AccessControl, ReentrancyGuard, Pausable, Initializ
     }
 
     function initialize() public initializer {
-        if (_initialized) revert NotInitialized();
-        _initialized = true;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(REGISTRAR_ROLE, msg.sender);
         _cachedChainId = block.chainid;
@@ -277,27 +274,16 @@ contract EvidenceRegistry is AccessControl, ReentrancyGuard, Pausable, Initializ
     function _generateBatchId(address owner_, bytes32 evidenceRoot)
         internal pure returns (string memory)
     {
-        return string(abi.encodePacked("batch-", _toHex(owner_), "-", _toHex(evidenceRoot)));
-    }
-
-    /// @dev Encode an address as a hex string (without "0x" prefix).
-    function _toHex(address value) internal pure returns (string memory) {
-        bytes memory hexChars = "0123456789abcdef";
-        bytes memory str = new bytes(40);
-        for (uint256 i = 0; i < 40; i++) {
-            str[i] = hexChars[uint8(uint160(value) >> (156 - i * 4)) & 0x0f];
-        }
-        return string(str);
-    }
-
-    /// @dev Encode a bytes32 as a hex string (without "0x" prefix).
-    function _toHex(bytes32 value) internal pure returns (string memory) {
-        bytes memory hexChars = "0123456789abcdef";
-        bytes memory str = new bytes(64);
-        for (uint256 i = 0; i < 64; i++) {
-            str[i] = hexChars[uint8(uint256(value) >> (252 - i * 4)) & 0x0f];
-        }
-        return string(str);
+        // Audit L-2: use OZ's audited Strings.toHexString instead of the
+        // hand-rolled 40/64-iteration hex encoders.
+        return string(
+            abi.encodePacked(
+                "batch-",
+                Strings.toHexString(uint160(owner_), 20),
+                "-",
+                Strings.toHexString(uint256(evidenceRoot))
+            )
+        );
     }
 
     /// @notice Revoke (deactivate) an evidence record.

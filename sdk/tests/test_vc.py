@@ -1,6 +1,7 @@
 # sdk/tests/test_vc.py
 """Tests for W3C Verifiable Credentials."""
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -152,3 +153,21 @@ def test_vc_model_roundtrip():
     vc2 = VerifiableCredential(**data)
     assert vc2.issuer == vc.issuer
     assert vc2.credentialSubject["claim"] == "value"
+
+
+class TestMalformedProofValue:
+    """Audit M-4: bytes.fromhex(proofValue) must not raise on untrusted input."""
+
+    def test_malformed_hex_returns_invalid_signature(self):
+        verifier = VCVerifier(resolver=None)
+        import json as _json
+        vc = SimpleNamespace(
+            issuer="did:web:example.com",
+            proof={"proofValue": "zz-not-hex!!"},
+            credentialSubject={},
+            type=["VerifiableCredential"],
+            # _verify_proof canonicalizes the VC before checking the proof.
+            model_dump=lambda **_: {"issuer": "did:web:example.com", "credentialSubject": {}},
+        )
+        # _verify_proof returns a reason string instead of raising ValueError.
+        assert verifier._verify_proof(vc, None) == "invalid_signature"

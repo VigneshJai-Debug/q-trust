@@ -144,7 +144,11 @@ describe("parseAssetId / toBytes32", () => {
     vi.resetModules();
     const { parseAssetId } = await import("@/lib/config");
     expect(() => parseAssetId("no-hex-prefix")).toThrow(/0x-prefixed/);
-    expect(() => parseAssetId(`0x${"ab".repeat(31)}`)).toThrow(/32 bytes/);
+    // Audit H-7: parseAssetId now enforces the full 64-hex-char charset and
+    // length in one strict pattern.
+    expect(() => parseAssetId(`0x${"ab".repeat(31)}`)).toThrow(/64-char hex/);
+    expect(() => parseAssetId(`0x${"zz".repeat(32)}`)).toThrow(/64-char hex/);
+    expect(() => parseAssetId(`0x${"ab".repeat(64)}`)).toThrow(/64-char hex/);
   });
 
   it("pads short hashes to bytes32", async () => {

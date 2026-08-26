@@ -10,15 +10,36 @@ import * as dotenv from "dotenv";
 
 dotenv.config();
 
+export class ConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConfigError";
+  }
+}
+
 // ── Environment helpers ──────────────────────────────────────────────────────
 
 function optionalEnv(name: string, fallback: string): string {
   return process.env[name] || fallback;
 }
 
-const RPC_URL = optionalEnv("QTRUST_BASE_SEPOLIA_RPC", "http://127.0.0.1:8545");
-const USE_MAINNET = process.env.QTRUST_USE_MAINNET === "true";
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
+// Audit L-8: default to the public HTTPS Base Sepolia endpoint instead of a
+// plaintext local HTTP URL, and refuse to boot production against an HTTP
+// (unencrypted, spoofable) RPC.
+function resolveRpcUrl(): string {
+  const url = optionalEnv("QTRUST_BASE_SEPOLIA_RPC", "https://sepolia.base.org");
+  if (IS_PRODUCTION && url.startsWith("http://")) {
+    throw new ConfigError(
+      "Refusing to start: QTRUST_BASE_SEPOLIA_RPC uses plaintext http:// in production — use an HTTPS endpoint",
+    );
+  }
+  return url;
+}
+
+const RPC_URL = resolveRpcUrl();
+const USE_MAINNET = process.env.QTRUST_USE_MAINNET === "true";
 
 export const CHAIN: Chain = USE_MAINNET ? base : baseSepolia;
 
@@ -49,13 +70,6 @@ export function allContractsConfigured(): boolean {
 }
 
 /** Thrown when required configuration is missing or invalid. */
-export class ConfigError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ConfigError";
-  }
-}
-
 /** CORS allowlist. Comma-separated origins; "*" allows all (dev only). */
 export const CORS_ORIGINS: string[] = (() => {
   const raw = process.env.QTRUST_CORS_ORIGINS ?? "*";
@@ -96,6 +110,10 @@ export const PG_URL = process.env.QTRUST_PG_URL ?? process.env.DATABASE_URL ?? "
 /** Planner microservice URL (optional — /v1/plans returns 503 when absent). */
 export const PLANNER_URL =
   process.env.QTRUST_PLANNER_URL ?? "http://127.0.0.1:8000";
+
+/** Shared planner API key — forwarded as X-Api-Key on proxied calls
+ *  (planner audit HIGH-1). */
+export const PLANNER_API_KEY = process.env.QTRUST_PLANNER_API_KEY ?? "";
 
 /** Block to start indexing from (set to the contract deployment block). */
 export const INDEXER_FROM_BLOCK = Number(process.env.QTRUST_INDEXER_FROM_BLOCK ?? 0);

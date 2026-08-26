@@ -99,3 +99,17 @@ def test_readonly_mode_constructor(monkeypatch):
     )
     assert client2.account is not None
     assert client2._require_account() is client2.account
+
+
+class TestCleartextRpcGuardHardening:
+    """Audit M-3: substring loopback check was bypassable via URL userinfo."""
+
+    def test_userinfo_substring_bypass_blocked(self):
+        # "127.0.0.1" appears in the userinfo position but the real host is
+        # evil.com — the guard must reject this.
+        with pytest.raises(ValueError, match="non-HTTPS"):
+            QTrustClient(rpc_url="http://127.0.0.1@evil.com:8545/")
+
+    def test_https_remote_allowed(self):
+        client = QTrustClient(rpc_url="https://sepolia.base.org")
+        assert client.rpc_url == "https://sepolia.base.org"

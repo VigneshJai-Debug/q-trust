@@ -27,7 +27,6 @@ contract ComplianceAttestation is AccessControl, ReentrancyGuard, Pausable, Init
     error AlreadyRevoked(bytes32 attestationId);
     error InvalidSignature();
     error InvalidNonce(address signer, uint256 provided, uint256 expected);
-    error NotInitialized();
 
     event ComplianceAttested(
         bytes32 indexed attestationId,
@@ -77,8 +76,14 @@ contract ComplianceAttestation is AccessControl, ReentrancyGuard, Pausable, Init
 
     mapping(address => uint256) public nonces;
 
-    bool private _initialized;
     uint256 private _cachedChainId;
+
+    // Audit M-4: latest attestation per (org, frameworkHash) so compliance
+    // lookups are O(1) instead of scanning the entire unbounded per-org list
+    // (an ATTESTER_ROLE holder could otherwise make lookups OOG by posting
+    // thousands of attestations for a target org). Appended last to keep the
+    // UUPS storage layout compatible with prior deployments.
+    mapping(address => mapping(bytes32 => bytes32)) private _latestAttestation;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -87,8 +92,6 @@ contract ComplianceAttestation is AccessControl, ReentrancyGuard, Pausable, Init
     }
 
     function initialize() public initializer {
-        if (_initialized) revert NotInitialized();
-        _initialized = true;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(ATTESTER_ROLE, msg.sender);
         _cachedChainId = block.chainid;
@@ -306,8 +309,18 @@ contract ComplianceAttestation is AccessControl, ReentrancyGuard, Pausable, Init
 
         _attestationsByOrg[orgDid].push(attestationId);
         _attestationsByFramework[framework].push(attestationId);
+        _latestAttestation[orgDid][keccak256(abi.encodePacked(framework))] = attestationId;
 
         emit ComplianceAttested(attestationId, orgDid, framework, score, block.timestamp);
+    }
+
+    /// @dev Clears the latest-attestation pointer when it is revoked so the
+    ///      O(1) status view never reports a revoked attestation (audit M-4).
+    function _clearLatestIfCurrent(Attestation storage att) internal {
+        bytes32 slot = _latestAttestation[att.orgDid][keccak256(abi.encodePacked(att.framework))];
+        if (slot == att.attestationId) {
+            delete _latestAttestation[att.orgDid][keccak256(abi.encodePacked(att.framework))];
+        }
     }
 
     /// @notice Revoke a compliance attestation. Only the original attestation
@@ -323,6 +336,7 @@ contract ComplianceAttestation is AccessControl, ReentrancyGuard, Pausable, Init
         if (att.orgDid != msg.sender) revert NotOwner(msg.sender);
 
         att.revoked = true;
+        _clearLatestIfCurrent(att);
 
         emit ComplianceRevoked(attestationId, reason, block.timestamp);
     }
@@ -338,6 +352,7 @@ contract ComplianceAttestation is AccessControl, ReentrancyGuard, Pausable, Init
         if (att.revoked) revert AlreadyRevoked(attestationId);
 
         att.revoked = true;
+        _clearLatestIfCurrent(att);
 
         emit ComplianceRevoked(attestationId, reason, block.timestamp);
     }
@@ -370,6 +385,27 @@ contract ComplianceAttestation is AccessControl, ReentrancyGuard, Pausable, Init
         return _attestationsByFramework[framework];
     }
 
+    /// @notice Number of attestations posted by an org (audit M-1).
+    function getAttestationCountByOrg(address orgDid) external view returns (uint256) {
+        return _attestationsByOrg[orgDid].length;
+    }
+
+    /// @notice Paginated attestation IDs for an org (audit M-1).
+    function getAttestationsByOrgPaged(address orgDid, uint256 offset, uint256 limit)
+        external view returns (bytes32[] memory page, uint256 total)
+    {
+        bytes32[] storage ids = _attestationsByOrg[orgDid];
+        total = ids.length;
+        if (offset >= total || limit == 0) return (new bytes32[](0), total);
+        uint256 end = offset + limit;
+        if (end > total) end = total;
+        uint256 pageSize = end - offset;
+        page = new bytes32[](pageSize);
+        for (uint256 i = 0; i < pageSize; i++) {
+            page[i] = ids[offset + i];
+        }
+    }
+
     /// @notice Check whether an attestation is currently valid (not revoked and
     ///         within its validity window)
     function isComplianceValid(bytes32 attestationId) external view returns (bool) {
@@ -380,18 +416,17 @@ contract ComplianceAttestation is AccessControl, ReentrancyGuard, Pausable, Init
 
     /// @notice Get an organization's compliance status for a given framework.
     ///         Returns whether a valid attestation exists and the latest score.
+    /// Audit M-4: O(1) via the _latestAttestation pointer instead of scanning
+    /// the full per-org attestation array (which was unbounded / OOG-able).
     function getOrgComplianceStatus(address orgDid, string calldata framework)
         external view returns (bool valid, uint256 latestScore)
     {
-        bytes32[] storage ids = _attestationsByOrg[orgDid];
-        for (uint256 i = ids.length; i > 0; i--) {
-            Attestation storage att = _attestations[ids[i - 1]];
-            if (keccak256(abi.encodePacked(att.framework)) == keccak256(abi.encodePacked(framework))
-                && !att.revoked && block.timestamp <= att.validUntil)
-            {
-                return (true, att.score);
-            }
+        bytes32 id = _latestAttestation[orgDid][keccak256(abi.encodePacked(framework))];
+        if (id == bytes32(0)) return (false, 0);
+        Attestation storage att = _attestations[id];
+        if (att.orgDid == address(0) || att.revoked || block.timestamp > att.validUntil) {
+            return (false, 0);
         }
-        return (false, 0);
+        return (true, att.score);
     }
 }

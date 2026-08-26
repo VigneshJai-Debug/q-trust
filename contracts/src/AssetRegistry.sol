@@ -18,13 +18,16 @@ contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
     error AssetNotFound(bytes32 assetId);
     error AssetAlreadyExists(bytes32 assetId);
     error NotRegistrar(address caller);
+    /// @dev Audit I-1: updateCBOM/retireAsset require the asset owner or an
+    ///      admin — NOT the REGISTRAR_ROLE. The old code raised NotRegistrar
+    ///      here, which was misleading for off-chain decoders.
+    error NotOwnerOrAdmin(address caller);
     error EmptyHash();
     error InvalidCBOMHash();
     error InvalidMetadataURI();
     error AssetAlreadyRetired(bytes32 assetId);
     error InvalidSignature();
     error InvalidNonce(address signer, uint256 provided, uint256 expected);
-    error NotInitialized();
 
     event CBOMRegistered(
         bytes32 indexed assetId,
@@ -75,7 +78,6 @@ contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
 
     mapping(address => uint256) public nonces;
 
-    bool private _initialized;
     uint256 private _cachedChainId;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -85,8 +87,6 @@ contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
     }
 
     function initialize() public initializer {
-        if (_initialized) revert NotInitialized();
-        _initialized = true;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(REGISTRAR_ROLE, msg.sender);
         _cachedChainId = block.chainid;
@@ -255,7 +255,7 @@ contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
         Asset storage asset = _assets[assetId];
         if (asset.orgDid == address(0)) revert AssetNotFound(assetId);
         if (asset.orgDid != msg.sender && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) {
-            revert NotRegistrar(msg.sender);
+            revert NotOwnerOrAdmin(msg.sender);
         }
         if (newCbomHash == bytes32(0)) revert InvalidCBOMHash();
         if (bytes(newMetadataURI).length == 0) revert InvalidMetadataURI();
@@ -272,7 +272,7 @@ contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
         Asset storage asset = _assets[assetId];
         if (asset.orgDid == address(0)) revert AssetNotFound(assetId);
         if (asset.orgDid != msg.sender && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) {
-            revert NotRegistrar(msg.sender);
+            revert NotOwnerOrAdmin(msg.sender);
         }
         if (!asset.active) revert AssetAlreadyRetired(assetId);
         asset.active = false;
@@ -319,8 +319,32 @@ contract AssetRegistry is AccessControl, ReentrancyGuard, Pausable, Initializabl
     }
 
     /// @notice Get all CBOM IDs for an org
+    /// Audit M-1: unbounded per-org return array — callers can be OOG-griefed
+    /// once an org grows large. Prefer getAssetCountByOrg +
+    /// getAssetsByOrgPaged for programmatic consumption.
     function getAssetsByOrg(address orgDid) external view returns (bytes32[] memory) {
         return _assetsByOrg[orgDid];
+    }
+
+    /// @notice Number of CBOMs registered by an org (audit M-1).
+    function getAssetCountByOrg(address orgDid) external view returns (uint256) {
+        return _assetsByOrg[orgDid].length;
+    }
+
+    /// @notice Paginated CBOM IDs for an org (audit M-1).
+    function getAssetsByOrgPaged(address orgDid, uint256 offset, uint256 limit)
+        external view returns (bytes32[] memory page, uint256 total)
+    {
+        bytes32[] storage ids = _assetsByOrg[orgDid];
+        total = ids.length;
+        if (offset >= total || limit == 0) return (new bytes32[](0), total);
+        uint256 end = offset + limit;
+        if (end > total) end = total;
+        uint256 pageSize = end - offset;
+        page = new bytes32[](pageSize);
+        for (uint256 i = 0; i < pageSize; i++) {
+            page[i] = ids[offset + i];
+        }
     }
 
     /// @notice Get all CBOM IDs (paginated)

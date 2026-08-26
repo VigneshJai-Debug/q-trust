@@ -1,3 +1,8 @@
+> **⚠ HISTORICAL DOCUMENT (2026-08-26).** This guide is the original
+> pre-implementation handoff prompt kept for provenance only. It does NOT
+> describe the current codebase — consult README.md, docs/ARCHITECTURE.md,
+> the ADRs, and the CHANGELOG instead.
+
 # Q-Trust — Full Implementation Guide
 
 ## Master Handoff Document for Qwen 2.5

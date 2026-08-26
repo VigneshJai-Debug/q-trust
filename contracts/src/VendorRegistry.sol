@@ -24,7 +24,6 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
     error InvalidAttestationLimit(uint256 provided);
     error InvalidSignature();
     error InvalidNonce(address signer, uint256 provided, uint256 expected);
-    error NotInitialized();
 
     /// @notice Default, minimum, and maximum bounds for the configurable
     ///         per-product attestation cap.
@@ -93,7 +92,6 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
 
     mapping(address => uint256) public nonces;
 
-    bool private _initialized;
     uint256 private _cachedChainId;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -103,8 +101,6 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
     }
 
     function initialize() public initializer {
-        if (_initialized) revert NotInitialized();
-        _initialized = true;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(VENDOR_ADMIN_ROLE, msg.sender);
         maxAttestationsPerProduct = DEFAULT_MAX_ATTESTATIONS_PER_PRODUCT;
@@ -195,6 +191,11 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
             productId, version, algorithm, supported, evidenceURI, nonce, signature
         );
         if (signer == address(0)) revert InvalidSignature();
+        // Audit H-1: re-check VENDOR_ROLE on the signed path, mirroring every
+        // other registry's signed flow. Without this, a vendor whose role was
+        // revoked via revokeRole(VENDOR_ROLE, vendor) but who was not also
+        // deactivated could still post signed attestations through a relayer.
+        if (!hasRole(VENDOR_ROLE, signer)) revert NotVendor(signer);
         if (nonces[signer] != nonce) {
             revert InvalidNonce(signer, nonce, nonces[signer]);
         }
@@ -387,8 +388,31 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
     }
 
     /// @notice Get all attestations by a vendor
+    /// Audit M-1: unbounded return array; prefer getAttestationCountByVendor
+    /// + getAttestationsByVendorPaged for programmatic consumption.
     function getAttestationsByVendor(address vendorDid) external view returns (bytes32[] memory) {
         return _attestationsByVendor[vendorDid];
+    }
+
+    /// @notice Number of attestations posted by a vendor (audit M-1).
+    function getAttestationCountByVendor(address vendorDid) external view returns (uint256) {
+        return _attestationsByVendor[vendorDid].length;
+    }
+
+    /// @notice Paginated attestations by a vendor (audit M-1).
+    function getAttestationsByVendorPaged(address vendorDid, uint256 offset, uint256 limit)
+        external view returns (bytes32[] memory page, uint256 total)
+    {
+        bytes32[] storage ids = _attestationsByVendor[vendorDid];
+        total = ids.length;
+        if (offset >= total || limit == 0) return (new bytes32[](0), total);
+        uint256 end = offset + limit;
+        if (end > total) end = total;
+        uint256 pageSize = end - offset;
+        page = new bytes32[](pageSize);
+        for (uint256 i = 0; i < pageSize; i++) {
+            page[i] = ids[offset + i];
+        }
     }
 
     /// @notice Get all attestations for a product

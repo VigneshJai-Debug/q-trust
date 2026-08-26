@@ -1,25 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { createHash, timingSafeEqual } from 'node:crypto';
 
-const PRIVATE_IP_PATTERNS = [
-  /^10\./,
-  /^172\.(1[6-9]|2[0-9]|3[01])\./,
-  /^192\.168\./,
-  /^127\./,
-  /^169\.254\./,
-  /^::1$/,
-  /^0:0:0:0:0:0:0:1$/,
-];
-
-const SHELL_META_CHARS = /[;|&$`\\n]/;
-
-function isPrivateOrBlockedHost(host: string): boolean {
-  const lower = host.toLowerCase();
-  if (lower === 'localhost') return true;
-  if (lower === '0.0.0.0') return true;
-  return PRIVATE_IP_PATTERNS.some((pattern) => pattern.test(lower));
-}
-
 /** Length-independent comparison that never short-circuits on content. */
 function safeEquals(a: string, b: string): boolean {
   const sha = (s: string) => createHash('sha256').update(s, 'utf8').digest();
@@ -30,29 +11,57 @@ function safeEquals(a: string, b: string): boolean {
  * API-key gate usable both as a route `preHandler` and as an instance hook.
  * Halting is signaled by returning the (already-sent) reply.
  *
+ * Audit M-10: this is now the SINGLE requireApiKey implementation for the
+ * whole backend — server.ts imports this function instead of keeping its own
+ * callback-style copy with divergent env-read semantics (module-load capture
+ * vs per-call read) and divergent error codes (401 vs 500).
+ *
  * Policy: fail-closed whenever QTRUST_API_KEYS is configured OR the process
  * runs in production; pure-local dev with no key management stays open so the
- * scanner/GPU demo flows work out of the box (mirrors server.ts semantics).
+ * scanner/GPU demo flows work out of the box.
  */
+const KEY_CACHE_TTL_MS = 30_000;
+let cachedKeys: { keys: string[]; at: number; raw: string | undefined } = {
+  keys: [],
+  at: 0,
+  raw: undefined,
+};
+
+/** Parse QTRUST_API_KEYS with a short TTL cache so key rotation via env
+ *  updates is picked up without re-parsing on every request. */
+function configuredApiKeys(): string[] {
+  const raw = process.env.QTRUST_API_KEYS;
+  if (
+    cachedKeys.raw === raw &&
+    Date.now() - cachedKeys.at < KEY_CACHE_TTL_MS
+  ) {
+    return cachedKeys.keys;
+  }
+  const keys = (raw ?? "")
+    .split(',')
+    .map((k) => k.trim())
+    .filter(Boolean);
+  cachedKeys = { keys, at: Date.now(), raw };
+  return keys;
+}
+
 export async function requireApiKey(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<unknown> {
-  const configuredKeys = process.env.QTRUST_API_KEYS;
   const isProduction = process.env.NODE_ENV === 'production';
-  if (!configuredKeys) {
+  const validKeys = configuredApiKeys();
+
+  if (!validKeys.length) {
     if (!isProduction) {
-      // Pure-local dev with no key management configured: keep endpoints open,
-      // mirroring server.ts API_KEY_REQUIRED semantics.
+      // Pure-local dev with no key management configured: keep endpoints open.
       return undefined;
     }
-    return reply.code(500).send({ error: 'Server misconfigured: no API keys set' });
+    // Production with no keys configured — refuse everything (fail-closed).
+    return reply
+      .code(401)
+      .send({ error: 'API keys not configured — write routes disabled' });
   }
-
-  const validKeys = configuredKeys
-    .split(',')
-    .map((k) => k.trim())
-    .filter(Boolean);
 
   const providedKey = request.headers['x-api-key'];
   if (
@@ -64,111 +73,9 @@ export async function requireApiKey(
   return undefined;
 }
 
-export function validateTarget(
-  this: FastifyInstance,
-  request: FastifyRequest,
-  reply: FastifyReply,
-): void {
-  const body = request.body as Record<string, unknown> | undefined;
-  if (!body || typeof body !== 'object') {
-    reply.code(400).send({ error: 'Request body is required' });
-    return;
-  }
-
-  const target = body.target ?? body.directory;
-  if (target === undefined) {
-    reply
-      .code(400)
-      .send({ error: 'Missing required field: target or directory' });
-    return;
-  }
-
-  if (typeof target !== 'string') {
-    reply.code(400).send({ error: 'Target must be a string' });
-    return;
-  }
-
-  if (target.length === 0) {
-    reply.code(400).send({ error: 'Target cannot be empty' });
-    return;
-  }
-
-  if (target.length > 2048) {
-    reply
-      .code(400)
-      .send({ error: 'Target exceeds maximum length of 2048 characters' });
-    return;
-  }
-
-  if (SHELL_META_CHARS.test(target)) {
-    reply
-      .code(400)
-      .send({ error: 'Target contains invalid characters' });
-    return;
-  }
-
-  try {
-    const parsed = new URL(target);
-    if (isPrivateOrBlockedHost(parsed.hostname)) {
-      reply
-        .code(400)
-        .send({ error: 'Target resolves to a private or blocked address' });
-      return;
-    }
-  } catch {
-    const hostname = target.split(':')[0].split('/')[0];
-    if (isPrivateOrBlockedHost(hostname)) {
-      reply
-        .code(400)
-        .send({ error: 'Target resolves to a private or blocked address' });
-      return;
-    }
-  }
-}
-
-export function requestLogger(
-  this: FastifyInstance,
-  request: FastifyRequest,
-  reply: FastifyReply,
-): void {
-  const start = Date.now();
-  const { method, url } = request;
-  const ip =
-    request.headers['x-forwarded-for'] ||
-    request.headers['x-real-ip'] ||
-    request.socket.remoteAddress ||
-    'unknown';
-  const userAgent = request.headers['user-agent'] || 'unknown';
-
-  reply.raw.on('finish', () => {
-    const duration = Date.now() - start;
-    const log = {
-      method,
-      url,
-      ip: Array.isArray(ip) ? ip[0] : ip,
-      userAgent,
-      statusCode: reply.statusCode,
-      duration,
-    };
-    request.log.info(log, 'request completed');
-  });
-}
-
-export function securityHeaders(
-  this: FastifyInstance,
-  _request: FastifyRequest,
-  reply: FastifyReply,
-): void {
-  reply.header('X-Content-Type-Options', 'nosniff');
-  reply.header('X-Frame-Options', 'DENY');
-  reply.header('X-XSS-Protection', '1; mode=block');
-  reply.header(
-    'Strict-Transport-Security',
-    'max-age=31536000; includeSubDomains',
-  );
-  reply.header('Content-Security-Policy', "default-src 'self'");
-  reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
-}
+// Audit I-4: unused validateTarget/requestLogger/securityHeaders helpers
+// were deleted — their functionality lives in scanner.ts validation and in
+// the helmet plugin.
 
 export function gracefulShutdown(
   server: FastifyInstance,

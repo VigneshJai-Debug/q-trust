@@ -41,11 +41,20 @@ export function encryptSecret(
   if (!plaintext) return "";
   const key = getEncryptionKey();
   if (!key) {
+    // Audit H-5: fail-closed in production. Never silently downgrade to
+    // plaintext-at-rest for HMAC signing secrets — any read access to Redis
+    // would let an attacker forge x-webhook-signature headers and impersonate
+    // this service to every subscriber.
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        `${KEY_ENV_VAR} is not set — refusing to store webhook secrets unencrypted in production`
+      );
+    }
     if (!warnedNoKey) {
       warnedNoKey = true;
       onPlaintextFallback?.();
     }
-    return plaintext;
+    return plaintext; // dev-only fallback
   }
   const iv = randomBytes(12);
   // Explicit 128-bit auth tag length (semgrep gcm-no-tag-length): the tag is
