@@ -23,7 +23,7 @@ jobs:
         working-directory: contracts
       - name: Forge Coverage (lcov)
         working-directory: contracts
-        run: forge coverage --report lcov
+        run: forge coverage --report lcov --ir-minimum
       - name: Upload Contracts coverage
         uses: codecov/codecov-action@1e68e06f1dbfde0e4cefc87efeba9e4643565303 # v4.5.0
         with:

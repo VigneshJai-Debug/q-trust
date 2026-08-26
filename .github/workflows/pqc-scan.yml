@@ -73,8 +73,9 @@ jobs:
   network-scan:
     name: TLS/SSH Endpoint Scan
     runs-on: ubuntu-22.04
-    if: github.event_name == 'push'
-    
+    # Only run when real targets are configured (repo variable, comma-separated).
+    if: github.event_name == 'push' && vars.PQC_SCAN_TARGETS != ''
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -88,22 +89,25 @@ jobs:
         run: pip install -e ./inspector
 
       - name: Scan TLS Endpoints
+        env:
+          PQC_SCAN_TARGETS: ${{ vars.PQC_SCAN_TARGETS }}
         run: |
-          # Add your domain(s) here
-          for target in "${{ vars.PQC_SCAN_TARGETS || 'example.com' }}" ; do
-            crypto-inspector scan "$target" \
-              --format sarif \
-              --output tls-scan.sarif \
-              --cyclonedx tls-cbom.json \
-              --deep-probe \
-              --risk || true
+          mkdir -p tls-sarif
+          for target in ${PQC_SCAN_TARGETS//,/ }; do
+            echo "Scanning $target..."
+            crypto-inspector host "$target" \
+              --ports 443 \
+              --sarif "tls-sarif/$target.sarif" \
+              --cyclonedx "tls-cbom-$target.json" \
+              --risk || echo "::warning::scan failed for $target"
           done
+          ls -la tls-sarif/
 
       - name: Upload TLS SARIF
-        if: always()
+        if: always() && hashFiles('tls-sarif/*.sarif') != ''
         uses: github/codeql-action/upload-sarif@0fa1882f994fbd81a47ab0804f93354f5ea40147 # v3.28.17
         with:
-          sarif_file: tls-scan.sarif
+          sarif_file: tls-sarif
           category: pqc-tls
 
   report:

@@ -169,7 +169,7 @@ contract VendorRegistryTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(
                 VendorRegistry.AttestationLimitExceeded.selector,
-                keccak256(abi.encodePacked("Prod", "1.0", "ML-KEM-512"))
+                keccak256(abi.encode("Prod", "1.0", "ML-KEM-512"))
             )
         );
         registry.attestProduct("Prod", "1.0", "ML-KEM-512", true, "ipfs://QmE");

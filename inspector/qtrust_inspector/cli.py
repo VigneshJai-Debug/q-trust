@@ -534,7 +534,9 @@ def scan_source(
     if language:
         findings = [f for f in findings if f.metadata.get("language") == language]
 
-    result = ScanResult(target=f"source:{path}", findings=[])
+    # Filesystem-relative target: SARIF artifact URIs must resolve against
+    # the checkout root for GitHub code-scanning ingestion.
+    result = ScanResult(target=str(path), findings=[])
     result.findings.extend(findings)
 
     if fmt == "sarif":

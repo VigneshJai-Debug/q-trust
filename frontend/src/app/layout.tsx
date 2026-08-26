@@ -23,7 +23,8 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <meta httpEquiv="X-Content-Type-Options" content="nosniff" />
-        <meta httpEquiv="X-Frame-Options" content="DENY" />
+        {/* X-Frame-Options is set as an HTTP header in next.config.mjs — it
+            cannot be set via <meta> (browsers ignore and warn on it). */}
         <meta name="referrer" content="strict-origin-when-cross-origin" />
       </head>
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">

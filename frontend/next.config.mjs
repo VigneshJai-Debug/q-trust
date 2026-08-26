@@ -11,12 +11,14 @@ const nextConfig = {
   },
   // Security headers
   async headers() {
-    // Next.js dev server needs 'unsafe-eval' for its HMR runtime; production
-    // builds do not. connect-src follows the configured API origin instead of
-    // a hardcoded localhost (audit FE-1 / FE-2).
+    // Next.js dev server needs 'unsafe-eval' for its HMR runtime AND
+    // 'unsafe-inline' for the framework's injected bootstrap scripts; without
+    // them every page fails hydration under CSP in dev. Production builds do
+    // not need either. connect-src follows the configured API origin instead
+    // of a hardcoded localhost (audit FE-1 / FE-2).
     const isDev = process.env.NODE_ENV !== "production";
     const apiBase = process.env.NEXT_PUBLIC_QTRUST_API_URL ?? "http://localhost:3001";
-    const scriptSrc = isDev ? "'self' 'unsafe-eval'" : "'self'";
+    const scriptSrc = isDev ? "'self' 'unsafe-eval' 'unsafe-inline'" : "'self'";
     const csp = [
       "default-src 'self'",
       `script-src ${scriptSrc}`,

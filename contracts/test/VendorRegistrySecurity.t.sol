@@ -55,7 +55,9 @@ contract VendorRegistrySecurityTest is Test {
         string memory version,
         string memory algorithm
     ) internal pure returns (bytes32) {
-        bytes32 productIdHash = keccak256(abi.encodePacked(productId, version, algorithm));
+        // Mirrors VendorRegistry: abi.encode (NOT encodePacked) over the three
+        // dynamic strings prevents hash-collision ambiguity between fields.
+        bytes32 productIdHash = keccak256(abi.encode(productId, version, algorithm));
         return keccak256(abi.encode(v, productIdHash));
     }
 

@@ -263,7 +263,7 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
         StringBounds.checkID(algorithm);
         StringBounds.checkURI(evidenceURI);
 
-        bytes32 productIdHash = keccak256(abi.encodePacked(productId, version, algorithm));
+        bytes32 productIdHash = keccak256(abi.encode(productId, version, algorithm));
         if (_attestationsByProduct[productIdHash].length >= maxAttestationsPerProduct) {
             revert AttestationLimitExceeded(productIdHash);
         }
@@ -334,7 +334,7 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
         string calldata version,
         string calldata algorithm
     ) external pure returns (bytes32) {
-        bytes32 productIdHash = keccak256(abi.encodePacked(productId, version, algorithm));
+        bytes32 productIdHash = keccak256(abi.encode(productId, version, algorithm));
         return keccak256(abi.encode(vendorDid, productIdHash));
     }
 
@@ -397,7 +397,7 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
         string calldata version,
         string calldata algorithm
     ) external view returns (bytes32[] memory) {
-        bytes32 productIdHash = keccak256(abi.encodePacked(productId, version, algorithm));
+        bytes32 productIdHash = keccak256(abi.encode(productId, version, algorithm));
         return _attestationsByProduct[productIdHash];
     }
 
@@ -407,7 +407,7 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
         string calldata version,
         string calldata algorithm
     ) external view returns (bool supported, address vendorDid, bytes32 attestationId) {
-        bytes32 productIdHash = keccak256(abi.encodePacked(productId, version, algorithm));
+        bytes32 productIdHash = keccak256(abi.encode(productId, version, algorithm));
         bytes32[] memory ids = _attestationsByProduct[productIdHash];
         uint256 n = ids.length;
         for (uint256 i = 0; i < n; i++) {

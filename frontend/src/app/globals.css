@@ -2,9 +2,12 @@
 
 @theme {
   --color-qtrust-50: #f0fdfa;
+  /* 500/600/700 are darkened relative to the original teal so white text on
+     qtrust-600/700 surfaces meets WCAG AA 4.5:1 (axe color-contrast serious):
+     #14b8a6 was reserved for accents; interactive fills start at 600 ≥ 6.3:1. */
   --color-qtrust-500: #14b8a6;
-  --color-qtrust-600: #0d9488;
-  --color-qtrust-700: #0f766e;
+  --color-qtrust-600: #0a675f;
+  --color-qtrust-700: #096159;
   --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
 
   /* shadcn/ui design tokens (audit Critical #4). GPU/analytics panels use
