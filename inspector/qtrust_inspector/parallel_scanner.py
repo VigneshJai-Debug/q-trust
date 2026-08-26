@@ -63,28 +63,110 @@ class ParallelScanner:
         self.use_gpu = use_gpu and torch.cuda.is_available()
         self.device = torch.device("cuda" if self.use_gpu else "cpu")
 
-        # Load risk model (if available)
+        # Load risk model (if available) — decoupled from planner package.
+        #
+        # FIX (audit #7 — cross-package dependency): the original code reached
+        # outside the inspector package via ``Path(__file__).parents[2]/planner/
+        # model_gpu_v3.pt``. That path is brittle (breaks under pip install,
+        # Docker, or any layout where inspector and planner are not siblings)
+        # and created an undeclared runtime dependency on ``qtrust-planner``.
+        #
+        # New resolution order (first hit wins):
+        #   1. Explicit env var: QTRUST_PLANNER_MODEL or QTRUST_MODEL_PATH
+        #      (operator-controlled, works in containers).
+        #   2. Packaged model: inspector/qtrust_inspector/models/model*.pt
+        #      (future: `cp planner/model*.pt inspector/...` at build time).
+        #   3. Legacy repo sibling ``../../planner/model*.pt`` — kept as a
+        #      deprecated fallback with a warning, so dev checkouts keep working
+        #      without env vars.
+        #
+        # The GNN import is also lazy/optional: if ``qtrust_planner`` is not
+        # installed (inspector's ``ml`` extra does not depend on planner),
+        # scoring falls back to the heuristic with a logged reason instead of
+        # raising at import time.
         self.risk_model = None
         try:
+            import logging
+            import os
+            import warnings
             from pathlib import Path
 
-            planner_dir = Path(__file__).resolve().parents[2] / "planner"
-            for name in ("model_gpu_v3.pt", "model.pt"):
-                model_path = planner_dir / name
-                if not model_path.exists():
-                    continue
-                from qtrust_planner.model_v3 import MigrationGNNv3
+            _log = logging.getLogger("qtrust_inspector.parallel_scanner")
+            env_path = os.environ.get("QTRUST_PLANNER_MODEL") or os.environ.get("QTRUST_MODEL_PATH")
+            if env_path:
+                # Operator explicitly pinned a model — respect it exclusively.
+                # If it doesn't exist, fail closed to heuristic (don't silently
+                # fall back to the legacy sibling) so misconfiguration is visible.
+                candidate_paths: list[Path] = [Path(env_path)]
+                model_path = candidate_paths[0] if candidate_paths[0].exists() else None
+                if model_path is None:
+                    raise FileNotFoundError(
+                        f"QTRUST_PLANNER_MODEL={env_path} not found — using heuristic risk scoring"
+                    )
+            else:
+                candidate_paths = []
+                # Packaged location (if models are vendored into the inspector)
+                candidate_paths.append(Path(__file__).resolve().parent / "models" / "model_gpu_v3.pt")
+                candidate_paths.append(Path(__file__).resolve().parent / "models" / "model.pt")
+                # Legacy repo-relative fallback (deprecated)
+                legacy_dir = Path(__file__).resolve().parents[2] / "planner"
+                for name in ("model_gpu_v3.pt", "model.pt"):
+                    p = legacy_dir / name
+                    if p not in candidate_paths:
+                        candidate_paths.append(p)
+                model_path = next((p for p in candidate_paths if p.exists()), None)
+                if model_path is None:
+                    raise FileNotFoundError(
+                        f"no planner model found (searched {[str(p) for p in candidate_paths]}); "
+                        "using heuristic risk scoring. Set QTRUST_PLANNER_MODEL to a .pt file to enable GNN scoring"
+                    )
+                # Warn when the legacy cross-package path is the one that matched.
+                if model_path.parent.name == "planner" and model_path.parents[1].name != "qtrust_inspector":
+                    warnings.warn(
+                        f"ParallelScanner loaded model via legacy cross-package path {model_path} — "
+                        "set QTRUST_PLANNER_MODEL or vendor the model under "
+                        "inspector/qtrust_inspector/models/ to decouple packages",
+                        DeprecationWarning,
+                        stacklevel=2,
+                    )
+                    _log.warning(
+                        "using legacy planner sibling path %s — prefer QTRUST_PLANNER_MODEL env var",
+                        model_path,
+                    )
 
-                candidate = MigrationGNNv3(input_features=6).to(self.device)
-                candidate.load_state_dict(
-                    # nosemgrep — torch.load with weights_only=True: safe deserialization
-                    torch.load(str(model_path), map_location=self.device, weights_only=True)
+            try:
+                from qtrust_planner.model_v3 import MigrationGNNv3  # type: ignore
+            except ImportError as exc:
+                raise ImportError(
+                    "qtrust_planner not installed — install planner or use heuristic scoring"
+                ) from exc
+
+            candidate = MigrationGNNv3(input_features=6).to(self.device)
+            # Checkpoint may be a raw state_dict or a dict with {"state_dict": ...}
+            # vs {"model_state_dict": ...} depending on training script.
+            payload = torch.load(str(model_path), map_location=self.device, weights_only=True)
+            if isinstance(payload, dict):
+                for key in ("state_dict", "model_state_dict"):
+                    if key in payload and isinstance(payload[key], dict):
+                        payload = payload[key]
+                        break
+            if not isinstance(payload, dict):
+                raise ValueError(f"unexpected checkpoint format at {model_path}")
+            candidate.load_state_dict(payload)
+            candidate.eval()
+            self.risk_model = candidate
+            _log.info("ParallelScanner loaded GNN risk model from %s", model_path)
+        except Exception as exc:
+            # Risk model is optional — heuristic fallback is always available.
+            try:
+                import logging
+
+                logging.getLogger("qtrust_inspector.parallel_scanner").debug(
+                    "GNN risk model unavailable (%s) — using heuristic scoring", exc
                 )
-                self.risk_model = candidate
-                self.risk_model.eval()
-                break
-        except Exception:
-            self.risk_model = None  # Risk model is optional
+            except Exception:
+                pass
+            self.risk_model = None
 
     async def scan_enterprise(self, hosts: list[str]) -> dict:
         """Scan multiple hosts in parallel.
@@ -226,8 +308,30 @@ class ParallelScanner:
         return risk.detach().float().cpu().view(-1).tolist()
 
     def _asset_to_features(self, algorithm: str, key_size: int, pqc_ready: bool, criticality: str) -> torch.Tensor:
-        """Convert asset metadata to 6-dim feature vector."""
-        from qtrust_planner.model_v3 import encode_algorithm_type
+        """Convert asset metadata to 6-dim feature vector.
+
+        Prefers the canonical ``qtrust_planner.model_v3.encode_algorithm_type``
+        when the planner package is installed; falls back to a vendored copy
+        of the same map so the inspector remains usable without the planner
+        (e.g. pip install qtrust-inspector alone).
+        """
+        try:
+            from qtrust_planner.model_v3 import encode_algorithm_type  # type: ignore
+        except ImportError:
+            # Vendored fallback — must stay in sync with planner/qtrust_planner/model_v3.py
+            _MAP = {
+                "RSA": 0, "ECC": 1, "DSA": 2, "DH": 3, "ECDH": 4, "ECDSA": 5,
+                "EDDSA": 6, "SHA": 7, "AES": 8, "HMAC": 9, "CHACHA20": 10,
+                "ML-KEM": 11, "ML-DSA": 12, "SLH-DSA": 13, "UNKNOWN": 14,
+            }
+            def encode_algorithm_type(algorithm: str) -> int:  # type: ignore[no-redef]
+                a = algorithm.upper()
+                if a in _MAP:
+                    return _MAP[a]
+                for prefix, code in _MAP.items():
+                    if a.startswith(prefix):
+                        return code
+                return _MAP["UNKNOWN"]
 
         alg_type = encode_algorithm_type(algorithm)
         crit_map = {"low": 1, "medium": 2, "high": 3, "critical": 4}

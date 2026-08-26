@@ -233,6 +233,33 @@ def _constant_time_equals(a: str, b: str) -> bool:
 
 app.add_middleware(ApiKeyMiddleware)
 
+# ---------------------------------------------------------------------------
+# Model promotion gate (audit: v2 vs v3)
+#
+#   v2 (planner/model.pt, 64-dim, BatchNorm) is the DEFAULT shipped model.
+#   v3 (planner/model_gpu_v3.pt, 256-dim, 4 layers, BatchNorm) achieved
+#   τ=0.898 on the canonical seed=999 held-out set — BELOW v2's τ=0.961
+#   (results/benchmark.json vs results/benchmark_v3.json). The gap is
+#   attributed to the BatchNorm→LayerNorm issue documented in
+#   qtrust_planner/model_v3.py (BatchNorm leaks cross-graph statistics when
+#   batching multiple CBOM graphs).
+#
+#   Promotion policy (enforced manually; CI gate pending):
+#     * v2 remains default in MODEL_PATH until a LayerNorm/GraphNorm v3
+#       retrain beats v2 on the *canonical* benchmark:
+#       ``python -m qtrust_planner.benchmark_v3 --n-graphs 1000``
+#       (scipy Kendall tau, same seed=999 split as benchmark.py).
+#     * The benchmark threshold is NOT yet enforced in
+#       .github/workflows/ci.yml (planner job only runs pytest). Recommended
+#       gate:
+#         - run benchmark_v3, assert v3 tau > v2 tau (or >0.961) before
+#           allowing QTRUST_MODEL_PATH to default to model_gpu_v3.pt.
+#     * Operators may opt-in to v3 now via ``QTRUST_MODEL_PATH`` env var
+#       (e.g. QTRUST_MODEL_PATH=/app/model_gpu_v3.pt), but the /health
+#       endpoint will report the evaluated ``eval_metrics.kendall`` so the
+#       trade-off is visible.
+#   See docs/WHITEPAPER.md §6.5, CHANGELOG "Benchmark Kendall-tau protocol bug".
+# ---------------------------------------------------------------------------
 MODEL_PATH = os.environ.get("QTRUST_MODEL_PATH", str(Path(__file__).resolve().parents[1] / "model.pt"))
 DEADLINES_PATH = os.environ.get(
     "QTRUST_DEADLINES_PATH", str(Path(__file__).resolve().parents[1] / "data" / "algorithms.json")

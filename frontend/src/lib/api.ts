@@ -46,6 +46,9 @@ export interface MigrationProgressInfo {
   verified_migrations: number;
   unverified_migrations: number;
   fetched_at: number;
+  // Indexer-enhanced fields (optional — present when served from Postgres)
+  asset_count?: number;
+  attestation_count?: number;
 }
 
 export interface MigrationInfo {
@@ -75,10 +78,23 @@ export interface OrgMigrationsResponse {
   latest_audit: LatestAuditInfo;
 }
 
+// Backend may return paginated shape ({ items, total, ... }) for org assets/vendors.
+// These interfaces capture both the legacy flat array shape and the paginated
+// Page shape so the frontend can handle either without breaking (schema drift guard).
+export interface Paginated<T> {
+  items: T[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
 export interface VendorAttestationsResponse {
   vendor: string;
   count: number;
   attestations: VendorAttestationInfo[];
+  // Paginated alternative (new backend shape: vendor + Page)
+  items?: VendorAttestationInfo[];
+  total?: number;
 }
 
 export interface ProductSupportInfo {
@@ -121,23 +137,63 @@ export function fetchAssetVerification(assetId: string): Promise<AssetVerificati
   return apiFetch<AssetVerification>(`/v1/assets/${encodeURIComponent(assetId)}/verify`);
 }
 
-/** Fetch all attestations posted by a vendor. */
-export function fetchVendorAttestations(
+/** Fetch all attestations posted by a vendor. Resilient to paginated vs legacy shape (schema drift). */
+export async function fetchVendorAttestations(
   vendorAddress: string,
 ): Promise<VendorAttestationsResponse> {
-  return apiFetch<VendorAttestationsResponse>(
+  const raw = await apiFetch<Record<string, unknown> & VendorAttestationsResponse & Paginated<VendorAttestationInfo>>(
     `/v1/vendors/${encodeURIComponent(vendorAddress)}/attestations`,
   );
+  // New shape: { vendor, items, total, offset, limit } — normalize to legacy { vendor, count, attestations }
+  if (Array.isArray((raw as unknown as { items?: unknown }).items)) {
+    const items = (raw as unknown as { items: VendorAttestationInfo[] }).items;
+    const total = (raw as unknown as { total?: number }).total ?? items.length;
+    return {
+      vendor: (raw as unknown as { vendor: string }).vendor ?? vendorAddress,
+      count: total,
+      attestations: items,
+      items,
+      total,
+    };
+  }
+  // Legacy shape already has attestations/count — ensure both fields present
+  const attestations = Array.isArray(raw.attestations) ? raw.attestations : [];
+  const count = typeof raw.count === "number" ? raw.count : attestations.length;
+  return { vendor: raw.vendor ?? vendorAddress, count, attestations };
 }
 
-/** Fetch an org's migration progress. */
-export function fetchOrgMigrations(orgAddress: string): Promise<OrgMigrationsResponse> {
-  return apiFetch<OrgMigrationsResponse>(`/v1/orgs/${encodeURIComponent(orgAddress)}/migrations`);
+/** Fetch an org's migration progress. Handles migrations as array vs Page (schema drift). */
+export async function fetchOrgMigrations(orgAddress: string): Promise<OrgMigrationsResponse> {
+  const raw = await apiFetch<Record<string, unknown> & OrgMigrationsResponse & { migrations?: unknown }>(
+    `/v1/orgs/${encodeURIComponent(orgAddress)}/migrations`,
+  );
+  let migrations: MigrationInfo[] = [];
+  const m = (raw as unknown as { migrations?: unknown }).migrations;
+  if (Array.isArray(m)) {
+    migrations = m as MigrationInfo[];
+  } else if (m && typeof m === "object" && Array.isArray((m as { items?: unknown }).items)) {
+    migrations = (m as Paginated<MigrationInfo>).items;
+  }
+  return {
+    org: (raw as unknown as { org: string }).org ?? orgAddress,
+    progress: (raw as unknown as { progress: MigrationProgressInfo }).progress,
+    migrations,
+    latest_audit: (raw as unknown as { latest_audit: LatestAuditInfo }).latest_audit,
+  };
 }
 
-/** Fetch the assets registered by an org (full records). */
-export function fetchOrgAssets(orgAddress: string): Promise<AssetInfo[]> {
-  return apiFetch<AssetInfo[]>(`/v1/orgs/${encodeURIComponent(orgAddress)}/assets`);
+/** Fetch the assets registered by an org (full records). Handles array vs paginated Page. */
+export async function fetchOrgAssets(orgAddress: string): Promise<AssetInfo[]> {
+  const raw = await apiFetch<unknown>(`/v1/orgs/${encodeURIComponent(orgAddress)}/assets`);
+  if (Array.isArray(raw)) return raw as AssetInfo[];
+  if (raw && typeof raw === "object") {
+    const r = raw as Record<string, unknown>;
+    if (Array.isArray(r.items)) return r.items as AssetInfo[];
+    if (Array.isArray(r.assets)) return r.assets as AssetInfo[];
+    // Some indexer responses nest under "assets" key
+    if (Array.isArray((r as unknown as { data?: unknown }).data)) return (r as unknown as { data: AssetInfo[] }).data;
+  }
+  return [];
 }
 
 /** Check whether a product+version supports a PQC algorithm on-chain. */

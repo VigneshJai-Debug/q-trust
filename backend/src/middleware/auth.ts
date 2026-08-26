@@ -64,10 +64,17 @@ export async function requireApiKey(
   }
 
   const providedKey = request.headers['x-api-key'];
-  if (
-    typeof providedKey !== 'string' ||
-    !validKeys.some((k) => safeEquals(k, providedKey))
-  ) {
+  if (typeof providedKey !== 'string') {
+    return reply.code(401).send({ error: 'Invalid or missing API key' });
+  }
+  // Constant-time across all configured keys: always compare against every
+  // key with safeEquals (hash + timingSafeEqual). Using Array.some would
+  // short-circuit on first match and leak the matching index via timing.
+  let authorized = false;
+  for (const k of validKeys) {
+    if (safeEquals(k, providedKey)) authorized = true;
+  }
+  if (!authorized) {
     return reply.code(401).send({ error: 'Invalid or missing API key' });
   }
   return undefined;

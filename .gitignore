@@ -66,7 +66,31 @@ Q-Trust_Stack_Migration_Checklist.xlsx
 qtrust-gpu-features.zip
 
 # ─── Legal: unpublished patent materials (audit D-1) ────────────────────────
-docs/PATENT/
+# D-1 / legal risk: docs/PATENT/ is currently TRACKED (git ls-files) yet this
+# rule would silently ignore future patent edits. That is the worst state —
+# either the material is public (then .gitignore gives false comfort) or it
+# should be private (then git history still publishes it). DO NOT add new
+# patent material until counsel decides filing strategy (see
+# docs/PATENT/filing_checklist.md + CHANGELOG "Known remaining blockers").
+#
+# Suggested fix (requires counsel approval — do NOT run without it):
+#   Option A — keep public and make ignoring explicit: leave this line
+#              commented out so `git status` surfaces every PATENT edit.
+#   Option B — make private: `git rm --cached -r docs/PATENT && git commit`
+#              then uncomment the ignore below and force-push history rewrite
+#              only if counsel approves (destroys public novelty anyway).
+# For now this line is COMMENTED OUT so tracking is visible. Uncomment to
+# re-enable ignoring after the repository is made private or PATENT is removed.
+# docs/PATENT/
+
+# ─── Internal audits — public hygiene (audit) ───────────────────────────────
+# docs/assessments/ holds 6 internal audit dumps that are currently TRACKED
+# and therefore public on GitHub. They are excluded from the published docs
+# site via mkdocs `*Audit*` but the raw markdown is still world-readable.
+# Hygiene fix (requires maintainer decision): move to a private repo / Drive
+# or `git rm --cached -r docs/assessments` and add `docs/assessments/` below.
+# For now the line stays commented so `git status` keeps them visible.
+# docs/assessments/
 
 # ─── Local-only artifacts ─────────────────────────────────────────────────────
 *.zip

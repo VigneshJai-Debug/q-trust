@@ -2,7 +2,15 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# tini + curl for signal handling and health probing (mirrors backend/Dockerfile)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tini curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
+# Audit M-8 parity: no dev extras baked into the runtime image — requirements.txt
+# is already prod-only (torch + geometric + scipy + fastapi + uvicorn + pydantic).
+# Use --no-cache-dir to keep the layer small and deterministic.
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY qtrust_planner/ qtrust_planner/
@@ -27,4 +35,5 @@ USER planner
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)"] || exit 1
 
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]

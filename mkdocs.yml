@@ -47,10 +47,11 @@ nav:
   - Runbooks:
       - Backup & Restore: runbook/backup-restore.md
       - Incident Response: runbook/incident-response.md
-  - Patent:
-      - Invention Disclosure: PATENT/invention_disclosure.md
-      - Draft Claims: PATENT/draft_claims.md
-      - Prior Art Survey: PATENT/prior_art_survey.md
+  # Patent docs — intentionally NOT in public nav. They remain in-repo
+  # (git history is already public) but are excluded from the published
+  # GitHub Pages site until counsel clears filing (audit D-1 / legal risk).
+  # To preview locally: `mkdocs serve` after temporarily removing PATENT/
+  # from `exclude_docs` below.
 exclude_docs: |
   PHASE_*.md
   PROMPT.md
@@ -58,3 +59,4 @@ exclude_docs: |
   demo_run_of_show.md
   *Audit*
   QTrust_Implementation_Guide.md
+  PATENT/

@@ -154,7 +154,7 @@ analysis panels.
 > sequence-correlation bug previously understated every GNN τ by ~0.5;
 > fixed in v2.1 with regression tests — see CHANGELOG). Canonical numbers:
 > heuristic upper bound τ 1.00, ListMLE-trained v2-family models
-> τ 0.94 ± 0.01 (`results/benchmark.json`).
+> τ 0.94 ± 0.01 (`planner/results/benchmark.json`).
 
 Run the v2-vs-v3 comparison yourself: `python -m qtrust_planner.benchmark_v3`.
 See [docs/GPU_FEATURES.md](docs/GPU_FEATURES.md),

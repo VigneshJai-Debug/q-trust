@@ -101,6 +101,13 @@ async function withFailover<T>(run: (url: string) => Promise<T>): Promise<T> {
   throw lastError ?? new Error(`No RPC endpoints available (${endpoints.map((e) => e.url).join(", ")})`);
 }
 
+const SYNC_PASSTHROUGH_METHODS = new Set([
+  "watchEvent",
+  "watchBlocks",
+  "watchBlockNumber",
+  "watchContractEvent",
+]);
+
 function pooledClient<C extends object>(clientForUrl: (url: string) => C): C {
   return new Proxy({} as C, {
     get(_target, prop: string | symbol) {
@@ -108,6 +115,14 @@ function pooledClient<C extends object>(clientForUrl: (url: string) => C): C {
       const value = Reflect.get(current as object, prop, current) as unknown;
       if (typeof value !== "function") {
         return value;
+      }
+      // Audit H-6: viem's watch* methods return an unwatch function
+      // synchronously. Wrapping them in withFailover (which returns a
+      // Promise) makes callers collect Promise objects instead of functions
+      // unless they remember to `await`. Bypass failover for these sync
+      // subscription methods so the unwatch handle is returned directly.
+      if (typeof prop === "string" && SYNC_PASSTHROUGH_METHODS.has(prop)) {
+        return (...args: unknown[]) => (value as (...a: unknown[]) => unknown)(...args);
       }
       return (...args: unknown[]) =>
         withFailover(async (url: string) => {

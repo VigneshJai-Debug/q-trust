@@ -164,7 +164,11 @@ contract QTrustGovernance is AccessControl {
     // holds, so without this guard any single proposer could schedule
     // upgradeToAndCall(proxy, maliciousImpl, "") and swap a registry
     // implementation after the 7-day delay.
-    bytes4 private constant _UPGRADE_TO_SELECTOR = 0x3659cfe6; // UUPSUpgradeable.upgradeTo(address)
+    bytes4 private constant _UPGRADE_TO_SELECTOR = 0x3659cfe6; // UUPSUpgradeable.upgradeTo(address) — keccak256("upgradeTo(address)")[:4]; verified via `cast sig` and `eth_utils.keccak`
+    // Audit report cites 0x3659c756 for upgradeTo — no function on openchain or in OZ 5.5 yields that selector
+    // (openchain lookup returns null; `cast sig "upgradeTo(address)"` is 0x3659cfe6 mathematically). Kept for
+    // strict audit compliance / defense-in-depth; blocking both selectors is safest and preserves existing tests.
+    bytes4 private constant _UPGRADE_TO_SELECTOR_AUDIT = 0x3659c756; // audit-claimed upgradeTo selector (no on-chain match)
     bytes4 private constant _UPGRADE_TO_AND_CALL_SELECTOR = 0x4f1ef286; // UUPSUpgradeable.upgradeToAndCall(address,bytes)
 
     function _isRoleMutationCall(bytes memory data) internal pure returns (bool) {
@@ -174,6 +178,7 @@ contract QTrustGovernance is AccessControl {
             selector == IAccessControl.revokeRole.selector ||
             selector == IAccessControl.renounceRole.selector ||
             selector == _UPGRADE_TO_SELECTOR ||
+            selector == _UPGRADE_TO_SELECTOR_AUDIT ||
             selector == _UPGRADE_TO_AND_CALL_SELECTOR;
     }
 

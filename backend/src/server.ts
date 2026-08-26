@@ -59,35 +59,20 @@ import {
   registerCBOM,
   attestProduct,
   recordMigration,
-  relaySignedAttestation,
-  relaySignedCBOMRegistration,
-  relaySignedMigration,
-  relaySignedAudit,
   relayerAddress,
-  getVendorNonce,
-  getOrgNonce,
-  getAuditNonce,
-  type SignedAttestationPayload,
-  type SignedCBOMRegistrationPayload,
-  type SignedMigrationPayload,
 } from "./services/attestation.js";
 import { startIndexer, stopIndexer, pool as pgPool } from "./services/indexer.js";
 import { evaluate } from "./services/evaluate.js";
 import { registerScannerRoutes } from "./routes/scanner.js";
+import { registerRelayRoutes } from "./routes/relay.js";
 import { registerGPURoutes } from "./services/gpu-service.js";
 // Audit M-10: single shared API-key gate — the previous local copy in this
 // file had divergent env-read semantics and error codes.
 import { gracefulShutdown, requireApiKey } from "./middleware/auth.js";
 import { initSentry, registerSentryHooks } from "./plugins/sentry.js";
 import { registerMetrics } from "./plugins/metrics.js";
-import {
-  CredentialVerifySchema,
-  RelayAuditBodySchema,
-  RelayAttestationBodySchema,
-  RelayCBOMBodySchema,
-  RelayMigrationBodySchema,
-} from "./schemas/index.js";
-import { CORS_ORIGINS, PLANNER_URL, PLANNER_API_KEY, CHAIN, CHAIN_ID, publicClient, CONTRACTS } from "./config.js";
+import { CredentialVerifySchema } from "./schemas/index.js";
+import { CORS_ORIGINS, PLANNER_URL, PLANNER_API_KEY, CHAIN_ID, publicClient, CONTRACTS } from "./config.js";
 import {
   RevocationAnchorAbi,
   PolicyCommitmentAbi,
@@ -445,152 +430,17 @@ server.post("/v1/write/migrations", {
   }
 });
 
-  // ------------------------------------------------------------------
-  // EIP-712 gasless relay — rate limited to prevent gas abuse
-  // ------------------------------------------------------------------
-  server.post("/v1/relay/attestation", {
-    // Audit H-3: requireApiKey on every relay POST — without it anyone can
-    // mint valid EIP-712 signatures for addresses they control and drain the
-    // relayer wallet (per-IP limits are trivially bypassed with a botnet).
-    preHandler: requireApiKey,
-    config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
-    schema: {
-      body: RelayAttestationBodySchema,
-      tags: ["relay"],
-      summary: "Relay an EIP-712-signed vendor attestation",
-      description:
-        "Verifies the vendor's signature against VendorRegistry's domain, checks the on-chain nonce, and submits attestProductSigned via the relayer.",
-    },
-  }, async (request, reply) => {
-  const body = request.body as SignedAttestationPayload;
-  try {
-    const result = await relaySignedAttestation(body);
-    return { ...result, relayer: relayerAddress(), chain_id: CHAIN.id };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    // Only echo our own validation errors; raw transport/RPC errors stay in
-    // the logs so internal details never leak to clients (audit H-6).
-    if (/Nonce mismatch|signature verification|must be/.test(msg)) {
-      return reply.status(400).send({ error: msg });
-    }
-    request.log.error(err, "Relay attestation failed");
-    return reply.status(422).send({ error: "Relay submission failed" });
-  }
-});
-
-server.get("/v1/relay/nonce/:did", async (request, reply) => {
-  try {
-    const nonce = await getVendorNonce((request.params as { did: string }).did as `0x${string}`);
-    return { did: (request.params as { did: string }).did, nonce: nonce.toString() };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return reply.status(400).send({ error: msg });
-  }
-});
-
-  // EIP-712 gasless CBOM registration
-  server.post("/v1/relay/cbom", {
-    preHandler: requireApiKey, // Audit H-3
-    config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
-    schema: {
-      body: RelayCBOMBodySchema,
-      tags: ["relay"],
-      summary: "Relay an EIP-712-signed CBOM registration",
-      description:
-        "Verifies the org's signature against AssetRegistry's domain, checks the on-chain nonce, and submits registerCBOMSigned via the relayer.",
-    },
-  }, async (request, reply) => {
-  const body = request.body as SignedCBOMRegistrationPayload;
-  try {
-    const result = await relaySignedCBOMRegistration(body);
-    return { ...result, relayer: relayerAddress(), chain_id: CHAIN.id };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (/Nonce mismatch|signature verification|must be/.test(msg)) {
-      return reply.status(400).send({ error: msg });
-    }
-    request.log.error(err, "Relay CBOM failed");
-    return reply.status(422).send({ error: "Relay submission failed" });
-  }
-});
-
-  // EIP-712 gasless migration recording
-  server.post("/v1/relay/migration", {
-    preHandler: requireApiKey, // Audit H-3
-    config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
-    schema: {
-      body: RelayMigrationBodySchema,
-      tags: ["relay"],
-      summary: "Relay an EIP-712-signed migration recording",
-      description:
-        "Verifies the org's signature against MigrationRegistry's domain, checks asset ownership on-chain, and submits recordMigrationSigned via the relayer.",
-    },
-  }, async (request, reply) => {
-  const body = request.body as SignedMigrationPayload;
-  try {
-    const result = await relaySignedMigration(body);
-    return { ...result, relayer: relayerAddress(), chain_id: CHAIN.id };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (/Nonce mismatch|signature verification|must be/.test(msg)) {
-      return reply.status(400).send({ error: msg });
-    }
-    request.log.error(err, "Relay migration failed");
-    return reply.status(422).send({ error: "Relay submission failed" });
-  }
-});
-
-// Fetch org nonce for CBOM registration
-server.get("/v1/relay/cbom-nonce/:did", async (request, reply) => {
-  try {
-    const nonce = await getOrgNonce((request.params as { did: string }).did as `0x${string}`);
-    return { did: (request.params as { did: string }).did, nonce: nonce.toString() };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return reply.status(400).send({ error: msg });
-  }
-});
-
-  // EIP-712 gasless audit posting
-  server.post("/v1/relay/audit", {
-    preHandler: requireApiKey, // Audit H-3
-    config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
-    schema: {
-      body: RelayAuditBodySchema,
-      tags: ["relay"],
-      summary: "Relay an EIP-712-signed audit attestation",
-      description:
-        "Verifies the auditor's signature against AuditRegistry's domain, checks the on-chain nonce, and submits postAuditSigned via the relayer. The signer must hold AUDITOR_ROLE; the recorded auditor is the signer.",
-    },
-  }, async (request, reply) => {
-  const body = request.body;
-  try {
-    const result = await relaySignedAudit(body);
-    return { ...result, relayer: relayerAddress(), chain_id: CHAIN.id };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    const code = msg.includes("signature") || msg.includes("Nonce") || msg.includes("must be") ? 400 : 422;
-    return reply.status(code).send({ error: msg });
-  }
-});
-
-// Fetch auditor nonce for audit posting
-server.get("/v1/relay/audit-nonce/:did", async (request, reply) => {
-  try {
-    const nonce = await getAuditNonce((request.params as { did: string }).did as `0x${string}`);
-    return { did: (request.params as { did: string }).did, nonce: nonce.toString() };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return reply.status(400).send({ error: msg });
-  }
-});
+// ------------------------------------------------------------------
+// EIP-712 gasless relay — extracted to routes/relay.ts (audit: split monolith)
+// ------------------------------------------------------------------
+await registerRelayRoutes(server);
 
 // ------------------------------------------------------------------
 // v1 Trust Evaluation
 // ------------------------------------------------------------------
-  server.post("/v1/evaluate", {
-    config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
-  }, async (request, reply) => {
+server.post("/v1/evaluate", {
+  config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+}, async (request, reply) => {
   const { subject_did, policy_id, policy_version, evidence } = request.body as {
     subject_did: string;
     policy_id: string;

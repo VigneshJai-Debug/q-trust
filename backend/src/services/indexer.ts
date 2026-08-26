@@ -352,10 +352,13 @@ async function watchLive(spec: EventSpec): Promise<void> {
           // Audit M-8: after a reorg purge the cursor is rewound but
           // watchEvent is forward-only — without a catch-up backfill here,
           // re-executed canonical events were silently lost until the next
-          // process restart.
+          // process restart. The purge wipes ALL spec tables/cursors, so
+          // re-scan every stream rather than just the triggering spec.
           if (forkBlock !== null) {
-            console.log(`Indexer: re-scanning ${spec.key} from fork block ${forkBlock}`);
-            await backfill(spec);
+            console.log(`Indexer: re-scanning from fork block ${forkBlock} across all streams`);
+            for (const s of EVENTS as unknown as EventSpec[]) {
+              await backfill(s);
+            }
           }
         } catch (err) {
           console.warn("Indexer: reorg check failed for", spec.key, ":", err);

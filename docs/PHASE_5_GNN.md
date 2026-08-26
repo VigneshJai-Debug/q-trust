@@ -17,8 +17,8 @@
 
 ## Verification
 - Benchmark (3 seeds × 40 epochs, 1000 graphs, 150 held-out eval) — honest,
-  reproducible via `python -m qtrust_planner.benchmark --seeds 42 43 44`:
-  **Current results (2026-08-21, fixed benchmark bug, 3 seeds):**
+  reproducible via `python -m qtrust_planner.benchmark --seeds 42 43 44`.
+  **Historical 2026-08-21 results (pre Kendall-protocol fix — see addendum):**
 
   | method | exact_rank | top5 | top10 | kendall | node_rank |
   |---|---|---|---|---|---|
@@ -27,17 +27,26 @@
   | **gnn-listmle** | **0.000** | **0.500±0.061** | **0.371±0.067** | **0.266±0.023** | **0.329±0.029** |
   | heuristic (label oracle) | 0.993 | 1.000 | 1.000 | 0.997 | 0.998 |
 
-  ListMLE significantly outperforms MSE (τ 0.266 vs 0.144) and random (~0), approaching heuristic.
+  Production `planner/model.pt` **(ListMLE, 80 epochs, 1200 graphs, seed 42)**
+  then reported top-5 0.656, top-10 0.528, Kendall τ 0.388 on its validation split
+  (180 graphs) under the old sequence-correlation protocol.
 
-- Production `planner/model.pt` **(ListMLE, 80 epochs, 1200 graphs, seed 42): top-5 0.656, top-10 0.528, Kendall τ 0.388, node-rank 0.437** on its validation split (180 graphs). Previous 50-epoch model: τ 0.279, top5 0.533.
+- Canonical (post-fix, per-node-rank) numbers — see README "Trained checkpoints &
+  measured results", WHITEPAPER §6.5, `planner/results/benchmark.json` and
+  `planner/results/benchmark_v3.json` (refresh 2026-08-26): **GNN v2 τ 0.961**
+  canonical held-out (3-seed mean 0.937±0.011, MSE 0.872±0.014), **GNN v3
+  τ 0.898 / DDP 0.831**. The v2.1 protocol bug understated every τ by ~0.5–0.7;
+  see CHANGELOG "Benchmark Kendall-tau protocol bug".
 - `predict_detailed()` used live in the Phase 8 pilot (step 4); reports honest `model_metrics` from the checkpoint.
 
 ## Honest notes
 - Evaluation is on **synthetic** graphs only (20–100 nodes, layered enterprise 70% + random 30% DAGs); real-world CBOM evaluation is future work and NOT claimed.
-- The label-generating heuristic is included as the `heuristic` baseline (upper bound for this synthetic task, τ 0.997); `random` is the chance level.
-- Earlier claims of "exact-rank 24%, Kendall τ 0.924" were not reproducible from the code (the metric previously reported was per-node rank agreement, mislabeled as exact-rank) and have been removed. MSE-trained ordering was found near-random (τ ≈ 0.14) due to mean-seeking regression; the ListMLE ranking loss is the current fix (τ 0.266 ±0.023, +85% over MSE).
-- Production model (80 epochs) trained with ListMLE reaches τ 0.388, demonstrating that longer training + more data improves ordering without changing the synthetic task.
-- Benchmark bug fixed (2026-08-21): `ckpt`/`model` ordering in `benchmark.py` corrected; 3-seed honest benchmark now completes.
+- The label-generating heuristic is included as the `heuristic` baseline (upper bound for this synthetic task, τ 0.997–1.00); `random` is the chance level.
+- Earlier claims of "exact-rank 24%, Kendall τ 0.924" were not reproducible from the code (the metric previously reported was per-node rank agreement, mislabeled as exact-rank) and have been removed.
+- Benchmark bugs fixed: (1) 2026-08-21 `ckpt`/`model` ordering in `benchmark.py`; (2) 2026-08-26 `score_order` sequence-correlation → per-node-rank Kendall (the larger correction, see CHANGELOG).
+- **Addendum 2026-08-26:** table above is retained for provenance. Current
+  canonical τ values (0.961 v2, 0.898 v3) supersede the 0.266/0.388 figures under the
+  corrected protocol.
 
 ## Fixes applied
 - `train.py` rewritten: ListMLE ranking loss (vectorized), risk-head MSE retained,
