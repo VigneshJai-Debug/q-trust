@@ -178,7 +178,11 @@ function VendorsInner() {
               />
             </label>
             <div className="ml-auto text-sm">
-              {support.data?.supported ? (
+              {support.isLoading ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-500">
+                  Checking…
+                </span>
+              ) : support.data?.supported ? (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 font-medium text-emerald-700">
                   <ShieldCheckIcon className="h-4 w-4" /> Supported
                 </span>

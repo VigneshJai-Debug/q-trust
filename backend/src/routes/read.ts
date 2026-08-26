@@ -43,8 +43,8 @@ export async function registerReadRoutes(app: FastifyInstance): Promise<void> {
     try {
       return await verifyAsset((request.params as { id: string }).id);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return reply.status(400).send({ error: msg });
+      request.log.warn({ err }, "asset verify failed");
+      return reply.status(400).send({ error: "Verification failed — check asset ID format" });
     }
   });
 
@@ -54,8 +54,8 @@ export async function registerReadRoutes(app: FastifyInstance): Promise<void> {
     try {
       return await getOrgSummary(did as `0x${string}`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return reply.status(400).send({ error: msg });
+      request.log.warn({ err }, "org summary failed");
+      return reply.status(400).send({ error: "Failed to load organization summary" });
     }
   });
 
@@ -95,8 +95,8 @@ export async function registerReadRoutes(app: FastifyInstance): Promise<void> {
       if (!migration) return reply.status(404).send({ error: "Migration not found" });
       return migration;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return reply.status(400).send({ error: msg });
+      request.log.warn({ err }, "migration fetch failed");
+      return reply.status(400).send({ error: "Failed to load migration" });
     }
   });
 

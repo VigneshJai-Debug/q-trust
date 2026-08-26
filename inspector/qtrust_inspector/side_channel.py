@@ -28,16 +28,23 @@ from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from typing import Optional
 
-import numpy as np
-import torch
-import torch.nn as nn
+try:
+    import numpy as np
+except ImportError:
+    np = None  # type: ignore
+try:
+    import torch
+    import torch.nn as nn
+except ImportError:
+    torch = None  # type: ignore
+    nn = None  # type: ignore
 
 
 # ---------------------------------------------------------------------------
 # Model
 # ---------------------------------------------------------------------------
 
-class SideChannelDetector(nn.Module):
+class SideChannelDetector(nn.Module if nn is not None else object):
     """Timing-distribution side-channel leakage classifier.
 
     Input: (batch, 3, L) where channel 0 is the SORTED z-normalized trace

@@ -334,6 +334,7 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
 
   app.post("/v1/scan/source", {
     preHandler: requireApiKey,
+    config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
     schema: { body: ScanRequestSchema, response: scanResponseSchemas },
   }, async (request, reply) => {
     const { directory } = request.body as { directory: string };
@@ -365,6 +366,7 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
 
   app.post("/v1/scan/manifests", {
     preHandler: requireApiKey,
+    config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
     schema: { body: ScanRequestSchema, response: scanResponseSchemas },
   }, async (request, reply) => {
     const { directory } = request.body as { directory: string };
@@ -396,6 +398,7 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
 
   app.post("/v1/scan/full", {
     preHandler: requireApiKey,
+    config: { rateLimit: { max: 5, timeWindow: "1 minute" } },
     schema: { body: ScanFullRequestSchema, response: scanResponseSchemas },
   }, async (request, reply) => {
     const { target, includeSource = true, includeManifests = true } = request.body as {

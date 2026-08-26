@@ -24,9 +24,16 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-import numpy as np
-import torch
-import torch.nn as nn
+try:
+    import numpy as np
+except ImportError:
+    np = None  # type: ignore
+try:
+    import torch
+    import torch.nn as nn
+except ImportError:
+    torch = None  # type: ignore
+    nn = None  # type: ignore
 
 
 @dataclass
@@ -42,7 +49,7 @@ class AnomalyResult:
     timestamp: str
 
 
-class CBOMVariationalAutoencoder(nn.Module):
+class CBOMVariationalAutoencoder(nn.Module if nn is not None else object):  # type: ignore
     """Variational autoencoder for CBOM anomaly detection.
 
     Architecture:
@@ -53,6 +60,8 @@ class CBOMVariationalAutoencoder(nn.Module):
     """
 
     def __init__(self, n_features: int = 10, latent_dim: int = 16):
+        if torch is None or nn is None:
+            raise ImportError("torch is required for CBOMVariationalAutoencoder — install with: pip install qtrust-inspector[ml]")
         super().__init__()
         self.n_features = n_features
         self.latent_dim = latent_dim
@@ -130,6 +139,8 @@ class CBOMAnomalyDetector:
         threshold: float = 0.8,
         device: str | None = None,
     ):
+        if torch is None:
+            raise ImportError("torch is required for CBOMAnomalyDetector — install with: pip install qtrust-inspector[ml]")
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
         self.model = CBOMVariationalAutoencoder(
             n_features=self.N_FEATURES, latent_dim=16

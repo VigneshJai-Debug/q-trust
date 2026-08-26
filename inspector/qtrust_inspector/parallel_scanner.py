@@ -21,8 +21,14 @@ import time
 from dataclasses import dataclass, asdict
 from typing import Optional
 
-import numpy as np
-import torch
+try:
+    import numpy as np
+except ImportError:
+    np = None  # type: ignore
+try:
+    import torch
+except ImportError:
+    torch = None  # type: ignore
 
 from .scanner import CryptoScanner
 from .scanner import validate_scan_target
