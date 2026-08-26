@@ -70,9 +70,16 @@ updates:
       - humoge7502
     open-pull-requests-limit: 10
 
-  # ── Dockerfiles / compose base images ─────────────────────────
+  # ── Dockerfile base images ────────────────────────────────────
   - package-ecosystem: docker
-    directory: /
+    directory: /backend
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /planner
     cooldown:
       default-days: 7
     schedule:
