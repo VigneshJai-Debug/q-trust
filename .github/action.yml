@@ -38,15 +38,23 @@ runs:
 
     - name: Run PQC Scan
       shell: bash
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_FORMAT: ${{ inputs.format }}
+        INPUT_COMPLIANCE: ${{ inputs.compliance }}
+        INPUT_THRESHOLD: ${{ inputs.threshold }}
+        INPUT_CI_MODE: ${{ inputs.ci-mode }}
       run: |
-        crypto-inspector scan-source ${{ inputs.path }} \
-          --format ${{ inputs.format }} \
-          --output scan-results.${{ inputs.format }} \
+        # Inputs pass through env (never direct ${{ }} interpolation in run:)
+        # to avoid GitHub Actions shell injection.
+        crypto-inspector scan-source "$INPUT_PATH" \
+          --format "$INPUT_FORMAT" \
+          --output "scan-results.$INPUT_FORMAT" \
           --cyclonedx cbom.json \
           --risk \
-          --compliance ${{ inputs.compliance }} \
-          --ci-gate ${{ inputs.threshold }} \
-          || { if [ "${{ inputs.ci-mode }}" = "blocking" ]; then exit 1; fi; }
+          --compliance "$INPUT_COMPLIANCE" \
+          --ci-gate "$INPUT_THRESHOLD" \
+          || { if [ "$INPUT_CI_MODE" = "blocking" ]; then exit 1; fi; }
 
     - name: Upload SARIF
       if: inputs.upload-sarif == 'true'
