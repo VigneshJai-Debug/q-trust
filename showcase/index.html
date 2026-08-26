@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Q-Trust — Post-Quantum Cryptography Migration &amp; Attestation Protocol</title>
+<meta name="description" content="Scan your cryptographic estate, score it against NIST & CNSA 2.0, plan migration with a GNN, and seal tamper-proof attestations on Base L2."/>
+<meta property="og:title" content="Q-Trust — Trust, proven post-quantum"/>
+<meta property="og:description" content="PQC migration & attestation protocol. CBOM scanning · GNN planning · Base L2 anchoring."/>
+<meta property="og:image" content="assets/banner.png"/>
+<style>
+  :root{
+    --bg:#0a0e1a; --bg2:#0d1424; --card:#101a30; --line:#1e2a44;
+    --cyan:#00d9ff; --violet:#a855f7; --text:#e6edf3; --dim:#8b949e; --pale:#7dd3fc;
+    --grad:linear-gradient(90deg,#00d9ff,#7c8bff,#a855f7);
+    --mono:'JetBrains Mono','Fira Code',ui-monospace,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6;overflow-x:hidden}
+  ::selection{background:rgba(0,217,255,.25)}
+  a{color:var(--cyan);text-decoration:none}
+  img{max-width:100%;display:block}
+
+  /* ── nav ── */
+  nav{position:sticky;top:0;z-index:50;display:flex;align-items:center;justify-content:space-between;
+      padding:14px 6vw;background:rgba(10,14,26,.82);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.12em;font-size:15px;color:var(--text)}
+  .brand img{width:30px;height:30px;border-radius:8px}
+  .nav-links{display:flex;gap:26px;font-size:14px;color:var(--dim)}
+  .nav-links a{color:var(--dim);transition:color .2s}
+  .nav-links a:hover{color:var(--cyan)}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 22px;border-radius:10px;font-weight:700;font-size:14px;
+       border:1px solid transparent;transition:transform .2s,box-shadow .2s}
+  .btn:hover{transform:translateY(-2px)}
+  .btn-primary{background:var(--grad);color:#04060e;box-shadow:0 0 26px rgba(0,217,255,.35)}
+  .btn-ghost{border-color:var(--line);color:var(--text)}
+  .btn-ghost:hover{border-color:var(--cyan)}
+  .nav-cta{display:flex;gap:12px;align-items:center}
+
+  /* ── hero ── */
+  .hero{position:relative;min-height:92vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:80px 6vw}
+  .hero-bg{position:absolute;inset:0;background:url('assets/quantum-hero.png') center/cover no-repeat;opacity:.5}
+  .hero-bg::after{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at center,rgba(10,14,26,.35) 0%,rgba(10,14,26,.9) 72%,var(--bg) 100%)}
+  .hero-inner{position:relative;z-index:2;max-width:960px}
+  .hero-badge{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12.5px;color:var(--pale);
+      border:1px solid rgba(0,217,255,.35);border-radius:999px;padding:7px 16px;background:rgba(0,217,255,.06);letter-spacing:.08em}
+  .hero-badge .dot{width:8px;height:8px;border-radius:50%;background:var(--cyan);box-shadow:0 0 12px var(--cyan);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  h1{font-size:clamp(44px,7vw,84px);font-weight:900;letter-spacing:-.02em;margin:26px 0 10px;line-height:1.05}
+  .grad-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;background-size:200% auto;animation:shift 6s linear infinite}
+  @keyframes shift{to{background-position:200% center}}
+  .hero-sub{font-size:clamp(16px,2vw,20px);color:var(--dim);max-width:720px;margin:18px auto 8px}
+  .hero-sub b{color:var(--pale);font-weight:600}
+  .pipeline-inline{font-family:var(--mono);color:var(--pale);font-size:14px;margin:10px 0 34px;letter-spacing:.05em}
+  .hero-cta{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+
+  /* ── stats strip ── */
+  .stats{position:relative;z-index:3;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;
+         background:var(--line);border:1px solid var(--line);border-radius:16px;overflow:hidden;max-width:1080px;margin:-70px auto 0;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .stat{background:var(--bg2);padding:26px 12px;text-align:center}
+  .stat .num{font-size:clamp(24px,3vw,34px);font-weight:900;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .stat .lbl{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-top:4px}
+
+  /* ── sections ── */
+  section{padding:90px 6vw;max-width:1200px;margin:0 auto}
+  .kicker{font-family:var(--mono);font-size:13px;color:var(--cyan);letter-spacing:.18em;text-transform:uppercase}
+  h2{font-size:clamp(28px,4vw,42px);font-weight:800;margin:10px 0 14px;letter-spacing:-.01em}
+  .lead{color:var(--dim);max-width:760px;font-size:17px}
+  .reveal{opacity:0;transform:translateY(28px);transition:opacity .7s ease,transform .7s ease}
+  .reveal.in{opacity:1;transform:none}
+
+  /* threat cards */
+  .grid-3{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:22px;margin-top:38px}
+  .tcard{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px;position:relative;overflow:hidden;transition:transform .25s,border-color .25s}
+  .tcard:hover{transform:translateY(-4px);border-color:rgba(0,217,255,.5)}
+  .tcard::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--grad)}
+  .tcard .year{font-family:var(--mono);font-size:30px;font-weight:800;color:var(--cyan)}
+  .tcard.v .year{color:var(--violet)}
+  .tcard h3{font-size:17px;margin:8px 0 8px}
+  .tcard p{font-size:14.5px;color:var(--dim)}
+  .tcard .src{display:inline-block;margin-top:12px;font-family:var(--mono);font-size:11.5px;color:var(--pale);border:1px solid var(--line);padding:3px 10px;border-radius:6px}
+
+  /* pipeline steps */
+  .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:22px;margin-top:38px;counter-reset:step}
+  .step{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:26px;position:relative}
+  .step .n{font-family:var(--mono);font-size:13px;color:#04060e;background:var(--grad);width:34px;height:34px;border-radius:10px;
+           display:flex;align-items:center;justify-content:center;font-weight:800;margin-bottom:14px}
+  .step h3{font-size:18px;margin-bottom:6px}
+  .step .sub{font-family:var(--mono);font-size:12px;color:var(--cyan);margin-bottom:10px;letter-spacing:.06em}
+  .step p{font-size:14px;color:var(--dim)}
+  .arrow-flow{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:30px;font-family:var(--mono);color:var(--pale);font-size:14px;flex-wrap:wrap}
+  .arrow-flow .sep{color:var(--cyan)}
+
+  /* feature image cards */
+  .fcards{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;margin-top:38px}
+  .fcard{border:1px solid var(--line);border-radius:18px;overflow:hidden;background:var(--card);transition:transform .25s,border-color .25s,box-shadow .25s}
+  .fcard:hover{transform:translateY(-6px);border-color:rgba(168,85,247,.55);box-shadow:0 24px 60px rgba(0,0,0,.5)}
+  .fcard img{width:100%;aspect-ratio:1.35;object-fit:cover}
+  .fcard .body{padding:24px}
+  .fcard h3{font-size:19px}
+  .fcard .tag{font-family:var(--mono);font-size:11.5px;color:var(--cyan);letter-spacing:.12em;text-transform:uppercase}
+  .fcard p{font-size:14.5px;color:var(--dim);margin-top:10px}
+
+  /* terminal */
+  .term-wrap{border-radius:16px;overflow:hidden;border:1px solid var(--line);box-shadow:0 30px 80px rgba(0,0,0,.55);margin-top:34px}
+  .term-wrap img{width:100%}
+
+  /* results table */
+  table{width:100%;border-collapse:collapse;margin-top:30px;font-size:14.5px}
+  th{font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--pale);text-align:left;
+     padding:14px 16px;border-bottom:1px solid var(--line);background:var(--bg2)}
+  td{padding:14px 16px;border-bottom:1px solid var(--line);color:var(--dim)}
+  td:first-child{color:var(--text);font-weight:600}
+  td b{color:var(--cyan)}
+  tr:hover td{background:rgba(0,217,255,.03)}
+  .tbl-card{border:1px solid var(--line);border-radius:16px;overflow:hidden;margin-top:30px}
+  .tbl-scroll{overflow-x:auto}
+
+  /* code blocks */
+  .code-card{background:#0d1117;border:1px solid var(--line);border-radius:14px;margin-top:26px;overflow:hidden}
+  .code-head{display:flex;align-items:center;gap:8px;padding:11px 16px;background:#161b22;border-bottom:1px solid var(--line)}
+  .code-head i{width:11px;height:11px;border-radius:50%;display:inline-block}
+  .code-head .t{font-family:var(--mono);font-size:12px;color:var(--dim);margin-left:8px}
+  pre{font-family:var(--mono);font-size:13.5px;line-height:1.75;padding:20px 22px;overflow-x:auto;color:#c9d1d9}
+  .c-cmd{color:#c9d1d9}.c-p{color:#a855f7;font-weight:700}.c-cm{color:#59636e}.c-ok{color:#3fb950}.c-acc{color:#7dd3fc}
+
+  /* roadmap */
+  .rm{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:22px;margin-top:36px}
+  .rm-col{border:1px solid var(--line);border-radius:16px;padding:24px;background:var(--card)}
+  .rm-col h3{font-size:15px;letter-spacing:.1em;text-transform:uppercase;font-family:var(--mono);margin-bottom:16px}
+  .rm-col.done h3{color:#3fb950}.rm-col.now h3{color:#00d9ff}.rm-col.next h3{color:#a855f7}
+  .rm-item{display:flex;gap:10px;padding:9px 0;border-bottom:1px dashed var(--line);font-size:14.5px;color:var(--dim)}
+  .rm-item:last-child{border-bottom:none}
+  .rm-item .ic{font-family:var(--mono)}
+
+  /* footer */
+  footer{border-top:1px solid var(--line);padding:44px 6vw;text-align:center;color:var(--dim);font-size:14px}
+  footer .heart{color:var(--violet)}
+  footer .f-brand{font-weight:800;letter-spacing:.12em;color:var(--text);margin-bottom:8px}
+  footer a{color:var(--pale)}
+  @media(max-width:720px){.nav-links{display:none}}
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="brand" href="#top"><img src="assets/logo.png" alt="Q-Trust logo"/> Q-TRUST</a>
+  <div class="nav-links">
+    <a href="#threat">Threat</a><a href="#pipeline">Pipeline</a><a href="#capabilities">Capabilities</a>
+    <a href="#architecture">Architecture</a><a href="#demo">Demo</a><a href="#quickstart">Quick Start</a><a href="#roadmap">Roadmap</a>
+  </div>
+  <div class="nav-cta">
+    <a class="btn btn-primary" href="https://github.com/humoge7502/q-trust" target="_blank" rel="noopener">★ Star on GitHub</a>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="hero-bg"></div>
+  <div class="hero-inner">
+    <span class="hero-badge"><span class="dot"></span>NIST IR 8547 · MIGRATION WINDOW: 2026–2030</span>
+    <h1>Quantum is coming.<br/><span class="grad-text">Your RSA has an expiry date.</span></h1>
+    <p class="hero-sub"><b>Q-Trust</b> is a post-quantum cryptography migration &amp; attestation protocol —
+      scan your crypto estate, score it against <b>NIST &amp; CNSA 2.0</b>, plan migration with a <b>GNN</b>,
+      and seal tamper-proof attestations on <b>Base L2</b>.</p>
+    <p class="pipeline-inline">discover → score → plan → attest</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary" href="https://github.com/humoge7502/q-trust" target="_blank" rel="noopener">★ Star on GitHub</a>
+      <a class="btn btn-ghost" href="https://humoge7502.github.io/q-trust" target="_blank" rel="noopener">Read the Docs</a>
+      <a class="btn btn-ghost" href="#demo">▶ Watch the Demo</a>
+    </div>
+  </div>
+</header>
+
+<div class="stats">
+  <div class="stat"><div class="num">11</div><div class="lbl">UUPS registries</div></div>
+  <div class="stat"><div class="num">10</div><div class="lbl">Scanner modules</div></div>
+  <div class="stat"><div class="num">τ 0.961</div><div class="lbl">GNN ranking</div></div>
+  <div class="stat"><div class="num">189</div><div class="lbl">Contract tests</div></div>
+  <div class="stat"><div class="num">7</div><div class="lbl">Compliance frameworks</div></div>
+</div>
+
+<section class="reveal" id="threat">
+  <span class="kicker">The deadline is set by standards bodies — not attackers</span>
+  <h2>Why quantum changes everything</h2>
+  <p class="lead">Every enterprise is sitting on the same wall: cryptography scattered across TLS endpoints, source
+     code, package manifests, binaries and configs — owned by different teams, with no shared evidence layer
+     between vendors, auditors and customers.</p>
+  <div class="grid-3">
+    <div class="tcard"><div class="year">2030–35</div><h3>RSA &amp; ECC signatures disallowed</h3>
+      <p>NIST IR 8547 transitions US federal systems off classical public-key crypto. CNSA 2.0 pulls National Security Systems to ML-KEM / ML-DSA on an overlapping schedule.</p>
+      <span class="src">NIST IR 8547</span></div>
+    <div class="tcard"><div class="year">Today</div><h3>Harvest now, decrypt later</h3>
+      <p>Traffic captured today can be decrypted the day a cryptographically relevant quantum computer arrives. For long-lived secrets, the deadline already passed.</p>
+      <span class="src">HNDL</span></div>
+    <div class="tcard v"><div class="year">2026+</div><h3>Regulators expect a CBOM</h3>
+      <p>EU NIS2, FISMA and FedRAMP increasingly require a cryptographic bill of materials. You cannot migrate what you have not inventoried.</p>
+      <span class="src">EU NIS2 · FedRAMP</span></div>
+  </div>
+</section>
+
+<section class="reveal" id="pipeline">
+  <span class="kicker">One protocol, four verbs</span>
+  <h2>The pipeline</h2>
+  <div class="steps">
+    <div class="step"><div class="n">1</div><h3>Scan</h3><div class="sub">inspector</div>
+      <p>TLS &amp; SSH probes, 12+ source languages, 10+ manifest formats, binary OID extraction, config audits — one command, one CBOM.</p></div>
+    <div class="step"><div class="n">2</div><h3>Score</h3><div class="sub">risk engine</div>
+      <p>Risk scoring against NIST SP 800-131A, CNSA 2.0, FIPS 140-3, NIS2, FISMA, FedRAMP and CMMC — with HNDL exposure classification.</p></div>
+    <div class="step"><div class="n">3</div><h3>Plan</h3><div class="sub">GNN + RL</div>
+      <p>PyTorch Geometric GNN ranks migration priority at Kendall τ 0.961 vs heuristic optimum; an RL agent sequences the rollout.</p></div>
+    <div class="step"><div class="n">4</div><h3>Attest</h3><div class="sub">Base L2</div>
+      <p>Hash-chained evidence ledger anchored via EIP-712 gasless relays to 11 UUPS registries — publicly verifiable and revocable.</p></div>
+  </div>
+  <div class="arrow-flow">CycloneDX 1.7 CBOM <span class="sep">→</span> risk-ranked inventory <span class="sep">→</span> migration steps <span class="sep">→</span> on-chain evidence root</div>
+</section>
+
+<section class="reveal" id="capabilities">
+  <span class="kicker">What's inside</span>
+  <h2>Capabilities</h2>
+  <div class="fcards">
+    <div class="fcard"><img src="assets/feature-scan.png" alt="Enterprise scanner"/>
+      <div class="body"><span class="tag">Discover</span><h3>Enterprise scanner</h3>
+      <p>10 modules — TLS, SSH, source, manifests, binaries, configs, PCAP — emitting CycloneDX 1.7 CBOMs, SARIF 2.1 findings and a tamper-evident evidence ledger.</p></div></div>
+    <div class="fcard"><img src="assets/feature-ai.png" alt="GNN planner"/>
+      <div class="body"><span class="tag">Plan</span><h3>GNN migration planner</h3>
+      <p>Graph neural networks score migration priority across your entire crypto estate, validated at 100K-graph scale — plus an RL agent that sequences execution.</p></div></div>
+    <div class="fcard"><img src="assets/feature-chain.png" alt="On-chain anchoring"/>
+      <div class="body"><span class="tag">Attest</span><h3>On-chain anchoring</h3>
+      <p>Eleven UUPS-upgradeable registries on Base L2 behind a 7-day timelock, EIP-712 gasless submission, Merkle-root revocation.</p></div></div>
+  </div>
+</section>
+
+<section class="reveal" id="architecture">
+  <span class="kicker">Six independently deployable subsystems</span>
+  <h2>Architecture</h2>
+  <p class="lead">Foundry contracts · Python inspector &amp; planner · Fastify 5 API, indexer and gasless relayer ·
+     Next.js 16 dashboard · Python SDK. One <code>docker compose up</code> runs it all.</p>
+  <div class="term-wrap"><img src="assets/architecture.png" alt="Q-Trust layered architecture"/></div>
+</section>
+
+<section class="reveal" id="demo">
+  <span class="kicker">Real CLI, real flow</span>
+  <h2>Demo</h2>
+  <div class="term-wrap"><img src="assets/demo-terminal.gif" alt="Q-Trust terminal demo"/></div>
+</section>
+
+<section class="reveal" id="results">
+  <span class="kicker">Measure, then claim</span>
+  <h2>Measured results</h2>
+  <div class="tbl-card tbl-scroll"><table>
+    <tr><th>Capability</th><th>Result</th><th>Source</th></tr>
+    <tr><td>Migration ranking</td><td>Kendall <b>τ 0.961</b> vs heuristic optimum (held-out)</td><td>planner/results/benchmark.json</td></tr>
+    <tr><td>GNN v3 at scale</td><td>100K graphs · BF16 — held-out <b>τ 0.898</b></td><td>planner/results/benchmark_v3.json</td></tr>
+    <tr><td>RL migration agent</td><td>mean reward <b>+6.24</b> (untrained −8.6)</td><td>planner/rl_agent.pt</td></tr>
+    <tr><td>API throughput</td><td><b>147.8 req/s</b> @ 100 VUs · p95 <b>11.3 ms</b></td><td>docs/PERFORMANCE.md</td></tr>
+    <tr><td>Contract tests</td><td><b>189</b> — unit + invariant (1000 runs) + fuzz + attack</td><td>CHANGELOG.md</td></tr>
+    <tr><td>Side-channel detector</td><td>clean → <b>0.05</b> VERIFIED · leaky → <b>0.95</b> HIGH_RISK</td><td>docs/GPU_FEATURES.md</td></tr>
+  </table></div>
+</section>
+
+<section class="reveal" id="quickstart">
+  <span class="kicker">From zero to CBOM in 60 seconds</span>
+  <h2>Quick start</h2>
+  <div class="code-card">
+    <div class="code-head"><i style="background:#ff5f56"></i><i style="background:#ffbd2e"></i><i style="background:#27c93f"></i><span class="t">qtrust — zsh</span></div>
+<pre><span class="c-cm"># 60 seconds — scan a live endpoint</span>
+<span class="c-p">$</span> <span class="c-cmd">git clone https://github.com/humoge7502/q-trust && cd q-trust/inspector</span>
+<span class="c-p">$</span> <span class="c-cmd">pip install -e .</span>
+<span class="c-p">$</span> <span class="c-cmd">crypto-inspector scan example.com --risk --compliance nist,cnsa</span>
+<span class="c-ok">✓ CBOM → cbom.json (CycloneDX 1.7) · risk + compliance report</span>
+
+<span class="c-cm"># 10 minutes — full stack on Docker</span>
+<span class="c-p">$</span> <span class="c-cmd">cd .. && cp .env.example .env && docker compose up -d --build</span>
+<span class="c-p">$</span> <span class="c-cmd">./scripts/verify_all.sh</span>
+<span class="c-ok">✓ 9-step full-stack verification</span>
+<span class="c-acc">→ dashboard http://localhost:3000 · api :3001 · grafana :3002</span></pre>
+  </div>
+</section>
+
+<section class="reveal" id="roadmap">
+  <span class="kicker">Dates indicative</span>
+  <h2>Roadmap</h2>
+  <div class="rm">
+    <div class="rm-col done"><h3>✓ Landed</h3>
+      <div class="rm-item"><span class="ic">✅</span>v2.0 scanner — 10 modules, 7 frameworks</div>
+      <div class="rm-item"><span class="ic">✅</span>11 registries + 189 tests (invariant/fuzz/attack)</div>
+      <div class="rm-item"><span class="ic">✅</span>GNN planner τ 0.961 + RL agent</div>
+      <div class="rm-item"><span class="ic">✅</span>7 CI pipelines · docs site · bank pilot</div></div>
+    <div class="rm-col now"><h3>↻ In flight</h3>
+      <div class="rm-item"><span class="ic">🔄</span>Base Sepolia deployment</div>
+      <div class="rm-item"><span class="ic">🔄</span>Independent security audit</div></div>
+    <div class="rm-col next"><h3>→ Next</h3>
+      <div class="rm-item"><span class="ic">⬜</span>Multi-chain anchoring beyond Base</div>
+      <div class="rm-item"><span class="ic">⬜</span>ZK compliance proofs</div>
+      <div class="rm-item"><span class="ic">⬜</span>Enterprise pilot expansion</div></div>
+  </div>
+</section>
+
+<footer>
+  <div class="f-brand">Q-TRUST</div>
+  <p>Trust, proven post-quantum. &nbsp;·&nbsp; <a href="https://github.com/humoge7502/q-trust">GitHub</a> ·
+     <a href="https://humoge7502.github.io/q-trust">Docs</a> · <a href="https://github.com/humoge7502/q-trust/discussions">Discussions</a></p>
+  <p style="margin-top:8px">MIT License © Q-Trust Contributors — built with <span class="heart">♥</span> and an unreasonable love for cryptographic inventory.</p>
+</footer>
+
+<script>
+  const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.12});
+  document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+</script>
+</body>
+</html>
