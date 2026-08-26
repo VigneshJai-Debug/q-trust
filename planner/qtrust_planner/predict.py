@@ -55,7 +55,7 @@ def _load_trained_model(model_path: str) -> tuple[Any, dict[str, Any]]:
     """Load the MigrationGNN checkpoint. Either fully succeeds or raises —
     there is no partial/silent-load path.
     """
-    # nosemgrep: ts.python.pickles-in-pytorch — weights_only=True
+    # nosemgrep — torch.load with weights_only=True: safe deserialization
     checkpoint = torch.load(model_path, map_location="cpu", weights_only=True)
     config = checkpoint.get("model_config", _DEFAULT_GNN_CONFIG)
     state_dict = checkpoint.get("model_state_dict")

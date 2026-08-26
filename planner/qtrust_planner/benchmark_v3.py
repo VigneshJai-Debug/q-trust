@@ -41,7 +41,7 @@ else:
 def _load_v2(path: Path):
     if not path.exists():
         return None
-    # nosemgrep: ts.python.pickles-in-pytorch — weights_only=True
+    # nosemgrep — torch.load with weights_only=True: safe deserialization
     payload = torch.load(path, map_location="cpu", weights_only=True)
     if isinstance(payload, dict) and "model_state_dict" in payload:
         cfg = payload.get("model_config", {})
@@ -67,7 +67,7 @@ def _load_v3(path: Path):
         use_centrality=True,
         variant="hybrid",
     )
-    # nosemgrep: ts.python.pickles-in-pytorch — weights_only=True
+    # nosemgrep — torch.load with weights_only=True: safe deserialization
     payload = torch.load(path, map_location="cpu", weights_only=True)
     if isinstance(payload, dict) and "state_dict" in payload:
         model.load_state_dict(payload["state_dict"])

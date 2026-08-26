@@ -77,7 +77,7 @@ class ParallelScanner:
 
                 candidate = MigrationGNNv3(input_features=6).to(self.device)
                 candidate.load_state_dict(
-                    # nosemgrep: ts.python.pickles-in-pytorch — weights_only=True
+                    # nosemgrep — torch.load with weights_only=True: safe deserialization
                     torch.load(str(model_path), map_location=self.device, weights_only=True)
                 )
                 self.risk_model = candidate

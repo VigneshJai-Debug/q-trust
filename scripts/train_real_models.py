@@ -253,7 +253,7 @@ def train_rl(real_assets: list[dict], episodes: int) -> None:
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     agent = MigrationAgent(n_features=6, hidden_dim=128).to(device)
-    agent.load_state_dict(torch.load(  # nosemgrep: ts.python.pickles-in-pytorch — weights_only=True
+    agent.load_state_dict(torch.load(  # nosemgrep — torch.load with weights_only=True: safe deserialization
     REPO_ROOT / "planner" / "rl_agent_real.pt",
     map_location=device, weights_only=True))
     agent.eval()

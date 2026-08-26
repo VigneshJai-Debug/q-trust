@@ -95,14 +95,22 @@ jobs:
           python-version: '3.12'
 
       - name: Install component
-        # Non-editable install so pip-audit can resolve every distribution.
-        run: pip install ./${{ matrix.component }}
+        # Non-editable install so every distribution is resolvable. The matrix
+        # value goes through env (never direct ${{ }} interpolation in run:)
+        # per semgrep run-shell-injection.
+        env:
+          COMPONENT: ${{ matrix.component }}
+        run: pip install "./$COMPONENT"
 
       - name: Install pip-audit
         run: pip install pip-audit
 
       - name: Audit installed dependencies
-        run: pip-audit --strict
+        # Audit third-party packages only: the component itself is not on
+        # PyPI, so auditing it directly makes --strict fail on resolution.
+        run: |
+          pip freeze | grep -v "^qtrust" > /tmp/audit-reqs.txt
+          pip-audit --strict -r /tmp/audit-reqs.txt
         continue-on-error: false
 
   gitleaks:
