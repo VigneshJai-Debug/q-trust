@@ -1,0 +1,17 @@
+{
+  "kendall_tau": 0.961,
+  "kendall_source": "planner/results/benchmark.json",
+  "kendall_note": "held-out ListMLE, corrected per-node-rank protocol (see CHANGELOG Unreleased)",
+  "api_throughput_rps": 147.8,
+  "api_p95_ms": 11.3,
+  "api_vus": 100,
+  "api_source": "docs/PERFORMANCE.md",
+  "contract_tests": 211,
+  "contract_test_source": "CHANGELOG.md",
+  "contract_test_config": "forge test invariant runs=1000 depth=100 fail_on_revert=true",
+  "scanner_languages": 12,
+  "manifest_formats": 10,
+  "compliance_frameworks": 7,
+  "last_verified": "2026-08-27",
+  "commit": "f02d106"
+}

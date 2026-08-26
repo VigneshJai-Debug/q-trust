@@ -325,50 +325,49 @@ def _load_model() -> None:
 
 
 def _heuristic_priority(asset: dict[str, Any]) -> float:
-    """Rule-based priority score for an asset. Higher = migrate first."""
-    criticality_map = {"Critical": 5, "High": 4, "Medium": 3, "Low": 2, "Info": 1}
-    crit = criticality_map.get(asset.get("criticality", "Medium"), 3)
-    key_size = asset.get("key_size", 0)
-    pqc_ready = asset.get("pqc_ready", False)
-    algorithm = asset.get("algorithm", "unknown")
-    family = algorithm.split("-")[0] if "-" in algorithm else algorithm
+    """Single canonical priority — delegates to qtrust_common (Blueprint §5.4)."""
+    try:
+        from qtrust_common.heuristics import pqc_priority
 
-    score = 0.0
-
-    # Criticality contribution (0-5)
-    score += crit
-
-    # Non-PQC algorithm bonus
-    if not pqc_ready:
-        if family in ("RSA", "ECC", "DSA", "DH", "ECDH", "ECDSA"):
-            score += 3.0
-        elif family in ("EdDSA",):
+        return pqc_priority(asset)
+    except ImportError:
+        criticality_map = {"Critical": 5, "High": 4, "Medium": 3, "Low": 2, "Info": 1}
+        crit = criticality_map.get(asset.get("criticality", "Medium"), 3)
+        key_size = asset.get("key_size", 0)
+        pqc_ready = asset.get("pqc_ready", False)
+        algorithm = asset.get("algorithm", "unknown")
+        family = algorithm.split("-")[0] if "-" in algorithm else algorithm
+        score = 0.0
+        score += crit
+        if not pqc_ready:
+            if family in ("RSA", "ECC", "DSA", "DH", "ECDH", "ECDSA"):
+                score += 3.0
+            elif family in ("EdDSA",):
+                score += 2.0
+            else:
+                score += 1.0
+        if key_size >= 4096:
             score += 2.0
-        else:
+        elif key_size >= 2048:
             score += 1.0
-
-    # Large key bonus
-    if key_size >= 4096:
-        score += 2.0
-    elif key_size >= 2048:
-        score += 1.0
-
-    # PQC-ready algorithm deduction (no migration needed)
-    if pqc_ready:
-        score -= 2.0
-
-    return score
+        if pqc_ready:
+            score -= 2.0
+        return score
 
 
 def _heuristic_risk(asset: dict[str, Any]) -> float:
-    """Rule-based risk score. Higher = riskier to migrate now."""
-    criticality_map = {"Critical": 5, "High": 4, "Medium": 3, "Low": 2, "Info": 1}
-    crit = criticality_map.get(asset.get("criticality", "Medium"), 3)
-    pqc_ready = asset.get("pqc_ready", False)
+    """Single canonical risk — delegates to qtrust_common."""
+    try:
+        from qtrust_common.heuristics import pqc_risk
 
-    if pqc_ready:
-        return 0.1
-    return crit / 5.0
+        return pqc_risk(asset)
+    except ImportError:
+        criticality_map = {"Critical": 5, "High": 4, "Medium": 3, "Low": 2, "Info": 1}
+        crit = criticality_map.get(asset.get("criticality", "Medium"), 3)
+        pqc_ready = asset.get("pqc_ready", False)
+        if pqc_ready:
+            return 0.1
+        return crit / 5.0
 
 
 class PlanRequest(BaseModel):

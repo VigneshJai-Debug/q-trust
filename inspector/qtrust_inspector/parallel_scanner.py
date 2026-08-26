@@ -346,25 +346,29 @@ class ParallelScanner:
         ], dtype=torch.float32)
 
     def _heuristic_risk(self, asset) -> float:
-        """Simple heuristic risk score (fallback if no GNN model)."""
-        if isinstance(asset, dict):
-            alg = asset.get("algorithm", "")
-            key_size = asset.get("key_size", 2048)
-            criticality = asset.get("criticality", "medium")
-        else:
-            alg = getattr(asset, "algorithm", "")
-            key_size = getattr(asset, "key_size", 2048)
-            criticality = getattr(asset, "criticality", "medium")
-
-        # RSA with small keys = high risk
-        if "RSA" in alg.upper() and key_size < 2048:
-            return 0.9
-        elif "RSA" in alg.upper() and key_size < 3072:
-            return 0.6
-        elif any(pqc in alg.upper() for pqc in ["ML-KEM", "ML-DSA", "SLH-DSA"]):
-            return 0.1  # PQC = low risk
-        else:
-            return 0.5
+        """Single canonical heuristic — delegates to qtrust_common (see Blueprint §5.4)."""
+        try:
+            from qtrust_common.heuristics import pqc_risk
+            # normalize dataclass vs dict
+            if not isinstance(asset, dict):
+                asset = {"algorithm": getattr(asset, "algorithm", ""), "key_size": getattr(asset, "key_size", 2048), "criticality": getattr(asset, "criticality", "medium"), "pqc_ready": getattr(asset, "pqc_ready", False)}
+            return pqc_risk(asset)
+        except ImportError:
+            # fallback (should not happen in repo checkout)
+            if isinstance(asset, dict):
+                alg = asset.get("algorithm", "")
+                key_size = asset.get("key_size", 2048)
+            else:
+                alg = getattr(asset, "algorithm", "")
+                key_size = getattr(asset, "key_size", 2048)
+            if "RSA" in alg.upper() and key_size < 2048:
+                return 0.9
+            elif "RSA" in alg.upper() and key_size < 3072:
+                return 0.6
+            elif any(pqc in alg.upper() for pqc in ["ML-KEM", "ML-DSA", "SLH-DSA"]):
+                return 0.1
+            else:
+                return 0.5
 
     def scan_from_file(self, hosts_file: str) -> dict:
         """Scan hosts from a file (one host per line).

@@ -847,18 +847,8 @@ class TestK8sPolicy:
 # ---------------------------------------------------------------------------
 
 class TestTLSProbe:
-    def test_client_hello_building(self):
-        from qtrust_inspector.tls_probe import _build_client_hello
-        hello = _build_client_hello("example.com")
-        assert isinstance(hello, bytes)
-        assert len(hello) > 0
-        assert hello[0] == 0x16  # TLS record
-
-    def test_client_hello_with_pqc(self):
-        from qtrust_inspector.tls_probe import _build_client_hello
-        hello = _build_client_hello("example.com", include_pqc=True)
-        assert isinstance(hello, bytes)
-        assert len(hello) > 0
+    # _build_client_hello removed — real probing uses ssl module (Blueprint §5.3)
+    # Previous helper built a ClientHello it never sent; deleted with its tests.
 
     def test_tls_group_codepoints(self):
         from qtrust_inspector.tls_probe import TLS_GROUP_CODEPOINTS

@@ -36,7 +36,10 @@ echo "==> [7/9] Frontend build (next)"
 (cd "$ROOT/frontend" && npm run build > /dev/null 2>&1) && pass "frontend build" || fail "frontend build"
 
 echo "==> [8/9] Notebooks execute"
-jupyter nbconvert --to notebook --execute "$ROOT/notebooks/01_quantum_threat_demo.ipynb" --output /tmp/qtrust_nb1.ipynb > /dev/null 2>&1 \
+# Notebook location moved to research/notebooks per Blueprint §5.1 — handle both old and new paths
+NB_DIR="$ROOT/notebooks"
+if [ ! -d "$NB_DIR" ] && [ -d "$ROOT/research/notebooks" ]; then NB_DIR="$ROOT/research/notebooks"; fi
+jupyter nbconvert --to notebook --execute "$NB_DIR/01_quantum_threat_demo.ipynb" --output /tmp/qtrust_nb1.ipynb > /dev/null 2>&1 \
   && pass "notebooks (01 quantum demo)" || fail "notebooks (01)"
 
 echo "==> [9/9] Pilot + bank-pilot notebook (fresh anvil + deploy)"
@@ -53,7 +56,7 @@ export QTRUST_AUDIT_REGISTRY_ADDRESS="$(grep 'AuditRegistry proxy:' "$DEPLOY_LOG
 rm -f "$DEPLOY_LOG"
 (cd "$ROOT/pilot" && python run_pilot.py 2>&1 | grep -q "PILOT COMPLETE") \
   && pass "pilot" || fail "pilot"
-jupyter nbconvert --to notebook --execute "$ROOT/notebooks/08_bank_pilot.ipynb" --output /tmp/qtrust_nb8.ipynb > /dev/null 2>&1 \
+jupyter nbconvert --to notebook --execute "$NB_DIR/08_bank_pilot.ipynb" --output /tmp/qtrust_nb8.ipynb > /dev/null 2>&1 \
   && pass "notebooks (08 bank pilot)" || fail "notebooks (08)"
 kill "$ANVIL_PID" 2>/dev/null || true
 

@@ -184,34 +184,43 @@ def cbom_to_graph(cbom: dict[str, Any], deps_path: str | dict[str, Any] | None =
 
 
 def _heuristic_priority(asset: dict[str, Any]) -> float:
-    """Rule-based priority score for an asset record. Higher = migrate first."""
-    criticality_weights = {"Critical": 5, "High": 4, "Medium": 3, "Low": 2, "Info": 1}
-    crit = criticality_weights.get(asset.get("criticality", "Medium"), 3)
-    key_size = int(asset.get("key_size", 0) or 0)
-    pqc_ready = bool(asset.get("pqc_ready", False))
-    algorithm = asset.get("algorithm", "unknown")
-    family = algorithm.split("-")[0] if "-" in algorithm else algorithm
+    """Single canonical priority — delegates to qtrust_common (Blueprint §5.4)."""
+    try:
+        from qtrust_common.heuristics import pqc_priority
 
-    score = float(crit)
-    if not pqc_ready:
-        if family in ("RSA", "ECC", "DSA", "DH", "ECDH", "ECDSA"):
-            score += 3.0
-        elif family in ("EdDSA",):
+        return pqc_priority(asset)
+    except ImportError:
+        criticality_weights = {"Critical": 5, "High": 4, "Medium": 3, "Low": 2, "Info": 1}
+        crit = criticality_weights.get(asset.get("criticality", "Medium"), 3)
+        key_size = int(asset.get("key_size", 0) or 0)
+        pqc_ready = bool(asset.get("pqc_ready", False))
+        algorithm = asset.get("algorithm", "unknown")
+        family = algorithm.split("-")[0] if "-" in algorithm else algorithm
+        score = float(crit)
+        if not pqc_ready:
+            if family in ("RSA", "ECC", "DSA", "DH", "ECDH", "ECDSA"):
+                score += 3.0
+            elif family in ("EdDSA",):
+                score += 2.0
+            else:
+                score += 1.0
+        if key_size >= 4096:
             score += 2.0
-        else:
+        elif key_size >= 2048:
             score += 1.0
-    if key_size >= 4096:
-        score += 2.0
-    elif key_size >= 2048:
-        score += 1.0
-    if pqc_ready:
-        score -= 2.0
-    return score
+        if pqc_ready:
+            score -= 2.0
+        return score
 
 
 def _heuristic_risk(asset: dict[str, Any]) -> float:
-    """Rule-based risk score. Higher = riskier to migrate now."""
-    criticality_weights = {"Critical": 5, "High": 4, "Medium": 3, "Low": 2, "Info": 1}
+    """Single canonical risk — delegates to qtrust_common."""
+    try:
+        from qtrust_common.heuristics import pqc_risk
+
+        return pqc_risk(asset)
+    except ImportError:
+        criticality_weights = {"Critical": 5, "High": 4, "Medium": 3, "Low": 2, "Info": 1}
     crit = criticality_weights.get(asset.get("criticality", "Medium"), 3)
     if bool(asset.get("pqc_ready", False)):
         return 0.1

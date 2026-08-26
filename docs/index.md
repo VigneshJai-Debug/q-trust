@@ -26,6 +26,23 @@ hide:
 
 ---
 
+## Where to go next — routing by intent
+
+| I want to… | Go to | What you get |
+|---|---|---|
+| Scan code or a TLS endpoint | [Guides: Scan your first CBOM](guides/scan-first-cbom.md) | 60-second CLI → CycloneDX 1.7 + SARIF |
+| Deploy contracts to testnet | [Guides: Deploy to Base Sepolia](guides/deploy-base-sepolia.md) | Forge deploy + Basescan verify + compose up |
+| Use the SDK in CI | [Guides: Integrate the SDK](guides/integrate-sdk.md) | hash_cbom → IPFS → EIP-712 gasless relay |
+| Run the full stack locally | [Guides: Operate the stack](guides/operate-stack.md) | Docker compose + Prometheus/Grafana + runbooks |
+| Understand the protocol | [Whitepaper](WHITEPAPER.md) | Threat model, GNN planner, on-chain design |
+| See measured performance | [Performance](PERFORMANCE.md) + [_data/metrics.json](_data/metrics.json) | k6 147.8 rps, τ 0.961, GPU latencies |
+| Evaluate for production | [Architecture](ARCHITECTURE.md) + [Reality check in README](../README.md#reality-check) | Honest limits: no audit, no public deploy, relayer trust |
+| Verify an attestation | `GET /v/{assetId}` or `GET /v1/assets/{id}/verify` | On-chain existence, active, org_did |
+
+*Last verified: 2026-08-27 · against commit f02d106 · verifier: ./scripts/verify_all.sh*
+
+---
+
 ## Quick links
 
 <div class="grid cards" markdown>

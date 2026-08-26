@@ -457,32 +457,7 @@ class CryptoScanner:
         return findings
 
     # ------------------------------------------------------------------
-    # Network scanning
-    # ------------------------------------------------------------------
-    def scan_network(self, cidr: str) -> list[dict[str, Any]]:
-        """Discover hosts on a network and scan each for crypto assets.
-
-        Args:
-            cidr: CIDR network range (e_g "192.168.1.0/24").
-        """
-        if not self._nm:
-            return []
-        try:
-            self._nm.scan(hosts=cidr, arguments="-sn -T4")
-            hosts_up = [h for h in self._nm.all_hosts() if self._nm[h].state() == "up"]
-            results: list[dict[str, Any]] = []
-            for host in hosts_up:
-                try:
-                    host_result = self.scan_host(host)
-                    results.append(host_result)
-                except Exception:
-                    pass
-            return results
-        except Exception:
-            return []
-
-    # ------------------------------------------------------------------
-    # CBOM generation
+    # CBOM generation (network scanning is via module-level scan_network())
     # ------------------------------------------------------------------
     def generate_cbom(self, scan_results: dict[str, Any] | list[dict[str, Any]]) -> dict[str, Any]:
         """Generate a Cryptographic Bill of Materials (CBOM) from scan results.

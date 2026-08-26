@@ -34,10 +34,22 @@ contracts/broadcast/
 # CI regenerates and fails on drift).
 
 # ─── Planner/inspector model checkpoints ──────────────────────────────────────
-# Trained checkpoints are intentionally tracked (force-added; all <1MB each).
-# Only the legacy v1 model and experiment sweeps stay untracked.
+# Canonical checkpoints remain tracked for clone-and-test speed (~4MB total
+# after deduplication of *_real.pt variants). Large experiment sweeps stay
+# untracked. Future large models should be published as GitHub Release assets
+# with SHA256 manifest (see models.sha256) rather than force-added blobs.
 planner/model.pt
 planner/results/*.pt
+# Deduplicated variants removed (see Engineering Elevation Blueprint §5.2)
+inspector/*_real.pt
+planner/*_real.pt
+# Fail-safe: any new .pt blob over 500KB is blocked by pre-commit check-added-large-files
+*.pt
+!inspector/anomaly_model.pt
+!inspector/side_channel_model.pt
+!planner/model_ddp_v3.pt
+!planner/model_gpu_v3.pt
+!planner/rl_agent.pt
 
 # ─── OS & IDE ─────────────────────────────────────────────────────────────────
 .DS_Store
@@ -92,9 +104,9 @@ qtrust-gpu-features.zip
 #   Option B — make private: `git rm --cached -r docs/PATENT && git commit`
 #              then uncomment the ignore below and force-push history rewrite
 #              only if counsel approves (destroys public novelty anyway).
-# For now this line is COMMENTED OUT so tracking is visible. Uncomment to
-# re-enable ignoring after the repository is made private or PATENT is removed.
-# docs/PATENT/
+# PATENT removed from public tree per Engineering Elevation Blueprint §4.2 (2026-08-27)
+# — re-enable ignoring to prevent accidental re-add.
+docs/PATENT/
 
 # ─── Internal audits — public hygiene (audit) ───────────────────────────────
 # docs/assessments/ holds 6 internal audit dumps that are currently TRACKED
@@ -102,10 +114,11 @@ qtrust-gpu-features.zip
 # site via mkdocs `*Audit*` but the raw markdown is still world-readable.
 # Hygiene fix (requires maintainer decision): move to a private repo / Drive
 # or `git rm --cached -r docs/assessments` and add `docs/assessments/` below.
-# For now the line stays commented so `git status` keeps them visible.
-# docs/assessments/
+# Assessments moved to private archive per Blueprint §4.2 — keep ignored.
+docs/assessments/
 
 # ─── Local-only artifacts ─────────────────────────────────────────────────────
 *.zip
 Q-Trust_v2.0.0_Senior_Engineer_Codebase_Audit.pdf
 .ipynb_checkpoints/
+Q-Trust*.pdf

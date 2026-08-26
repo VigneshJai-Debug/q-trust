@@ -147,3 +147,16 @@ CycloneDX is an OWASP standard for Software Bill of Materials (SBOM) and Cryptog
 ### Why Hash-Chained Evidence
 
 Hash chaining creates a tamper-evident sequence: every evidence record includes the hash of the previous record. This means any modification to historical records is immediately detectable. Combined with on-chain root anchoring, this provides cryptographic proof of evidence integrity without requiring a blockchain write for every individual record.
+
+## Anti-Decay Checklist (Engineering Elevation Blueprint §A.4)
+
+Every PR must defend the gains from decaying — the same mechanism that keeps the 7 CI workflows honest:
+
+- [ ] Every badge resolves. Link-check the README in the docs workflow; a badge is a claim.
+- [ ] Every number has a source link. New metrics enter `docs/_data/metrics.json` first, prose second; a number without a source link does not merge.
+- [ ] One metric, one value. If the same quantity appears in two documents, one of them imports it or one of them is deleted. The 127/189 → 211 test-count incident is the cautionary tale.
+- [ ] Zero superlatives, zero unverifiable claims. Reviewer check on every README/docs PR.
+- [ ] Limitations stay stated. When a Reality-check item is fixed (external audit obtained, contracts deployed), the section updates — it never silently disappears.
+- [ ] Screenshots are real and current. A UI PR that changes a landing-page-visible surface re-captures the asset in the same PR.
+- [ ] Reference material is generated, never hand-copied. API tables render from `openapi.yaml`; env tables from `.env.example`.
+- [ ] No binaries in git. `pre-commit`'s 500 KB cap is absolute; artifacts ride Releases. Run `git ls-files | xargs ls -lh | grep -E "\.pt|\.pdf"` before merge.

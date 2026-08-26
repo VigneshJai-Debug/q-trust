@@ -1,13 +1,15 @@
 site_name: Q-Trust Documentation
 site_description: >-
-  Q-Trust — on-chain coordination for the post-quantum migration of
-  enterprise cryptography. CBOM scanning, GPU-accelerated analysis,
-  GNN/RL migration planning, and verifiable provenance on Base L2.
+  Q-Trust — on-chain coordination for the post-quantum migration
+  of enterprise cryptography. CBOM scanning, GPU-accelerated
+  analysis, GNN/RL migration planning, verifiable provenance on
+  Base L2.
 site_url: https://humoge7502.github.io/q-trust/
 repo_url: https://github.com/humoge7502/q-trust
 repo_name: humoge7502/q-trust
 edit_uri: edit/main/docs/
 copyright: Copyright &copy; 2024 Q-Trust Contributors. MIT Licensed.
+strict: true
 
 theme:
   name: material
@@ -89,24 +91,19 @@ validation:
     anchors: info
     unrecognized_links: info
 
-not_in_nav: |
-  8GPU_PLAN.md
-  QTrust_30_Day_Execution_Plan.md
-  assessments/*
-  PHASE_*.md
-  PROMPT.md
-  playbook_review.md
-  demo_run_of_show.md
-  QTrust_Implementation_Guide.md
-
 nav:
   - Home: index.md
+  - Guides:
+      - Scan your first CBOM: guides/scan-first-cbom.md
+      - Deploy to Base Sepolia: guides/deploy-base-sepolia.md
+      - Integrate the SDK: guides/integrate-sdk.md
+      - Operate the stack: guides/operate-stack.md
   - Architecture: ARCHITECTURE.md
-  - Whitepaper: WHITEPAPER.md
-  - API Reference: api.md
-  - CBOM Conformance: CBOM_CONFORMANCE.md
-  - GPU Features: GPU_FEATURES.md
-  - Performance: PERFORMANCE.md
+  - Reference:
+      - Whitepaper: WHITEPAPER.md
+      - Performance: PERFORMANCE.md
+      - GPU Features: GPU_FEATURES.md
+      - CBOM Conformance: CBOM_CONFORMANCE.md
   - Deployment:
       - Base Sepolia: deployment/BASE_SEPOLIA.md
       - Multi-Chain: deployment/MULTI_CHAIN.md
@@ -121,18 +118,6 @@ nav:
       - ADR 0004 — Postgres read model with RPC fallback: adr/0004-postgres-read-model-with-rpc-fallback.md
       - ADR 0005 — In-house Python VC/DID (Veramo for JS later): adr/0005-in-house-python-vc-did-veramo-for-js-later.md
       - ADR 0006 — Deterministic content-addressed IDs: adr/0006-deterministic-content-addressed-ids.md
-  - Operations:
+  - Runbooks:
       - Backup & Restore: runbook/backup-restore.md
       - Incident Response: runbook/incident-response.md
-  - Contributing: CONTRIBUTING.md
-  - Security: SECURITY.md
-  - Changelog: CHANGELOG.md
-
-exclude_docs: |
-  PHASE_*.md
-  PROMPT.md
-  playbook_review.md
-  demo_run_of_show.md
-  *Audit*
-  QTrust_Implementation_Guide.md
-  PATENT/
