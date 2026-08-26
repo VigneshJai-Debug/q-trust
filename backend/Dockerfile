@@ -9,7 +9,7 @@
 # To run the webhook watcher instead of the API:
 #   docker run --env-file .env qtrust-backend node dist/services/webhook.js
 
-FROM oven/bun:1.1 AS base
+FROM oven/bun:1.3 AS base
 WORKDIR /app
 
 # Install OpenSSL (needed by ioredis and some viem deps) and tini for signal handling.
