@@ -147,7 +147,7 @@ function severityColor(s: string) {
     case "high":
       return "bg-amber-100 text-amber-700";
     case "medium":
-      return "bg-indigo-100 text-indigo-700";
+      return "bg-qtrust-50 text-qtrust-700 ring-1 ring-inset ring-qtrust-600/15";
     case "low":
       return "bg-emerald-100 text-emerald-700";
     case "info":
@@ -549,7 +549,7 @@ export function ScannerDashboard() {
           <Tabs.Trigger
             key={tab.id}
             value={tab.id}
-            className="rounded-md px-4 py-2 text-sm font-medium transition data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow data-[state=inactive]:text-slate-600 hover:data-[state=inactive]:bg-slate-100"
+            className="rounded-md px-4 py-2 text-sm font-medium transition data-[state=active]:bg-qtrust-600 data-[state=active]:text-white data-[state=active]:shadow data-[state=inactive]:text-slate-600 hover:data-[state=inactive]:bg-slate-100"
           >
             {tab.label}
           </Tabs.Trigger>
@@ -586,7 +586,7 @@ export function ScannerDashboard() {
                 type="checkbox"
                 checked={scanSource}
                 onChange={(e) => setScanSource(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-indigo-600"
+                className="h-4 w-4 rounded border-slate-300 text-qtrust-600"
               />
               Source code
             </label>
@@ -595,7 +595,7 @@ export function ScannerDashboard() {
                 type="checkbox"
                 checked={scanManifest}
                 onChange={(e) => setScanManifest(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-indigo-600"
+                className="h-4 w-4 rounded border-slate-300 text-qtrust-600"
               />
               Dependency manifests
             </label>
@@ -654,16 +654,17 @@ export function ScannerDashboard() {
                 )}
               </div>
 
-              {/* Findings table */}
-              <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+              {/* Findings table — responsive: table on md+, cards on mobile */}
+              <div className="mt-4 hidden overflow-x-auto rounded-lg border border-slate-200 md:block">
                 <table className="w-full text-left text-xs">
+                  <caption className="sr-only">Scan findings</caption>
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50 text-slate-500">
-                      <th className="px-4 py-2 font-medium">File</th>
-                      <th className="px-4 py-2 font-medium">Line</th>
-                      <th className="px-4 py-2 font-medium">Algorithm</th>
-                      <th className="px-4 py-2 font-medium">Severity</th>
-                      <th className="px-4 py-2 font-medium">Message</th>
+                      <th scope="col" className="px-4 py-2 font-medium">File</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Line</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Algorithm</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Severity</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Message</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -689,6 +690,22 @@ export function ScannerDashboard() {
                     )}
                   </tbody>
                 </table>
+              </div>
+              {/* Mobile card fallback for findings */}
+              <div className="mt-4 space-y-3 md:hidden" role="list" aria-label="Scan findings">
+                {scanResult.findings.map((f, i) => (
+                  <div key={i} className="rounded-lg border border-slate-200 bg-white p-3" role="listitem">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="truncate font-mono text-xs font-medium text-slate-700">{f.file}:{f.line ?? "—"}</span>
+                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${severityColor(f.severity ?? "")}`}>{f.severity ?? "unknown"}</span>
+                    </div>
+                    <div className="mt-1 text-xs font-medium text-slate-800">{f.algorithm}</div>
+                    {f.message ? <div className="mt-1 text-xs text-slate-500">{f.message}</div> : null}
+                  </div>
+                ))}
+                {scanResult.findings.length === 0 && (
+                  <div className="rounded-lg border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">No findings — no quantum-vulnerable algorithms detected.</div>
+                )}
               </div>
 
               {/* Export buttons */}
@@ -749,7 +766,7 @@ export function ScannerDashboard() {
                 <button
                   onClick={() => void fetchRiskScores()}
                   disabled={riskLoading}
-                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-lg bg-qtrust-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-qtrust-700 disabled:opacity-50"
                 >
                   {riskLoading && <Spinner />}
                   {riskLoading ? "Calculating…" : "Calculate risk scores"}
@@ -759,20 +776,22 @@ export function ScannerDashboard() {
               {riskError && <p className="mt-3 text-xs text-rose-600">{riskError}</p>}
 
               {riskScores.length > 0 && (
-                <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50 text-slate-500">
-                        <th className="px-4 py-2 font-medium">File</th>
-                        <th className="px-4 py-2 font-medium">Line</th>
-                        <th className="px-4 py-2 font-medium">Algorithm</th>
-                        <th className="px-4 py-2 font-medium">Quantum Vulnerable</th>
-                        <th className="px-4 py-2 font-medium">Classification</th>
-                        <th className="px-4 py-2 font-medium">Risk Level</th>
-                        <th className="px-4 py-2 font-medium">Risk Score</th>
-                        <th className="px-4 py-2 font-medium">Message</th>
-                      </tr>
-                    </thead>
+                <>
+                  <div className="mt-4 hidden overflow-x-auto rounded-lg border border-slate-200 md:block">
+                    <table className="w-full text-left text-xs">
+                      <caption className="sr-only">Quantum risk scores</caption>
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50 text-slate-500">
+                          <th scope="col" className="px-4 py-2 font-medium">File</th>
+                          <th scope="col" className="px-4 py-2 font-medium">Line</th>
+                          <th scope="col" className="px-4 py-2 font-medium">Algorithm</th>
+                          <th scope="col" className="px-4 py-2 font-medium">Quantum Vulnerable</th>
+                          <th scope="col" className="px-4 py-2 font-medium">Classification</th>
+                          <th scope="col" className="px-4 py-2 font-medium">Risk Level</th>
+                          <th scope="col" className="px-4 py-2 font-medium">Risk Score</th>
+                          <th scope="col" className="px-4 py-2 font-medium">Message</th>
+                        </tr>
+                      </thead>
                     <tbody>
                       {riskScores.map((r, i) => {
                         const broken = r.algorithmClassification === "BROKEN" || r.algorithmClassification === "WEAKENED";
@@ -806,8 +825,29 @@ export function ScannerDashboard() {
                         );
                       })}
                     </tbody>
-                  </table>
-                </div>
+                    </table>
+                  </div>
+                  {/* Mobile cards */}
+                  <div className="mt-4 space-y-3 md:hidden" role="list" aria-label="Risk scores">
+                    {riskScores.map((r, i) => {
+                      const broken = r.algorithmClassification === "BROKEN" || r.algorithmClassification === "WEAKENED";
+                      return (
+                        <div key={i} className="rounded-lg border border-slate-200 bg-white p-3" role="listitem">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate font-mono text-xs text-slate-700">{r.file}:{r.line ?? "—"}</span>
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${severityColor(r.riskLevel.toLowerCase())}`}>{r.riskLevel}</span>
+                          </div>
+                          <div className="mt-1 text-xs font-medium text-slate-800">{r.algorithm} · {r.algorithmClassification}</div>
+                          <div className="mt-1 flex items-center gap-2 text-xs">
+                            {broken ? <span className="inline-flex items-center gap-1 text-rose-600"><XCircleIcon className="h-3 w-3" /> Vulnerable</span> : <span className="inline-flex items-center gap-1 text-emerald-600"><ShieldCheckIcon className="h-3 w-3" /> Safe</span>}
+                            <span className="font-mono text-slate-600">score {r.riskScore.toFixed(0)}</span>
+                          </div>
+                          {r.message ? <div className="mt-1 truncate text-xs text-slate-500">{r.message}</div> : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
               )}
             </>
           )}
@@ -848,7 +888,7 @@ export function ScannerDashboard() {
                 <button
                   onClick={() => void fetchCompliance()}
                   disabled={complianceLoading}
-                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-lg bg-qtrust-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-qtrust-700 disabled:opacity-50"
                 >
                   {complianceLoading && <Spinner />}
                   {complianceLoading ? "Evaluating…" : "Evaluate"}
@@ -912,15 +952,16 @@ export function ScannerDashboard() {
                     </div>
                   </div>
 
-                  {/* Results table */}
-                  <div className="mt-6 overflow-x-auto rounded-lg border border-slate-200">
+                  {/* Results table — responsive */}
+                  <div className="mt-6 hidden overflow-x-auto rounded-lg border border-slate-200 md:block">
                     <table className="w-full text-left text-xs">
+                      <caption className="sr-only">Compliance findings</caption>
                       <thead>
                         <tr className="border-b border-slate-200 bg-slate-50 text-slate-500">
-                          <th className="px-4 py-2 font-medium">File</th>
-                          <th className="px-4 py-2 font-medium">Algorithm</th>
-                          <th className="px-4 py-2 font-medium">Status</th>
-                          <th className="px-4 py-2 font-medium">Details</th>
+                          <th scope="col" className="px-4 py-2 font-medium">File</th>
+                          <th scope="col" className="px-4 py-2 font-medium">Algorithm</th>
+                          <th scope="col" className="px-4 py-2 font-medium">Status</th>
+                          <th scope="col" className="px-4 py-2 font-medium">Details</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -940,6 +981,19 @@ export function ScannerDashboard() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                  {/* Mobile cards */}
+                  <div className="mt-6 space-y-3 md:hidden" role="list" aria-label="Compliance findings">
+                    {complianceReport.results.map((r, i) => (
+                      <div key={i} className="rounded-lg border border-slate-200 bg-white p-3" role="listitem">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate font-mono text-xs text-slate-700">{r.file}</span>
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${complianceColor(r.compliance?.compliant ? "pass" : "fail")}`}>{r.compliance?.compliant ? "pass" : "fail"}</span>
+                        </div>
+                        <div className="mt-1 text-xs font-medium text-slate-800">{r.algorithm}</div>
+                        <div className="mt-1 text-xs text-slate-500">{r.compliance?.reason}</div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -979,7 +1033,7 @@ export function ScannerDashboard() {
                 <button
                   onClick={() => void fetchRoadmap()}
                   disabled={roadmapLoading}
-                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-lg bg-qtrust-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-qtrust-700 disabled:opacity-50"
                 >
                   {roadmapLoading && <Spinner />}
                   {roadmapLoading ? "Planning…" : "Generate roadmap"}
@@ -1024,7 +1078,7 @@ export function ScannerDashboard() {
                     {roadmap.phases.map((phase) => (
                       <div key={phase.phase} className="relative rounded-lg border border-slate-200 bg-white p-4 pl-12 shadow-sm">
                         {/* Timeline dot */}
-                        <div className="absolute left-3 top-4 flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-bold text-white">
+                        <div className="absolute left-3 top-4 flex h-5 w-5 items-center justify-center rounded-full bg-qtrust-600 text-[10px] font-bold text-white">
                           {phase.phase}
                         </div>
                         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1083,7 +1137,7 @@ export function ScannerDashboard() {
             <button
               onClick={() => void createEvidence()}
               disabled={evidenceLoading || !scanResult}
-              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg bg-qtrust-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-qtrust-700 disabled:opacity-50"
             >
               {evidenceLoading && <Spinner />}
               {!scanResult ? "Run a scan first" : evidenceLoading ? "Creating…" : "Create evidence record"}

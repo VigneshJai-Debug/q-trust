@@ -22,7 +22,7 @@
   --color-border: #e2e8f0;
   --color-input: #e2e8f0;
   --color-ring: #14b8a6;
-  --color-primary: #0d9488;
+  --color-primary: #0a675f;
   --color-primary-foreground: #ffffff;
   --color-secondary: #f1f5f9;
   --color-secondary-foreground: #0f172a;
@@ -41,6 +41,54 @@
 
 html, body {
   height: 100%;
+}
+
+/* Skip link — visible only on keyboard focus */
+.skip-link:focus {
+  position: fixed;
+  left: 1rem;
+  top: 1rem;
+  z-index: 100;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 0.5rem;
+  background-color: var(--color-qtrust-600);
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #ffffff;
+  outline: none;
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px var(--color-qtrust-600);
+}
+
+/* Aurora + glass helpers */
+.aurora-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(48px);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .aurora-blob {
+    display: none;
+  }
 }
 
 /* Custom scrollbar for long lists */

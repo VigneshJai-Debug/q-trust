@@ -3,31 +3,108 @@ site_description: >-
   Q-Trust — on-chain coordination for the post-quantum migration of
   enterprise cryptography. CBOM scanning, GPU-accelerated analysis,
   GNN/RL migration planning, and verifiable provenance on Base L2.
+site_url: https://humoge7502.github.io/q-trust/
 repo_url: https://github.com/humoge7502/q-trust
 repo_name: humoge7502/q-trust
+edit_uri: edit/main/docs/
+copyright: Copyright &copy; 2024 Q-Trust Contributors. MIT Licensed.
+
 theme:
   name: material
   palette:
     - scheme: default
       primary: indigo
       accent: blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
   features:
     - navigation.tabs
     - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.top
+    - navigation.indexes
+    - navigation.footer
     - content.code.copy
+    - content.action.edit
+    - content.code.annotate
   icon:
     repo: fontawesome/brands/github
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/humoge7502/q-trust
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/qtrust-sdk/
+    - icon: material/shield-lock
+      link: https://github.com/humoge7502/q-trust/security/policy
+    - icon: material/book-open-page-variant
+      link: https://humoge7502.github.io/q-trust/
+  version:
+    provider: mike
+
 markdown_extensions:
   - admonition
   - pymdownx.superfences
-  - pymdownx.tabbed
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - pymdownx.emoji
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.keys
+  - attr_list
+  - def_list
   - tables
   - toc:
       permalink: true
+
+plugins:
+  - search
+  - minify:
+      minify_html: true
+      minify_js: true
+      minify_css: true
+      htmlmin_opts:
+        remove_comments: true
+
+validation:
+  nav:
+    omitted_files: info
+    not_found: warn
+    absolute_links: info
+  links:
+    not_found: info
+    absolute_links: info
+    anchors: info
+    unrecognized_links: info
+
+not_in_nav: |
+  8GPU_PLAN.md
+  QTrust_30_Day_Execution_Plan.md
+  assessments/*
+  PHASE_*.md
+  PROMPT.md
+  playbook_review.md
+  demo_run_of_show.md
+  QTrust_Implementation_Guide.md
+
 nav:
   - Home: index.md
   - Architecture: ARCHITECTURE.md
   - Whitepaper: WHITEPAPER.md
+  - API Reference: api.md
+  - CBOM Conformance: CBOM_CONFORMANCE.md
   - GPU Features: GPU_FEATURES.md
   - Performance: PERFORMANCE.md
   - Deployment:
@@ -44,14 +121,13 @@ nav:
       - ADR 0004 — Postgres read model with RPC fallback: adr/0004-postgres-read-model-with-rpc-fallback.md
       - ADR 0005 — In-house Python VC/DID (Veramo for JS later): adr/0005-in-house-python-vc-did-veramo-for-js-later.md
       - ADR 0006 — Deterministic content-addressed IDs: adr/0006-deterministic-content-addressed-ids.md
-  - Runbooks:
+  - Operations:
       - Backup & Restore: runbook/backup-restore.md
       - Incident Response: runbook/incident-response.md
-  # Patent docs — intentionally NOT in public nav. They remain in-repo
-  # (git history is already public) but are excluded from the published
-  # GitHub Pages site until counsel clears filing (audit D-1 / legal risk).
-  # To preview locally: `mkdocs serve` after temporarily removing PATENT/
-  # from `exclude_docs` below.
+  - Contributing: CONTRIBUTING.md
+  - Security: SECURITY.md
+  - Changelog: CHANGELOG.md
+
 exclude_docs: |
   PHASE_*.md
   PROMPT.md

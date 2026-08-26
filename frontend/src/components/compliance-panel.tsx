@@ -118,48 +118,79 @@ export default function CompliancePanel({
       </div>
 
       <div className="rounded-lg border border-border bg-card">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-muted-foreground">
-              <th className="px-4 py-3 font-medium">Rule ID</th>
-              <th className="px-4 py-3 font-medium">Name</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Details</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rules.map((rule) => {
-              const cfg = STATUS_CONFIG[rule.status] || STATUS_CONFIG.NOT_APPLICABLE;
-              const isExpanded = expandedRuleId === rule.ruleId;
-              return (
-                <tr
-                  key={rule.ruleId}
-                  className="border-b border-border last:border-0"
+        {/* Desktop table */}
+        <div className="hidden overflow-x-auto md:block">
+          <table className="w-full text-sm">
+            <caption className="sr-only">Compliance rules assessment</caption>
+            <thead>
+              <tr className="border-b border-border text-left text-muted-foreground">
+                <th scope="col" className="px-4 py-3 font-medium">Rule ID</th>
+                <th scope="col" className="px-4 py-3 font-medium">Name</th>
+                <th scope="col" className="px-4 py-3 font-medium">Status</th>
+                <th scope="col" className="px-4 py-3 font-medium">Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rules.map((rule) => {
+                const cfg = STATUS_CONFIG[rule.status] || STATUS_CONFIG.NOT_APPLICABLE;
+                const isExpanded = expandedRuleId === rule.ruleId;
+                return (
+                  <tr
+                    key={rule.ruleId}
+                    className="border-b border-border last:border-0"
+                  >
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                      {rule.ruleId}
+                    </td>
+                    <td className="px-4 py-3 text-foreground">{rule.ruleName}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${cfg.bg} ${cfg.text}`}
+                      >
+                        {cfg.label}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => toggle(rule.ruleId)}
+                        aria-expanded={isExpanded}
+                        aria-controls={`rule-detail-${rule.ruleId}`}
+                        className="text-xs text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qtrust-600"
+                      >
+                        {isExpanded ? "Hide" : "Show"}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {/* Mobile card fallback */}
+        <div className="divide-y divide-border md:hidden" role="list" aria-label="Compliance rules">
+          {rules.map((rule) => {
+            const cfg = STATUS_CONFIG[rule.status] || STATUS_CONFIG.NOT_APPLICABLE;
+            const isExpanded = expandedRuleId === rule.ruleId;
+            return (
+              <div key={rule.ruleId} className="p-4" role="listitem">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="font-mono text-xs text-muted-foreground">{rule.ruleId}</div>
+                    <div className="mt-1 text-sm font-medium text-foreground">{rule.ruleName}</div>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${cfg.bg} ${cfg.text}`}>{cfg.label}</span>
+                </div>
+                <button
+                  onClick={() => toggle(rule.ruleId)}
+                  aria-expanded={isExpanded}
+                  className="mt-2 text-xs text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qtrust-600"
                 >
-                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                    {rule.ruleId}
-                  </td>
-                  <td className="px-4 py-3 text-foreground">{rule.ruleName}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${cfg.bg} ${cfg.text}`}
-                    >
-                      {cfg.label}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => toggle(rule.ruleId)}
-                      className="text-xs text-primary underline-offset-2 hover:underline"
-                    >
-                      {isExpanded ? "Hide" : "Show"}
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                  {isExpanded ? "Hide details" : "Show details"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
 
         {rules.map((rule) => {
           if (expandedRuleId !== rule.ruleId) return null;
@@ -167,6 +198,7 @@ export default function CompliancePanel({
           return (
             <div
               key={`detail-${rule.ruleId}`}
+              id={`rule-detail-${rule.ruleId}`}
               className="border-t border-border bg-muted/30 px-4 py-3"
             >
               <div className="mb-2 flex items-center gap-2">

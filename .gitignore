@@ -49,6 +49,18 @@ Thumbs.db
 *.swo
 *~
 
+# ─── Coverage ─────────────────────────────────────────────────────────────────
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+coverage*.xml
+.coverage*
+*.cover
+
+# ─── Docs build ───────────────────────────────────────────────────────────────
+site/
+
 # ─── Jupyter ──────────────────────────────────────────────────────────────────
 .ipynb_checkpoints/
 
@@ -56,6 +68,7 @@ Thumbs.db
 *.log
 logs/
 tmp/
+planner/results/*.log
 Q-Trust_Senior_Web3_Audit_Report.pdf
 
 # ─── Reference / analysis artifacts ───────────────────────────────────────

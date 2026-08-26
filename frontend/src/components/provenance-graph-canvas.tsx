@@ -11,7 +11,7 @@ export default function ProvenanceGraphCanvas({ asset, verification }: GraphCanv
   const nodes = [
     { id: "code", label: "Source Code", sub: "scanned by cryptography-inspector", color: "slate" },
     { id: "scanner", label: "Scanner", sub: "cryptography-inspector v0.1", color: "slate" },
-    { id: "cbom", label: "CBOM", sub: asset.cbom_hash.slice(0, 18) + "...", color: "indigo" },
+    { id: "cbom", label: "CBOM", sub: asset.cbom_hash.slice(0, 18) + "...", color: "qtrust" },
     { id: "asset", label: "On-chain Asset", sub: asset.asset_id.slice(0, 18) + "...", color: "emerald" },
     { id: "migration", label: "Migration", sub: "pending", color: "amber" },
   ];
@@ -27,11 +27,11 @@ export default function ProvenanceGraphCanvas({ asset, verification }: GraphCanv
                 backgroundColor:
                   node.color === "emerald" ? "#ecfdf5" :
                   node.color === "amber" ? "#fffbeb" :
-                  node.color === "indigo" ? "#eef2ff" : "#f8fafc",
+                  node.color === "qtrust" ? "#f0fdfa" : "#f8fafc",
                 borderColor:
                   node.color === "emerald" ? "#a7f3d0" :
                   node.color === "amber" ? "#fde68a" :
-                  node.color === "indigo" ? "#c7d2fe" : "#e2e8f0",
+                  node.color === "qtrust" ? "#99f6e4" : "#e2e8f0",
               }}
             >
               <div className="text-xs font-semibold text-slate-800">{node.label}</div>

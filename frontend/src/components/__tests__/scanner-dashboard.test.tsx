@@ -89,9 +89,10 @@ describe("ScannerDashboard", () => {
     expect(screen.getByText("2 findings")).toBeInTheDocument();
     expect(screen.getByText("1 critical")).toBeInTheDocument();
     expect(screen.getByText("1 high")).toBeInTheDocument();
-    expect(screen.getByText("RSA-2048")).toBeInTheDocument();
-    expect(screen.getByText("src/tls.py")).toBeInTheDocument();
-    expect(screen.getByText("quantum-vulnerable key exchange")).toBeInTheDocument();
+    // Table + mobile card fallback both render — use getAllByText
+    expect(screen.getAllByText("RSA-2048")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("src/tls.py")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("quantum-vulnerable key exchange")[0]).toBeInTheDocument();
   });
 
   it("shows the backend error message when the scan request fails", async () => {

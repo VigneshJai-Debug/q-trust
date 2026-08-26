@@ -157,45 +157,76 @@ function PlanView({ plan }: { plan: PlanResult }) {
         </div>
       ) : null}
 
-      <table className="w-full text-left text-xs">
-        <thead>
-          <tr className="border-b border-slate-200 text-slate-500">
-            <th className="py-2 pr-2 font-medium">Rank</th>
-            <th className="py-2 pr-2 font-medium">Asset</th>
-            <th className="py-2 pr-2 font-medium">Algorithm</th>
-            <th className="py-2 pr-2 font-medium">Criticality</th>
-            <th className="py-2 pr-2 font-medium">Effort</th>
-            {sched ? <th className="py-2 pr-2 font-medium">Window</th> : null}
-          </tr>
-        </thead>
-        <tbody>
-          {plan.migration_order.map((a) => {
-            const window = sched?.windows.find((w) => w.asset_id === a.asset_id);
-            return (
-              <tr key={a.asset_id} className="border-b border-slate-100">
-                <td className="py-2 pr-2 font-mono text-slate-400">#{a.rank}</td>
-                <td className="py-2 pr-2 font-mono text-slate-800">{a.asset_id}</td>
-                <td className="py-2 pr-2 text-slate-600">{a.algorithm}</td>
-                <td className="py-2 pr-2">
-                  {a.pqc_ready ? (
-                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">
-                      PQC-ready
-                    </span>
-                  ) : (
-                    <span className="text-slate-600">{a.criticality}</span>
-                  )}
-                </td>
-                <td className="py-2 pr-2 text-slate-600">{a.migrate_days}d</td>
-                {window ? (
-                  <td className="py-2 pr-2 font-mono text-xs text-slate-500">
-                    {window.start.slice(0, 10)} → {window.end.slice(0, 10)}
+      {/* Desktop table */}
+      <div className="hidden overflow-x-auto md:block">
+        <table className="w-full text-left text-xs">
+          <caption className="sr-only">Migration plan — ranked assets</caption>
+          <thead>
+            <tr className="border-b border-slate-200 text-slate-500">
+              <th scope="col" className="py-2 pr-2 font-medium">Rank</th>
+              <th scope="col" className="py-2 pr-2 font-medium">Asset</th>
+              <th scope="col" className="py-2 pr-2 font-medium">Algorithm</th>
+              <th scope="col" className="py-2 pr-2 font-medium">Criticality</th>
+              <th scope="col" className="py-2 pr-2 font-medium">Effort</th>
+              {sched ? <th scope="col" className="py-2 pr-2 font-medium">Window</th> : null}
+            </tr>
+          </thead>
+          <tbody>
+            {plan.migration_order.map((a) => {
+              const window = sched?.windows.find((w) => w.asset_id === a.asset_id);
+              return (
+                <tr key={a.asset_id} className="border-b border-slate-100">
+                  <td className="py-2 pr-2 font-mono text-slate-400">#{a.rank}</td>
+                  <td className="py-2 pr-2 font-mono text-slate-800">{a.asset_id}</td>
+                  <td className="py-2 pr-2 text-slate-600">{a.algorithm}</td>
+                  <td className="py-2 pr-2">
+                    {a.pqc_ready ? (
+                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">
+                        PQC-ready
+                      </span>
+                    ) : (
+                      <span className="text-slate-600">{a.criticality}</span>
+                    )}
                   </td>
-                ) : null}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                  <td className="py-2 pr-2 text-slate-600">{a.migrate_days}d</td>
+                  {window ? (
+                    <td className="py-2 pr-2 font-mono text-xs text-slate-500">
+                      {window.start.slice(0, 10)} → {window.end.slice(0, 10)}
+                    </td>
+                  ) : null}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {/* Mobile card fallback */}
+      <div className="space-y-3 md:hidden" role="list" aria-label="Migration plan">
+        {plan.migration_order.map((a) => {
+          const window = sched?.windows.find((w) => w.asset_id === a.asset_id);
+          return (
+            <div key={a.asset_id} className="rounded-lg border border-slate-200 bg-slate-50 p-3" role="listitem">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-xs font-medium text-slate-500">#{a.rank} · {a.asset_id}</span>
+                <span className="text-xs text-slate-600">{a.migrate_days}d</span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                <span className="rounded bg-white px-2 py-1 font-medium text-slate-700 ring-1 ring-slate-200">{a.algorithm}</span>
+                {a.pqc_ready ? (
+                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">PQC-ready</span>
+                ) : (
+                  <span className="rounded-full bg-white px-2 py-0.5 text-slate-600 ring-1 ring-slate-200">{a.criticality}</span>
+                )}
+              </div>
+              {window ? (
+                <div className="mt-2 font-mono text-[11px] text-slate-500">
+                  {window.start.slice(0, 10)} → {window.end.slice(0, 10)}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

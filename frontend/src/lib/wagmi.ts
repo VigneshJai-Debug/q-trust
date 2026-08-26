@@ -14,11 +14,8 @@ import { base, baseSepolia } from "wagmi/chains";
  * valid project ID from https://cloud.walletconnect.com.
  *
  * Build-time guard (audit F-2): in production the env var must be set to a
- * real project ID — "demo" or missing is a deployment error.
- * This logs a build-time error (and would fail the build if changed to `throw`).
- * Keeping it as `console.error` preserves `npm run build` in CI without a live
- * WalletConnect ID while still making the misconfiguration loudly visible.
- * To enforce a hard fail, replace the `console.error` below with `throw new Error(...)`.
+ * real project ID — "demo" or missing is a deployment error and the build
+ * must fail fast.
  */
 const RAW_WALLETCONNECT_PROJECT_ID = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
 
@@ -26,12 +23,9 @@ const RAW_WALLETCONNECT_PROJECT_ID = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJE
 if (!RAW_WALLETCONNECT_PROJECT_ID || RAW_WALLETCONNECT_PROJECT_ID === "demo") {
   const msg =
     "[Q-Trust] NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID is not set or is 'demo' — wallet connections will be rate-limited. " +
-    "Set a real project ID from https://cloud.walletconnect.com for production. " +
-    "In production this should fail the build (change console.error to throw to enforce).";
+    "Set a real project ID from https://cloud.walletconnect.com for production.";
   if (process.env.NODE_ENV === "production") {
-    console.error(msg);
-    // Uncomment to hard-fail production builds:
-    // throw new Error(msg);
+    throw new Error(msg);
   } else {
     console.warn(msg);
   }

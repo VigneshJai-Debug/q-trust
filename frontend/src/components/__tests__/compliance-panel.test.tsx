@@ -43,12 +43,13 @@ describe("CompliancePanel", () => {
 
   it("renders one row per framework rule with status badges", () => {
     renderPanel();
-    expect(screen.getByText("NIST-1")).toBeInTheDocument();
-    expect(screen.getByText("NIST-2")).toBeInTheDocument();
-    expect(screen.getByText("No quantum-vulnerable key exchange")).toBeInTheDocument();
-    const badge = screen.getByText("Non-Compliant");
-    expect(badge.className).toContain("text-red-600");
-    expect(screen.getByText("Compliant").className).toContain("text-green-600");
+    // Mobile card fallback duplicates table rows — use getAllByText to handle both renderings
+    expect(screen.getAllByText("NIST-1")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("NIST-2")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("No quantum-vulnerable key exchange")[0]).toBeInTheDocument();
+    const badges = screen.getAllByText("Non-Compliant");
+    expect(badges[0].className).toContain("text-red-600");
+    expect(screen.getAllByText("Compliant")[0].className).toContain("text-green-600");
   });
 
   it("expands a rule to show its evidence and recommendation", () => {

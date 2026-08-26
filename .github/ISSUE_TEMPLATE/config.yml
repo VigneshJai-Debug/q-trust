@@ -1,0 +1,21 @@
+# GitHub Issue Template config — controls the "New issue" page.
+# See https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/configuring-issue-templates-for-your-repository#configuring-the-template-chooser
+
+blank_issues_enabled: false
+
+contact_links:
+  - name: Ask a question / discussion
+    url: https://github.com/humoge7502/q-trust/discussions
+    about: Use Discussions for questions, ideas, and general support — faster than an issue.
+  - name: Report a security vulnerability (private)
+    url: https://github.com/humoge7502/q-trust/security/advisories/new
+    about: Do NOT open a public issue. Use Security Advisories or see SECURITY.md for email/PGP.
+  - name: Security policy
+    url: https://github.com/humoge7502/q-trust/blob/main/SECURITY.md
+    about: Supported versions, scope, SLAs, and safe-harbor.
+  - name: Contributing guide
+    url: https://github.com/humoge7502/q-trust/blob/main/CONTRIBUTING.md
+    about: Development setup, testing, and PR process.
+  - name: Documentation
+    url: https://humoge7502.github.io/q-trust
+    about: Architecture, whitepaper, deployment, ADRs, and runbooks.

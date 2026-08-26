@@ -1,17 +1,16 @@
-"use client";
-
 /**
  * Landing page — hero with live verify, 3-step how-it-works, public stats,
  * contract addresses with explorer links, docs links, and architecture visual.
  *
  * Production-grade: mobile-responsive, Tailwind 4, accessible (headings, landmarks,
  * focus rings, aria-live for validation, skip link, reduced-motion safe).
+ *
+ * Server component — interactive islands (VerifyBox, PublicStats, SiteHeader) are
+ * client components imported below.
  */
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { CHAIN, CONTRACTS, parseAssetId } from "@/lib/config";
+import { CHAIN, CONTRACTS } from "@/lib/config";
 import { API_BASE_URL } from "@/lib/api";
 import {
   ShieldCheckIcon,
@@ -21,14 +20,14 @@ import {
   DocumentCheckIcon,
   BeakerIcon,
   CpuChipIcon,
-  ClockIcon,
 } from "@/app/icons";
+import { VerifyBox } from "@/components/verify-box.client";
+import { SiteHeader } from "@/components/site-header.client";
+import { PublicStatsClient } from "@/components/stats-panel.client";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const EXAMPLE_ASSET_ID = "0x7b52d7b29272207cab6c061ee4e58141b434ce20eef955b5684c175ceb12c6b6";
 
 function explorerBase(): string {
   const fromChain = (CHAIN.blockExplorers?.default?.url as string | undefined) ?? null;
@@ -41,182 +40,37 @@ function isConfigured(addr: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Sub-components
+// Sub-components (server)
 // ---------------------------------------------------------------------------
 
 function SkipLink() {
   return (
     <a
       href="#main-content"
-      className="sr-only z-[100] rounded bg-qtrust-600 px-4 py-2 text-sm font-medium text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2"
+      className="skip-link sr-only z-[100] rounded bg-qtrust-600 px-4 py-2 text-sm font-medium text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2"
     >
       Skip to content
     </a>
   );
 }
 
-function SiteHeader() {
-  return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-200/70 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
-      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center gap-2.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qtrust-600 focus-visible:ring-offset-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-qtrust-600 text-[11px] font-bold tracking-widest text-white" aria-hidden="true">
-            QT
-          </span>
-          <span className="text-sm font-semibold tracking-tight text-slate-900">Q-Trust</span>
-          <span className="hidden rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-medium tracking-wide text-white sm:inline-flex">Base L2</span>
-        </Link>
-
-        <nav aria-label="Primary" className="hidden items-center gap-1 md:flex">
-          <Link href="/dashboard" className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qtrust-600">
-            Dashboard
-          </Link>
-          <Link href="/vendors" className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qtrust-600">
-            Vendors
-          </Link>
-          <Link href="/v" className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qtrust-600">
-            Verify
-          </Link>
-          <a
-            href={`${API_BASE_URL.replace(/\/$/, "")}/docs`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qtrust-600"
-          >
-            API docs
-            <ArrowTopRightOnSquareIcon className="h-3 w-3" aria-hidden="true" />
-            <span className="sr-only">(opens in new tab)</span>
-          </a>
-        </nav>
-
-        <div className="flex items-center gap-2">
-          <span className="hidden items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 sm:inline-flex" aria-label="Network status: live">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" aria-hidden="true" />
-            {CHAIN.name}
-          </span>
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center justify-center rounded-lg bg-qtrust-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-qtrust-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qtrust-600 focus-visible:ring-offset-2"
-          >
-            Launch app
-          </Link>
-        </div>
-      </div>
-    </header>
-  );
-}
-
-function VerifyBox() {
-  const router = useRouter();
-  const [value, setValue] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  function handleVerify() {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      setError("Enter an asset ID (0x + 64 hex chars).");
-      return;
-    }
-    try {
-      const parsed = parseAssetId(trimmed);
-      setError(null);
-      router.push(`/v/${parsed}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Invalid asset ID.");
-    }
-  }
-
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-lg shadow-slate-200/50 sm:p-6">
-      <div className="flex items-center gap-2">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20" aria-hidden="true">
-          <ShieldCheckIcon className="h-4 w-4" />
-        </span>
-        <div>
-          <h2 className="text-sm font-semibold text-slate-900">Verify an attestation</h2>
-          <p className="text-xs text-slate-500">Public, no wallet required. Checked on-chain.</p>
-        </div>
-        <span className="ml-auto hidden rounded-full bg-slate-900 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-white sm:inline-flex">Live</span>
-      </div>
-
-      <label htmlFor="verify-input" className="mt-4 block text-xs font-medium text-slate-700">
-        Asset ID <span className="font-normal text-slate-500">(0x + 64 hex)</span>
-      </label>
-      <div className="mt-1 flex gap-2">
-        <input
-          id="verify-input"
-          value={value}
-          onChange={(e) => {
-            setValue(e.target.value);
-            if (error) setError(null);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleVerify();
-          }}
-          placeholder={EXAMPLE_ASSET_ID}
-          spellCheck={false}
-          autoComplete="off"
-          inputMode="text"
-          aria-describedby={error ? "verify-error verify-help" : "verify-help"}
-          aria-invalid={error ? "true" : undefined}
-          className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2.5 font-mono text-xs text-slate-900 placeholder:text-slate-400 focus:border-qtrust-600 focus:outline-none focus:ring-2 focus:ring-qtrust-600/20"
-        />
-        <button
-          type="button"
-          onClick={handleVerify}
-          className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 disabled:opacity-50"
-        >
-          Verify
-          <ArrowRightIcon className="h-3.5 w-3.5" aria-hidden="true" />
-        </button>
-      </div>
-      <p id="verify-help" className="mt-2 text-[11px] leading-relaxed text-slate-500">
-        Paste a full asset ID or try the example. You’ll be taken to{" "}
-        <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11px] text-slate-700">/v/&lt;asset-id&gt;</code> with on-chain status, provenance, and CLI instructions.
-      </p>
-      {error ? (
-        <p id="verify-error" role="alert" aria-live="polite" className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700 ring-1 ring-inset ring-rose-600/20">
-          {error}
-        </p>
-      ) : null}
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => setValue(EXAMPLE_ASSET_ID)}
-          className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700 transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qtrust-600"
-        >
-          Fill example
-        </button>
-        <Link
-          href="/v"
-          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qtrust-600"
-        >
-          What is an asset ID?
-        </Link>
-      </div>
-
-      <div className="mt-4 rounded-lg bg-slate-900 p-3">
-        <div className="text-[10px] font-medium uppercase tracking-widest text-slate-400">Independently via CLI</div>
-        <pre className="mt-1 overflow-x-auto text-[11px] leading-relaxed text-slate-100">
-          <code>{`pip install qtrust-sdk
-python -c "from qtrust import QTrustClient; print(QTrustClient().verify_asset('${EXAMPLE_ASSET_ID.slice(0, 18)}…'))"
-# or
-crypto-inspector verify ${EXAMPLE_ASSET_ID.slice(0, 18)}…`}</code>
-        </pre>
-      </div>
-    </div>
-  );
-}
-
 function Hero() {
   return (
-    <section aria-labelledby="hero-heading" className="relative overflow-hidden border-b border-slate-200 bg-gradient-to-b from-white via-slate-50/70 to-slate-50">
-      {/* decorative grid */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,theme(colors.slate.200)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.slate.200)_1px,transparent_1px)] bg-[size:32px_32px] opacity-[0.18] [mask-image:radial-gradient(ellipse_at_center,black_60%,transparent_75%)]" />
+    <section aria-labelledby="hero-heading" className="relative overflow-hidden border-b border-slate-200 bg-white">
+      {/* aurora gradient mesh */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="aurora-blob -top-32 -left-32 h-[520px] w-[640px] bg-gradient-to-br from-qtrust-500/25 via-teal-400/20 to-cyan-300/20 blur-3xl" style={{ background: "radial-gradient(40% 60% at 30% 30%, rgba(10,103,95,0.18), transparent 70%), radial-gradient(50% 50% at 70% 20%, rgba(45,212,191,0.14), transparent 60%)" }} />
+        <div className="aurora-blob -top-28 right-[-12%] h-[460px] w-[560px] bg-gradient-to-bl from-violet-400/14 via-sky-400/12 to-qtrust-500/16 blur-3xl" />
+        <div className="aurora-blob bottom-[-80px] left-1/2 h-72 w-[720px] -translate-x-1/2 bg-gradient-to-t from-slate-100 via-slate-50/60 to-transparent blur-2xl opacity-60" />
+        {/* soft grid */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,theme(colors.slate.200)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.slate.200)_1px,transparent_1px)] bg-[size:32px_32px] opacity-[0.09] [mask-image:radial-gradient(ellipse_80%_65%_at_50%_0%,black_70%,transparent_110%)]" />
+        {/* top vignette */}
+        <div className="absolute inset-0 bg-gradient-to-b from-white via-transparent to-white/60" />
+      </div>
+
       <div className="relative mx-auto grid max-w-7xl grid-cols-1 gap-8 px-4 py-10 sm:px-6 sm:py-12 lg:grid-cols-12 lg:items-center lg:gap-10 lg:px-8 lg:py-16">
         <div className="lg:col-span-7">
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm">
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/80 px-3 py-1 text-xs font-medium text-slate-600 shadow-sm backdrop-blur">
             <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
             NIST FIPS 203/204/205 — OMB M-23-02 ready
             <span aria-hidden="true" className="text-slate-300">·</span>
@@ -256,15 +110,15 @@ function Hero() {
           </div>
 
           <ul className="mt-6 flex flex-wrap gap-2 text-xs text-slate-500" aria-label="Trust signals">
-            <li className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 ring-1 ring-slate-200">
+            <li className="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1 ring-1 ring-slate-200 backdrop-blur">
               <ShieldCheckIcon className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
               Hash-only on-chain
             </li>
-            <li className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 ring-1 ring-slate-200">
+            <li className="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1 ring-1 ring-slate-200 backdrop-blur">
               <DocumentCheckIcon className="h-3.5 w-3.5 text-slate-600" aria-hidden="true" />
               EIP-712 gasless
             </li>
-            <li className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 ring-1 ring-slate-200">
+            <li className="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1 ring-1 ring-slate-200 backdrop-blur">
               <ChartBarIcon className="h-3.5 w-3.5 text-slate-600" aria-hidden="true" />
               GNN-ranked planning
             </li>
@@ -354,109 +208,6 @@ function HowItWorks() {
         <p className="text-xs leading-6 text-amber-900">
           <strong className="font-semibold">Off-chain stays off-chain.</strong> Full CBOMs, evidence packages, and audit reports are pinned to IPFS or kept in customer storage. On-chain we store only 32-byte hashes, addresses, timestamps, and IPFS URIs — verifiable, gas-efficient, and privacy-preserving.
         </p>
-      </div>
-    </section>
-  );
-}
-
-function PublicStats() {
-  const [health, setHealth] = useState<{ status: string; chain_id: number; relayer: string } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const ctrl = new AbortController();
-    fetch(`${API_BASE_URL.replace(/\/$/, "")}/health`, { signal: ctrl.signal, cache: "no-store" })
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`${r.status}`);
-        const j = (await r.json()) as { status: string; chain_id: number; relayer: string };
-        if (!cancelled) setHealth(j);
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      });
-    return () => {
-      cancelled = true;
-      ctrl.abort();
-    };
-  }, []);
-
-  const stats = [
-    {
-      label: "Registry contracts",
-      value: "11",
-      sub: "Asset · Vendor · Migration · Audit + 7 infra",
-      icon: DocumentCheckIcon,
-    },
-    {
-      label: "Tests & audits",
-      value: "364",
-      sub: "144 Foundry · 166 inspector · 32 SDK · 22 backend",
-      icon: BeakerIcon,
-    },
-    {
-      label: "Chain",
-      value: CHAIN.name,
-      sub: `ID ${CHAIN.id} · ${health ? `health: ${health.status}` : error ? `API unreachable (${error})` : "checking API…"}`,
-      icon: CpuChipIcon,
-    },
-    {
-      label: "Verification",
-      value: "Public",
-      sub: health?.relayer ? `Relayer ${health.relayer.slice(0, 10)}…` : "No wallet needed for /v/[id]",
-      icon: ShieldCheckIcon,
-    },
-  ] as const;
-
-  return (
-    <section aria-labelledby="stats-heading" className="border-y border-slate-200 bg-white">
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 id="stats-heading" className="text-sm font-semibold uppercase tracking-widest text-slate-500">
-              Network at a glance
-            </h2>
-            <p className="mt-1 text-sm text-slate-600">Public, verifiable, and hash-only on-chain. Full CBOMs stay off-chain.</p>
-          </div>
-          <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
-            <ClockIcon className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
-            API: <code className="font-mono text-[11px]">{API_BASE_URL}</code>
-          </span>
-        </div>
-
-        <dl className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {stats.map((s) => (
-            <div key={s.label} className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-              <dt className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-                <s.icon className="h-3.5 w-3.5" aria-hidden="true" />
-                {s.label}
-              </dt>
-              <dd className="mt-2 text-2xl font-bold tracking-tight text-slate-900">{s.value}</dd>
-              <dd className="mt-1 text-xs leading-5 text-slate-600">{s.sub}</dd>
-            </div>
-          ))}
-        </dl>
-
-        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <div className="text-xs font-semibold text-slate-900">For orgs</div>
-            <p className="mt-1 text-xs leading-5 text-slate-600">Connect wallet → see migrations, audit result, and registered assets. EIP-712 gasless — you sign, the relayer pays.</p>
-            <Link href="/dashboard" className="mt-3 inline-flex text-xs font-medium text-qtrust-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qtrust-600">Go to dashboard →</Link>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <div className="text-xs font-semibold text-slate-900">For vendors</div>
-            <p className="mt-1 text-xs leading-5 text-slate-600">Attest product × version × algorithm readiness with evidence URIs. Verifiable by any customer before procurement.</p>
-            <Link href="/vendors" className="mt-3 inline-flex text-xs font-medium text-qtrust-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qtrust-600">Open vendor portal →</Link>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <div className="text-xs font-semibold text-slate-900">For auditors</div>
-            <p className="mt-1 text-xs leading-5 text-slate-600">Post audit attestations bound to on-chain migration counts. Auditors cannot claim more migrations than exist on-chain.</p>
-            <a href={`${explorerBase()}/address/${CONTRACTS.auditRegistry !== "0x0" ? CONTRACTS.auditRegistry : ""}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-qtrust-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qtrust-600">
-              View AuditRegistry
-              <ArrowTopRightOnSquareIcon className="h-3 w-3" aria-hidden="true" />
-            </a>
-          </div>
-        </div>
       </div>
     </section>
   );
@@ -763,7 +514,7 @@ function SiteFooter() {
 }
 
 // ---------------------------------------------------------------------------
-// Page
+// Page (server)
 // ---------------------------------------------------------------------------
 
 export default function HomePage() {
@@ -774,7 +525,7 @@ export default function HomePage() {
       <main id="main-content">
         <Hero />
         <HowItWorks />
-        <PublicStats />
+        <PublicStatsClient />
         <ContractsSection />
         <ArchitecturePlaceholder />
         <DocsLinks />
