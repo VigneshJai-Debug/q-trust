@@ -12,7 +12,7 @@ torch-geometric>=2.5.0
 # auto-detects GPU Aer and falls back to CPU Aer / classical factoring with
 # honest method labels when unavailable.
 qiskit>=1.0.0
-qiskit-aer>=0.13.3
+qiskit-aer>=0.17.2
 
 # Side-channel analysis
 numpy>=1.26.0
