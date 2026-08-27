@@ -11,7 +11,7 @@ torch-geometric>=2.5.0
 # or build qiskit-aer from source with AER_THRUST_BACKEND=CUDA). The estimator
 # auto-detects GPU Aer and falls back to CPU Aer / classical factoring with
 # honest method labels when unavailable.
-qiskit>=1.0.0
+qiskit>=2.5.2
 qiskit-aer>=0.13.3
 
 # Side-channel analysis
