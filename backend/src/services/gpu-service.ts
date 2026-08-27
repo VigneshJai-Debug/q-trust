@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { requireApiKey } from "../middleware/auth.js";
@@ -31,15 +31,103 @@ interface BridgeResult {
   payload: Record<string, unknown>;
 }
 
+// P2-11: persistent daemon — warm models, single process, multiplexed JSON lines
+// Keeps one python3 gpu_bridge.py daemon alive and pipelines requests over its stdin/stdout
+let daemonProc: ChildProcess | null = null;
+let daemonPending = new Map<string, { resolve: (r: BridgeResult) => void; timer: NodeJS.Timeout }>();
+let daemonNextId = 0;
+let daemonBuf = "";
+
+function ensureDaemon(): ChildProcess | null {
+  if (daemonProc && !daemonProc.killed && daemonProc.exitCode === null) return daemonProc;
+  // Spawn daemon; if it fails, caller falls back to per-request spawn
+  try {
+    daemonProc = spawn(process.env.QTRUST_INSPECTOR_PYTHON || "python3", [GPU_BRIDGE, "daemon"], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    daemonProc.stdout?.on("data", (d: Buffer) => {
+      daemonBuf += d.toString();
+      let idx: number;
+      while ((idx = daemonBuf.indexOf("\n")) !== -1) {
+        const line = daemonBuf.slice(0, idx).trim();
+        daemonBuf = daemonBuf.slice(idx + 1);
+        if (!line) continue;
+        try {
+          const msg = JSON.parse(line) as { id: string; code: number; result: Record<string, unknown> };
+          const pending = daemonPending.get(msg.id);
+          if (pending) {
+            clearTimeout(pending.timer);
+            daemonPending.delete(msg.id);
+            pending.resolve({ code: msg.code, payload: msg.result });
+          }
+        } catch {
+          // ignore parse errors on daemon channel
+        }
+      }
+    });
+    daemonProc.stderr?.on("data", (d: Buffer) => {
+      if (d.toString().trim()) console.error(`[gpu-daemon] ${d.toString().trim().slice(0, 500)}`);
+    });
+    daemonProc.on("error", () => {
+      daemonProc = null;
+    });
+    daemonProc.on("close", () => {
+      // Reject all pending
+      for (const [, p] of daemonPending) {
+        clearTimeout(p.timer);
+        p.resolve({ code: -1, payload: { error: "daemon_closed" } });
+      }
+      daemonPending.clear();
+      daemonProc = null;
+    });
+    return daemonProc;
+  } catch {
+    return null;
+  }
+}
+
+function runBridgeViaDaemon(
+  subcommand: string,
+  payload: Record<string, unknown>,
+  timeoutMs: number,
+): Promise<BridgeResult | null> {
+  const proc = ensureDaemon();
+  if (!proc || !proc.stdin || proc.killed) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const id = String(++daemonNextId);
+    const timer = setTimeout(() => {
+      daemonPending.delete(id);
+      resolve({ code: -1, payload: { error: "daemon_timeout" } });
+    }, timeoutMs);
+    daemonPending.set(id, { resolve, timer });
+    try {
+      proc.stdin!.write(JSON.stringify({ id, cmd: subcommand, payload }) + "\n");
+    } catch {
+      clearTimeout(timer);
+      daemonPending.delete(id);
+      resolve(null);
+    }
+  });
+}
+
 /**
- * Run the static python bridge, passing the request payload via stdin only.
+ * Run the python bridge, preferring the warm daemon (P2-11 persistent service)
+ * and falling back to per-request spawn if the daemon is unavailable.
  * Request data never touches argv or interpolated source strings.
+ * Daemon is opt-in via QTRUST_GPU_DAEMON=true (warm models, multiplexed);
+ * tests and simple dev setups keep the per-request spawn path.
  */
-function runBridge(
+async function runBridge(
   subcommand: string,
   payload: Record<string, unknown>,
   timeoutMs: number,
 ): Promise<BridgeResult> {
+  // Prefer daemon for side-channel/anomaly/quantum where model load matters
+  if (process.env.QTRUST_GPU_DAEMON === "true") {
+    const viaDaemon = await runBridgeViaDaemon(subcommand, payload, timeoutMs);
+    if (viaDaemon !== null) return viaDaemon;
+  }
+  // Fallback: per-request spawn (original path, used for status or when daemon disabled)
   return new Promise((resolve) => {
     const child = spawn(process.env.QTRUST_INSPECTOR_PYTHON || "python3", [GPU_BRIDGE, subcommand], {
       stdio: ["pipe", "pipe", "pipe"],
@@ -91,7 +179,7 @@ export async function registerGPURoutes(server: FastifyInstance): Promise<void> 
         available: payload.available === true,
         device_name: (payload.device_name as string) ?? null,
         memory_total_gb: (payload.memory_total_gb as number) ?? null,
-        models_loaded: [],
+        models_loaded: Array.isArray(payload.models_loaded) ? (payload.models_loaded as string[]) : [],
       };
       cachedStatus = { at: now, data };
       return { ...data, gpu_enabled: gpuEnabled(), planner_url: PLANNER_URL };

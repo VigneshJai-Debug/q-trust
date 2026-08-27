@@ -260,14 +260,29 @@ app.add_middleware(ApiKeyMiddleware)
 #       trade-off is visible.
 #   See docs/WHITEPAPER.md §6.5, CHANGELOG "Benchmark Kendall-tau protocol bug".
 # ---------------------------------------------------------------------------
-MODEL_PATH = os.environ.get("QTRUST_MODEL_PATH", str(Path(__file__).resolve().parents[1] / "model.pt"))
+MODEL_PATH = os.environ.get("QTRUST_MODEL_PATH", str(Path(__file__).resolve().parent / "model.pt"))
+# P0-3: wire v3 and real variants via env vars (ship empty by default, operator sets them)
+MODEL_PATH_V3 = os.environ.get("QTRUST_MODEL_PATH_V3", str(Path(__file__).resolve().parent / "model_gpu_v3.pt"))
+MODEL_PATH_DDP = os.environ.get("QTRUST_MODEL_PATH_DDP", str(Path(__file__).resolve().parent / "model_ddp_v3.pt"))
+MODEL_PATH_REAL = os.environ.get("QTRUST_PLANNER_MODEL_REAL", str(Path(__file__).resolve().parent / "model_gpu_v3_real.pt"))
+RL_MODEL_PATH = os.environ.get("QTRUST_RL_MODEL_PATH", str(Path(__file__).resolve().parent / "rl_agent.pt"))
+RL_MODEL_PATH_REAL = os.environ.get("QTRUST_RL_MODEL_REAL", str(Path(__file__).resolve().parent / "rl_agent_real.pt"))
 DEADLINES_PATH = os.environ.get(
-    "QTRUST_DEADLINES_PATH", str(Path(__file__).resolve().parents[1] / "data" / "algorithms.json")
+    "QTRUST_DEADLINES_PATH", str(Path(__file__).resolve().parent / "data" / "algorithms.json")
 )
 
 _model = None
 _model_info: dict[str, Any] = {}
 _deadlines: dict[str, Any] = {}
+# P0-3: registry of all candidate model artifacts for health reporting
+_MODEL_CANDIDATES = {
+    "v2": MODEL_PATH,
+    "v3_gpu": MODEL_PATH_V3,
+    "v3_ddp": MODEL_PATH_DDP,
+    "v3_real": MODEL_PATH_REAL,
+    "rl": RL_MODEL_PATH,
+    "rl_real": RL_MODEL_PATH_REAL,
+}
 
 
 def _warn_heuristic_mode(reason: str) -> None:
@@ -287,41 +302,122 @@ except FileNotFoundError:
     _deadlines = {}
 
 
+def _resolve_checkpoint_path() -> tuple[str | None, str]:
+    """P0-3: resolve model path with fallback chain so DDP artifact has a consumer.
+    Priority: QTRUST_MODEL_PATH (explicit) -> model_gpu_v3.pt -> model_ddp_v3.pt -> model.pt
+    Also supports QTRUST_PLANNER_MODEL_REAL when it exists.
+    Returns (path, variant) or (None, reason).
+    """
+    # Check real variant first if operator requested
+    if os.path.exists(MODEL_PATH_REAL):
+        return MODEL_PATH_REAL, "v3_real"
+    candidates = [
+        (MODEL_PATH, "v2_explicit" if MODEL_PATH != str(Path(__file__).resolve().parent / "model.pt") else "v2"),
+        (MODEL_PATH_V3, "v3_gpu"),
+        (MODEL_PATH_DDP, "v3_ddp"),
+        (str(Path(__file__).resolve().parent / "model.pt"), "v2_fallback"),
+    ]
+    for p, variant in candidates:
+        if p and os.path.exists(p):
+            return p, variant
+    return None, "no checkpoint found in any candidate"
+
+def _instantiate_model_from_checkpoint(checkpoint: dict, path: str):
+    """Instantiate MigrationGNN or MigrationGNNv3 based on checkpoint config/shape."""
+    import torch
+    # Detect v3 by config or state_dict keys
+    config = checkpoint.get("model_config", {})
+    state_dict = checkpoint.get("model_state_dict") or checkpoint.get("state_dict")
+    # Check for v3 indicators: hidden_dim == 256, embedding_dim == 128, or bn/conv4 keys
+    is_v3 = False
+    if isinstance(state_dict, dict):
+        # Look for v3-specific keys
+        v3_keys = {"conv4.weight", "bn4.weight", "order_head.fc1.weight"}
+        if any(k in state_dict for k in v3_keys):
+            is_v3 = True
+    if config.get("hidden_dim", 64) == 256 or config.get("embedding_dim", 32) == 128:
+        is_v3 = True
+    # Also handle legacy checkpoints that stored flat state_dict (no wrapper)
+    if not isinstance(state_dict, dict) or len(state_dict) == 0:
+        # Could be flat state_dict for v3
+        is_v3 = any(k.startswith("conv4") or k.startswith("bn4") for k in checkpoint.keys()) if isinstance(checkpoint, dict) else False
+        if is_v3:
+            state_dict = checkpoint
+            config = {"input_features": 6, "hidden_dim": 256, "embedding_dim": 128}
+    if is_v3:
+        from qtrust_planner.model_v3 import MigrationGNNv3
+        # Infer norm from checkpoint if possible
+        norm = "batch"
+        cfg = dict(config) if config else {"input_features": 6, "hidden_dim": 256, "embedding_dim": 128}
+        # Handle Lite config mapping
+        if "heads" not in cfg:
+            cfg["heads"] = 8
+        # Filter to known kwargs
+        allowed = {"input_features", "hidden_dim", "embedding_dim", "heads", "dropout", "use_centrality", "variant", "norm"}
+        cfg = {k: v for k, v in cfg.items() if k in allowed}
+        model = MigrationGNNv3(**cfg)
+        # state_dict already extracted
+        if state_dict is None:
+            state_dict = checkpoint.get("state_dict") or checkpoint
+        model.load_state_dict(state_dict, strict=False)
+        return model, cfg, "v3"
+    else:
+        from qtrust_planner.model import MigrationGNN
+        if state_dict is None:
+            raise ValueError("checkpoint contains no usable model_state_dict")
+        cfg = config if config else {"input_features": 6, "hidden_dim": 64, "embedding_dim": 32}
+        model = MigrationGNN(**cfg)
+        model.load_state_dict(state_dict)
+        return model, cfg, "v2"
+
 def _load_model() -> None:
     global _model, _model_info
     try:
         import torch
-        from qtrust_planner.model import MigrationGNN
     except ImportError as exc:
         _warn_heuristic_mode(f"torch/model deps not importable: {exc}")
-        _model_info = {"mode": "heuristic", "reason": "torch not installed"}
+        _model_info = {"mode": "heuristic", "reason": "torch not installed", "candidates": _MODEL_CANDIDATES}
         return
 
-    if not os.path.exists(MODEL_PATH):
-        _warn_heuristic_mode(f"model file not found at {MODEL_PATH}")
-        _model_info = {"mode": "heuristic", "reason": "model.pt not found"}
+    resolved_path, variant = _resolve_checkpoint_path()
+    # P0-3: report candidate discovery for serving gap audit
+    candidates_status = {k: os.path.exists(v) for k, v in _MODEL_CANDIDATES.items()}
+    if resolved_path is None:
+        _warn_heuristic_mode(f"model file not found — checked {list(_MODEL_CANDIDATES.values())}")
+        _model_info = {"mode": "heuristic", "reason": "no checkpoint found", "candidates": candidates_status, "tried": list(_MODEL_CANDIDATES.values())}
         return
 
     try:
         # nosemgrep — torch.load with weights_only=True: safe deserialization
-        checkpoint = torch.load(MODEL_PATH, map_location="cpu", weights_only=True)
-        config = checkpoint.get("model_config", {"input_features": 6, "hidden_dim": 64, "embedding_dim": 32})
-        state_dict = checkpoint.get("model_state_dict")
-        if not isinstance(state_dict, dict) or len(state_dict) == 0:
-            raise ValueError("checkpoint contains no usable model_state_dict")
-        model = MigrationGNN(**config)
-        model.load_state_dict(state_dict)
+        checkpoint = torch.load(resolved_path, map_location="cpu", weights_only=True)
+        # Handle flat state_dict case (no wrapper dict)
+        if isinstance(checkpoint, dict) and "model_state_dict" not in checkpoint and "state_dict" not in checkpoint:
+            # Assume flat state_dict
+            if all(isinstance(v, torch.Tensor) for v in checkpoint.values()):
+                checkpoint = {"model_state_dict": checkpoint, "model_config": {}}
+        model, cfg, arch = _instantiate_model_from_checkpoint(checkpoint, resolved_path)
         model.eval()
         _model = model
+        # Robust metrics extraction
+        eval_metrics = checkpoint.get("eval_metrics", {}) if isinstance(checkpoint, dict) else {}
+        if not eval_metrics:
+            eval_metrics = checkpoint.get("best_val_kendall", {})
+            if isinstance(eval_metrics, float):
+                eval_metrics = {"kendall": eval_metrics}
         _model_info = {
             "mode": "gnn",
-            "path": MODEL_PATH,
-            "config": config,
-            "eval_metrics": checkpoint.get("eval_metrics", {}),
+            "arch": arch,
+            "variant": variant,
+            "path": resolved_path,
+            "config": cfg,
+            "eval_metrics": eval_metrics,
+            "candidates": candidates_status,
+            "served": True,
         }
+        logger.info(json.dumps({"event": "planner_model_loaded", "path": resolved_path, "arch": arch, "variant": variant}))
     except Exception as exc:
-        _warn_heuristic_mode(f"model load failed: {type(exc).__name__}: {exc}")
-        _model_info = {"mode": "heuristic", "reason": f"model load failed: {exc}"}
+        _warn_heuristic_mode(f"model load failed at {resolved_path}: {type(exc).__name__}: {exc}")
+        _model_info = {"mode": "heuristic", "reason": f"model load failed: {exc}", "candidates": candidates_status, "tried_path": resolved_path}
 
 
 def _heuristic_priority(asset: dict[str, Any]) -> float:
@@ -488,8 +584,16 @@ def plan_with_deadline(req: DeadlineRequest) -> dict[str, Any]:
 
 
 _RL_BUDGET_SECONDS = 2.0
-_RL_MODEL_PATH = Path(__file__).resolve().parent / "rl_agent.pt"
+_RL_MODEL_PATH = Path(RL_MODEL_PATH) if RL_MODEL_PATH else Path(__file__).resolve().parent / "rl_agent.pt"
+_RL_MODEL_PATH_REAL = Path(RL_MODEL_PATH_REAL) if RL_MODEL_PATH_REAL else Path(__file__).resolve().parent / "rl_agent_real.pt"
 _RL_AGENT_CACHE: dict[str, Any] | None = None
+
+def _resolve_rl_model_path() -> Path | None:
+    """P0-3: resolve RL model — real variant has priority when present."""
+    for p in (_RL_MODEL_PATH_REAL, _RL_MODEL_PATH):
+        if p.exists():
+            return p
+    return None
 
 
 def _rl_migration_order(req: PlanRequest) -> tuple[list[dict[str, Any]], str] | None:
@@ -498,7 +602,8 @@ def _rl_migration_order(req: PlanRequest) -> tuple[list[dict[str, Any]], str] | 
     Returns (migration_order, method) or None when the RL checkpoint is
     missing or torch/PyG are unavailable.
     """
-    if not _RL_MODEL_PATH.exists():
+    rl_path = _resolve_rl_model_path()
+    if rl_path is None or not rl_path.exists():
         return None
 
     try:
@@ -516,20 +621,20 @@ def _rl_migration_order(req: PlanRequest) -> tuple[list[dict[str, Any]], str] | 
     # once; a 30-80ms disk hit per inference adds up under load).
     global _RL_AGENT_CACHE  # noqa: PLW0603
     cached = _RL_AGENT_CACHE
-    if cached is not None and cached["path"] == _RL_MODEL_PATH and cached["device"] == device:
+    if cached is not None and cached["path"] == rl_path and cached["device"] == device:
         agent = cached["agent"]
     else:
         agent = MigrationAgent(n_features=6, hidden_dim=128).to(device)
         try:
             agent.load_state_dict(
                 # nosemgrep — torch.load with weights_only=True: safe deserialization
-                torch.load(str(_RL_MODEL_PATH), map_location=device, weights_only=True)
+                torch.load(str(rl_path), map_location=device, weights_only=True)
             )
         except Exception as exc:
             logger.warning("rl_agent checkpoint unusable: %s", exc)
             return None
         agent.eval()
-        _RL_AGENT_CACHE = {"path": _RL_MODEL_PATH, "device": device, "agent": agent}
+        _RL_AGENT_CACHE = {"path": rl_path, "device": device, "agent": agent}
 
     crit_map = {"low": 1, "medium": 2, "high": 3, "critical": 4}
     from qtrust_planner.model_v3 import encode_algorithm_type

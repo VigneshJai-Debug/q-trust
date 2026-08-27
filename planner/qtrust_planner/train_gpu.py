@@ -30,20 +30,55 @@ from .model_v3 import MigrationGNNv3
 
 
 def listMLE_loss(order_logits: torch.Tensor, y_order: torch.Tensor) -> torch.Tensor:
-    """ListMLE ranking loss (Plackett-Luce likelihood).
+    """ListMLE ranking loss (Plackett-Luce likelihood) for a SINGLE graph.
 
     Args:
-        order_logits: (N,) predicted priority scores.
+        order_logits: (N,) predicted priority scores for one graph.
         y_order: (N,) ground-truth rank of each node (0 = first to migrate).
+    Returns:
+        Scalar loss; caller must average across graphs in a batch.
+        For batched tensors spanning multiple graphs, use per_graph_listMLE_loss.
     """
+    if order_logits.numel() <= 1:
+        return torch.zeros((), device=order_logits.device)
     perm = torch.argsort(y_order)
     scores = order_logits[perm]
     max_val = scores.max().detach()
     scores = scores - max_val
     # logcumsumexp from the bottom of the ranked list upward
     log_cumsum = torch.logcumsumexp(scores.flip(0), dim=0).flip(0)
-    loss = -(scores - log_cumsum).sum()
+    # P0-1 fix: mean reduction so loss is comparable across graph sizes
+    loss = (log_cumsum - scores).mean()
     return loss
+
+
+def per_graph_listMLE_loss(
+    order_logits: torch.Tensor,
+    y_order: torch.Tensor,
+    batch_idx: torch.Tensor | None,
+) -> torch.Tensor:
+    """Compute ListMLE per-graph and average.
+
+    When batch_idx is None, treats the entire tensor as one graph
+    (backward compatible single-graph path). Otherwise iterates over
+    unique graph ids in batch_idx — this is the P0-1 fix for the
+    cross-graph ListMLE bug documented in diagnosis register P0-1.
+    """
+    if batch_idx is None:
+        return listMLE_loss(order_logits, y_order)
+    # Ensure batch_idx is on same device
+    if batch_idx.device != order_logits.device:
+        batch_idx = batch_idx.to(order_logits.device)
+    n_graphs = int(batch_idx.max().item()) + 1 if batch_idx.numel() > 0 else 1
+    if n_graphs == 1:
+        return listMLE_loss(order_logits, y_order)
+    total = torch.zeros((), device=order_logits.device)
+    for gid in range(n_graphs):
+        mask = batch_idx == gid
+        if mask.sum() == 0:
+            continue
+        total = total + listMLE_loss(order_logits[mask], y_order[mask])
+    return total / n_graphs
 
 
 def _kendall_tau(pred: torch.Tensor, true_rank: torch.Tensor) -> float:
@@ -155,8 +190,37 @@ def train_gpu(
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Model parameters: {n_params:,}")
 
+    # P2-10: torch.compile for 2-4x throughput on A100 when available
+    if use_cuda:
+        try:
+            model = torch.compile(model)  # type: ignore[attr-defined]
+            print("Model compiled with torch.compile")
+        except Exception as e:
+            print(f"torch.compile unavailable: {e}")
+
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-    scaler = torch.amp.GradScaler("cuda", enabled=use_cuda)
+    # P0/P2 fix: warmup-cosine schedule (fixes constant 1e-3) — 3% warmup per doctrine
+    warmup_epochs = max(1, int(epochs * 0.03))
+    def _lr_lambda(epoch: int) -> float:
+        if epoch < warmup_epochs:
+            return float(epoch + 1) / float(max(1, warmup_epochs))
+        # cosine decay from 1 -> 0.1
+        import math
+        progress = (epoch - warmup_epochs) / max(1, epochs - warmup_epochs)
+        return 0.1 + 0.9 * 0.5 * (1.0 + math.cos(math.pi * progress))
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda)
+    # P0/P2 fix: GradScaler is for fp16 only; bf16 is numerically stable without scaling
+    # Do not create a scaler when using bf16 autocast (documented no-op + wasted memory)
+    scaler = None  # bf16 does not need GradScaler
+    # Grad accumulation for long sequences (seq len 2048-8192) — default 1 (no accumulation)
+    grad_accum = int(os.environ.get("QTRUST_GRAD_ACCUM", "1"))
+    if grad_accum < 1:
+        grad_accum = 1
+
+    # Data provenance for registry (hash of generation params)
+    import hashlib
+    import json as _json
+    data_hash = hashlib.sha256(f"{n_graphs}-{seed}-{batch_size}".encode()).hexdigest()[:16]
 
     best_val_kendall = -1.0
     train_start = time.time()
@@ -165,72 +229,121 @@ def train_gpu(
         model.train()
         total_loss = 0.0
         n_batches = 0
+        optimizer.zero_grad()
 
-        for batch in train_loader:
+        for step, batch in enumerate(train_loader):
             batch = batch.to(device)
-            optimizer.zero_grad()
+            batch_idx = getattr(batch, "batch", None)
 
             if use_cuda:
                 with torch.amp.autocast("cuda", dtype=torch.bfloat16):
                     order_logits, risk_logits = model(batch)
-                    loss_order = listMLE_loss(order_logits.float(), batch.y_order)
+                    # P0-1: per-graph ListMLE (fixes cross-graph ranking bug)
+                    loss_order = per_graph_listMLE_loss(order_logits.float(), batch.y_order, batch_idx)
                     loss_risk = F.mse_loss(risk_logits.float(), batch.y_risk)
                     loss = loss_order + 0.3 * loss_risk
-                scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
+                    # scale for grad accumulation
+                    loss = loss / grad_accum
+                loss.backward()
+                # optimizer step only every grad_accum batches or at epoch end
+                if (step + 1) % grad_accum == 0 or (step + 1) == len(train_loader):
+                    optimizer.step()
+                    optimizer.zero_grad()
             else:
                 order_logits, risk_logits = model(batch)
-                loss_order = listMLE_loss(order_logits, batch.y_order)
+                loss_order = per_graph_listMLE_loss(order_logits, batch.y_order, batch_idx)
                 loss_risk = F.mse_loss(risk_logits, batch.y_risk)
-                loss = loss_order + 0.3 * loss_risk
+                loss = (loss_order + 0.3 * loss_risk) / grad_accum
                 loss.backward()
-                optimizer.step()
+                if (step + 1) % grad_accum == 0 or (step + 1) == len(train_loader):
+                    optimizer.step()
+                    optimizer.zero_grad()
 
-            total_loss += loss.item()
+            total_loss += loss.item() * grad_accum
             n_batches += 1
 
         avg_train_loss = total_loss / max(n_batches, 1)
+        scheduler.step()
 
-        if (epoch + 1) % 10 == 0 or epoch == 0 or epoch == epochs - 1:
-            model.eval()
-            all_metrics = {"kendall": [], "top5": [], "top10": []}
+        # Evaluate every epoch for reliable best-model selection (fixes "sample every 10th")
+        # and compute per-graph metrics to avoid batch-level bias.
+        model.eval()
+        all_metrics = {"kendall": [], "top5": [], "top10": []}
 
-            with torch.no_grad():
-                for batch in val_loader:
-                    batch = batch.to(device)
-                    if use_cuda:
-                        with torch.amp.autocast("cuda", dtype=torch.bfloat16):
-                            order_logits, _ = model(batch)
-                        order_logits = order_logits.float()
-                    else:
+        with torch.no_grad():
+            for batch in val_loader:
+                batch = batch.to(device)
+                batch_idx = getattr(batch, "batch", None)
+                if use_cuda:
+                    with torch.amp.autocast("cuda", dtype=torch.bfloat16):
                         order_logits, _ = model(batch)
-                    metrics = compute_metrics(order_logits, batch.y_order)
+                    order_logits = order_logits.float()
+                else:
+                    order_logits, _ = model(batch)
+                # P0-1: per-graph metrics — iterate over graphs in batch
+                if batch_idx is not None:
+                    for gid in range(int(batch_idx.max().item()) + 1):
+                        mask = batch_idx == gid
+                        if mask.sum() < 2:
+                            continue
+                        m = compute_metrics(order_logits[mask], batch.y_order[mask])
+                        for k in all_metrics:
+                            all_metrics[k].append(m[k])
+                else:
+                    m = compute_metrics(order_logits, batch.y_order)
                     for k in all_metrics:
-                        all_metrics[k].append(metrics[k])
+                        all_metrics[k].append(m[k])
 
+        if len(all_metrics["kendall"]) == 0:
+            avg_kendall = 0.0
+            avg_top5 = 0.0
+            avg_top10 = 0.0
+        else:
             avg_kendall = sum(all_metrics["kendall"]) / len(all_metrics["kendall"])
             avg_top5 = sum(all_metrics["top5"]) / len(all_metrics["top5"])
             avg_top10 = sum(all_metrics["top10"]) / len(all_metrics["top10"])
 
-            gpu_mem = torch.cuda.memory_allocated() / 1e9 if use_cuda else 0.0
-            elapsed = time.time() - train_start
+        gpu_mem = torch.cuda.memory_allocated() / 1e9 if use_cuda else 0.0
+        elapsed = time.time() - train_start
+        current_lr = optimizer.param_groups[0]["lr"]
+        # Log every 10 epochs + first/last, but track best every epoch
+        if (epoch + 1) % 10 == 0 or epoch == 0 or epoch == epochs - 1:
             print(
                 f"Epoch {epoch+1:>3}/{epochs} | "
-                f"loss={avg_train_loss:.4f} | "
+                f"loss={avg_train_loss:.4f} lr={current_lr:.2e} | "
                 f"val tau={avg_kendall:.4f} top5={avg_top5:.3f} top10={avg_top10:.3f} | "
-                f"GPU={gpu_mem:.1f}GB | elapsed={elapsed:.0f}s"
+                f"GPU={gpu_mem:.1f}GB | elapsed={elapsed:.0f}s | data_hash={data_hash}"
             )
 
-            if avg_kendall > best_val_kendall:
-                best_val_kendall = avg_kendall
+        if avg_kendall > best_val_kendall:
+            best_val_kendall = avg_kendall
+            # Save with lineage: config, seed, data_hash, metrics (fixes opaque checkpoints)
+            payload = {
+                "model_state_dict": model.state_dict() if not hasattr(model, "_orig_mod") else model._orig_mod.state_dict(),  # type: ignore[attr-defined]
+                "state_dict": model.state_dict() if not hasattr(model, "_orig_mod") else model._orig_mod.state_dict(),  # compat
+                "model_config": {"input_features": 6, "hidden_dim": 256, "embedding_dim": 128, "heads": 8},
+                "epochs": epoch + 1,
+                "n_graphs": n_graphs,
+                "seed": seed,
+                "data_hash": data_hash,
+                "best_val_kendall": best_val_kendall,
+                "best_val_top5": avg_top5,
+                "best_val_top10": avg_top10,
+                "val_split": val_split,
+                "learning_rate": learning_rate,
+                "weight_decay": weight_decay,
+            }
+            # Handle compiled model unwrapping
+            try:
+                torch.save(payload, model_path)
+            except Exception:
                 torch.save(model.state_dict(), model_path)
-                print(f"  -> Saved best model (tau={best_val_kendall:.4f})")
+            print(f"  -> Saved best model (tau={best_val_kendall:.4f})")
 
     total_time = time.time() - train_start
     print(f"\nTraining complete in {total_time:.0f}s ({total_time/60:.1f} min)")
     print(f"Best validation Kendall tau: {best_val_kendall:.4f}")
-    print(f"Model saved to: {model_path}")
+    print(f"Model saved to: {model_path} (data_hash={data_hash})")
     return model_path
 
 

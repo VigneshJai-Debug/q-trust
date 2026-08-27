@@ -87,81 +87,124 @@ async function validateScanDirectory(rawDir: string): Promise<string> {
   return resolved;
 }
 
-const ALGORITHM_RISK_MAP: Record<string, string> = {
-  RSA: "BROKEN",
-  ECDSA: "BROKEN",
-  ECDH: "BROKEN",
-  DSA: "BROKEN",
-  Ed25519: "BROKEN",
-  Ed448: "BROKEN",
-  DH: "BROKEN",
-  MD5: "WEAKENED",
-  "SHA-1": "WEAKENED",
-  DES: "WEAKENED",
-  "3DES": "WEAKENED",
-  RC4: "WEAKENED",
-  "SHA-256": "SAFE",
-  "SHA-384": "SAFE",
-  "SHA-512": "SAFE",
-  "AES-256": "SAFE",
-  ChaCha20: "SAFE",
-  "ML-KEM": "PQC_READY",
-  "ML-DSA": "PQC_READY",
-  "SLH-DSA": "PQC_READY",
-  HQC: "PQC_READY",
-  FALCON: "PQC_READY",
+// P2-12: single canonical risk scoring — mirrors inspector/qtrust_inspector/risk_engine.py
+// and qtrust_common/heuristics.py so that parallel_scanner, risk_engine, and
+// scanner.ts no longer diverge (RSA-2048 scored 74 vs 90 before unification).
+
+const ALGORITHM_VULNERABILITY_DB: Record<string, string> = {
+  RSA: "BROKEN", "RSA-1024": "BROKEN", "RSA-2048": "BROKEN", "RSA-4096": "BROKEN",
+  ECDSA: "BROKEN", "ECDSA-P256": "BROKEN", "ECDSA-P384": "BROKEN", "ECDSA-P521": "BROKEN",
+  ECDH: "BROKEN", "ECDH-P256": "BROKEN", "ECDH-P384": "BROKEN", "ECDH-P521": "BROKEN",
+  DSA: "BROKEN", Ed25519: "BROKEN", Ed448: "BROKEN", DH: "BROKEN", "DH-2048": "BROKEN", "DH-4096": "BROKEN",
+  X25519: "BROKEN", X448: "BROKEN",
+  "AES-128": "WEAKENED", "3DES": "WEAKENED", DES: "WEAKENED", "HMAC-MD5": "WEAKENED",
+  "AES-256": "SAFE", "AES-192": "SAFE", "ChaCha20-Poly1305": "SAFE", "SHA-256": "SAFE", "SHA-384": "SAFE", "SHA-512": "SAFE",
+  "SHA3-256": "SAFE", "SHA3-384": "SAFE", "SHA3-512": "SAFE", "HMAC-SHA256": "SAFE", "HMAC-SHA384": "SAFE", "HMAC-SHA512": "SAFE",
+  "ML-KEM-512": "PQC_READY", "ML-KEM-768": "PQC_READY", "ML-KEM-1024": "PQC_READY",
+  "ML-DSA-44": "PQC_READY", "ML-DSA-65": "PQC_READY", "ML-DSA-87": "PQC_READY",
+  "SLH-DSA-SHA2-128s": "PQC_READY", "SLH-DSA-SHA2-128f": "PQC_READY", "SLH-DSA-SHA2-192s": "PQC_READY", "SLH-DSA-SHA2-192f": "PQC_READY",
+  "SLH-DSA-SHA2-256s": "PQC_READY", "SLH-DSA-SHA2-256f": "PQC_READY",
+  "HQC-128": "PQC_READY", "HQC-192": "PQC_READY", "HQC-256": "PQC_READY",
+  "FALCON-512": "PQC_READY", "FALCON-1024": "PQC_READY",
 };
 
-const RISK_SCORES: Record<string, number> = {
-  BROKEN: 90,
-  WEAKENED: 70,
-  SAFE: 10,
-  PQC_READY: 5,
+const NIST_800_131A_DEPRECATION: Record<string, number> = {
+  "RSA-1024": 2030, "RSA-2048": 2030, "ECDSA-P256": 2030, "ECDSA-P384": 2030, "SHA-1": 2030, "3DES": 2030, DES: 2030, RC4: 2030,
+  RSA: 2035, "RSA-4096": 2035, ECDSA: 2035, "ECDSA-P521": 2035, DSA: 2035,
 };
+const CNSA2_ALLOWED = new Set(["ML-KEM-1024","ML-DSA-87","SLH-DSA-SHA2-256s","AES-256","SHA-384","SHA-512","SHA3-384","SHA3-512","HMAC-SHA384","HMAC-SHA512"]);
+const _CNSA2_ALLOWED_UPPER = new Set([...CNSA2_ALLOWED].map(s => s.toUpperCase()));
+const _ASYMMETRIC_MARKERS = ["RSA","ECDSA","ECDH","ED25519","ED448","X25519","X448","DSA","DH"] as const;
+const _SYMMETRIC_MARKERS = ["AES","CHACHA20"] as const;
 
+function _normalizeAlg(n: string): string { return n.toUpperCase().replace(/ /g,"").replace(/_/g,"-"); }
+function _isAsymmetric(u: string): boolean { return _ASYMMETRIC_MARKERS.some(m => u.includes(m)); }
+function _lookupVuln(algorithm: string, keySize?: number | null): string {
+  const up = _normalizeAlg(algorithm);
+  let vuln = ALGORITHM_VULNERABILITY_DB[up];
+  if (!vuln) {
+    vuln = "BROKEN";
+    for (const [k,v] of Object.entries(ALGORITHM_VULNERABILITY_DB)) {
+      const nk = _normalizeAlg(k);
+      if (nk.includes(up) || up.includes(nk)) { vuln = v; break; }
+    }
+  }
+  if (_isAsymmetric(up)) return vuln;
+  if (keySize != null && _SYMMETRIC_MARKERS.some(m => up.includes(m))) {
+    return keySize < 256 ? "WEAKENED" : "SAFE";
+  }
+  return vuln;
+}
+function _checkNIST(algorithm: string, keySize?: number | null): [boolean, number | null] {
+  const up = algorithm.toUpperCase().replace(/ /g,"");
+  const now = new Date().getFullYear();
+  if (up in NIST_800_131A_DEPRECATION) {
+    const d = NIST_800_131A_DEPRECATION[up];
+    return [now < d, d];
+  }
+  if (keySize != null) {
+    if (up.includes("RSA") && keySize < 2048) return [now < 2030, 2030];
+    if (up.includes("ECDSA") && keySize < 384) return [now < 2030, 2030];
+  }
+  return [true, null];
+}
+function _checkCNSA(algorithm: string): boolean { return _CNSA2_ALLOWED_UPPER.has(_normalizeAlg(algorithm)); }
+function _hndlScore(vuln: string, sensitivity = 3, lifetimeYears = 2, exposureYears = 0): number {
+  const w: Record<string, number> = { BROKEN:5, WEAKENED:3, SAFE:0, PQC_READY:0 };
+  const v = w[vuln] ?? 0;
+  const s = Math.max(0, Math.min(5, sensitivity));
+  const l = Math.max(0, Math.min(5, lifetimeYears));
+  const e = Math.max(0, exposureYears);
+  return Math.min(100, v*s*l*(1+e/10)*(100/125));
+}
 function classifyRisk(score: number): string {
   if (score >= 80) return "CRITICAL";
   if (score >= 60) return "HIGH";
   if (score >= 40) return "MEDIUM";
-  if (score >= 20) return "LOW";
+  if (score > 0) return "LOW";
   return "NONE";
 }
-
 function computeRiskFinding(finding: any) {
-  const alg = finding.algorithm || finding.name || "UNKNOWN";
-  const classification = ALGORITHM_RISK_MAP[alg] || "UNKNOWN";
-  const score = RISK_SCORES[classification] ?? 50;
-  const level = classifyRisk(score);
+  const algorithm = finding.algorithm || finding.name || "unknown";
+  const keySize = finding.key_size ?? finding.keySize ?? null;
+  const vuln = _lookupVuln(algorithm, keySize);
+  const [nistCompliant] = _checkNIST(algorithm, keySize);
+  const cnsaCompliant = _checkCNSA(algorithm);
+  // Exposure years from first_seen if present
+  let exposureYears = 0;
+  if (finding.first_seen) {
+    try { exposureYears = (Date.now() - new Date(finding.first_seen).getTime())/ (365.25*864e5); } catch {}
+  }
+  const hndl = _hndlScore(vuln, 3, 2, exposureYears);
+  const penalties: Record<string, number> = { BROKEN:50, WEAKENED:25, SAFE:5, PQC_READY:0 };
+  let penalty = penalties[vuln] ?? 5;
+  if (!nistCompliant) penalty += 15;
+  if (!cnsaCompliant) penalty += 10;
+  const overall = Math.min(100, Math.round((hndl + penalty)*100)/100);
+  const level = classifyRisk(overall);
+  // Preserve backward-compatible fields plus new detailed ones
   return {
     ...finding,
-    algorithmClassification: classification,
-    riskScore: score,
+    algorithmClassification: vuln,
+    quantumVulnerability: vuln,
+    nist800131aCompliant: nistCompliant,
+    cnsa2Compliant: cnsaCompliant,
+    hndlExposureScore: Math.round(hndl*100)/100,
+    riskScore: overall,
+    overallRiskScore: overall,
     riskLevel: level,
   };
 }
 
 function evaluateNISTCompliance(finding: any): { compliant: boolean; reason: string } {
-  const alg = (finding.algorithm || "").toUpperCase();
-  if (alg === "RSA") {
-    const bits = finding.keySize || finding.key_size || 0;
-    if (bits < 2048) {
-      return { compliant: false, reason: `RSA key size ${bits} is below minimum 2048 bits` };
-    }
-    return { compliant: true, reason: "RSA key meets NIST minimum" };
-  }
-  if (alg === "MD5" || alg === "SHA-1") {
-    return { compliant: false, reason: `${alg} is not approved by NIST` };
-  }
-  return { compliant: true, reason: "Algorithm is acceptable under NIST guidelines" };
+  const [compliant, deadline] = _checkNIST(finding.algorithm || "", finding.key_size ?? finding.keySize ?? null);
+  if (!compliant) return { compliant:false, reason: `${finding.algorithm} is below NIST SP 800-131A deadline ${deadline}` };
+  return { compliant:true, reason: "Algorithm is acceptable under NIST guidelines" };
 }
-
 function evaluateCNSACompliance(finding: any): { compliant: boolean; reason: string } {
   const alg = finding.algorithm || "";
-  const cnsaApproved = ["ML-KEM-1024", "ML-DSA-87", "SLH-DSA-SHA2-256s", "AES-256", "SHA-384", "SHA-512"];
-  if (cnsaApproved.includes(alg)) {
-    return { compliant: true, reason: `${alg} is CNSA approved` };
-  }
-  return { compliant: false, reason: `${alg} is not on the CNSA approved list` };
+  if (_checkCNSA(alg)) return { compliant:true, reason: `${alg} is CNSA approved` };
+  return { compliant:false, reason: `${alg} is not on the CNSA approved list` };
 }
 
 interface LedgerEntry {

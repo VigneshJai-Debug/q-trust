@@ -37,11 +37,11 @@ if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from model_v3 import MigrationGNNv3
     from data_generator import generate_dataset
-    from train_gpu import listMLE_loss, compute_metrics
+    from train_gpu import listMLE_loss, per_graph_listMLE_loss, compute_metrics
 else:
     from .model_v3 import MigrationGNNv3
     from .data_generator import generate_dataset
-    from .train_gpu import listMLE_loss, compute_metrics
+    from .train_gpu import listMLE_loss, per_graph_listMLE_loss, compute_metrics
 
 
 def _setup(dist_backend_init: bool = True) -> tuple[int, int]:
@@ -86,25 +86,30 @@ def train_ddp(
             props = torch.cuda.get_device_properties(i)
             print(f"  cuda:{i} -> {props.name} ({props.total_memory / 1e9:.1f} GB)", flush=True)
 
-    graphs_per_rank = n_graphs // world_size
+    # P1-7 fix: single global dataset sharded once via DistributedSampler.
+    # Previously each rank generated graphs_per_rank graphs with rank-specific seed
+    # and then each rank's data was re-sharded, so each replica saw only a fraction
+    # of its own graphs and val sets differed per rank — double-sharding.
     if rank == 0:
-        print(f"Generating {n_graphs:,} graphs ({graphs_per_rank:,} per GPU)...", flush=True)
+        print(f"Generating {n_graphs:,} graphs (global, sharded across {world_size} GPUs)...", flush=True)
 
     gen_start = time.time()
-    dataset = generate_dataset(n_graphs=graphs_per_rank, seed=seed + rank)
+    # Generate identical dataset on every rank with same seed so sampler shards one logical dataset
+    dataset = generate_dataset(n_graphs=n_graphs, seed=seed)
     gen_secs = time.time() - gen_start
     if rank == 0:
-        print(f"Generation took {gen_secs:.1f}s per GPU", flush=True)
+        print(f"Generation took {gen_secs:.1f}s (global {len(dataset):,} graphs)", flush=True)
 
+    # Single global train/val split — same on every rank so best-model selection uses one val set
     n_val = max(1, int(len(dataset) * val_split))
     n_train = len(dataset) - n_val
     train_dataset = dataset[:n_train]
     val_dataset = dataset[n_train:]
     if rank == 0:
-        print(f"Train: {n_train:,}/rank, Val: {n_val:,}/rank", flush=True)
+        print(f"Train: {n_train:,} graphs (global), Val: {n_val:,} graphs (global, shared)", flush=True)
 
     sampler = DistributedSampler(
-        train_dataset, num_replicas=world_size, rank=rank, shuffle=True
+        train_dataset, num_replicas=world_size, rank=rank, shuffle=True, seed=seed
     )
     train_loader = DataLoader(
         train_dataset, batch_size=batch_size, sampler=sampler, num_workers=4
@@ -120,12 +125,35 @@ def train_ddp(
         use_centrality=True,
         variant="hybrid",
     ).to(device)
+    # P2-10: torch.compile
+    try:
+        model = torch.compile(model)  # type: ignore[attr-defined]
+        if rank == 0:
+            print("Model compiled with torch.compile", flush=True)
+    except Exception as e:
+        if rank == 0:
+            print(f"torch.compile unavailable: {e}", flush=True)
     if rank == 0:
         print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}", flush=True)
 
     ddp_model = DDP(model, device_ids=[device.index])
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-    scaler = torch.amp.GradScaler("cuda")
+    # P2-10: warmup-cosine schedule
+    warmup_epochs = max(1, int(epochs * 0.03))
+    def _lr_lambda(epoch: int) -> float:
+        if epoch < warmup_epochs:
+            return float(epoch + 1) / float(max(1, warmup_epochs))
+        import math
+        progress = (epoch - warmup_epochs) / max(1, epochs - warmup_epochs)
+        return 0.1 + 0.9 * 0.5 * (1.0 + math.cos(math.pi * progress))
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda)
+    # P0 fix: no GradScaler for bf16 (fp16-only tool, no-op under bf16)
+    scaler = None
+    grad_accum = int(os.environ.get("QTRUST_GRAD_ACCUM", "1"))
+    if grad_accum < 1:
+        grad_accum = 1
+    import hashlib
+    data_hash = hashlib.sha256(f"{n_graphs}-{seed}-{batch_size}".encode()).hexdigest()[:16]
 
     best_val_kendall = -1.0
     train_start = time.time()
@@ -136,61 +164,95 @@ def train_ddp(
 
         total_loss = 0.0
         n_batches = 0
+        optimizer.zero_grad()
 
-        for batch in train_loader:
+        for step, batch in enumerate(train_loader):
             batch = batch.to(device)
-            optimizer.zero_grad()
-
+            batch_idx = getattr(batch, "batch", None)
             with torch.amp.autocast("cuda", dtype=torch.bfloat16):
                 order_logits, risk_logits = ddp_model(batch)
-                loss_order = listMLE_loss(order_logits.float(), batch.y_order)
+                # P0-1: per-graph ListMLE
+                loss_order = per_graph_listMLE_loss(order_logits.float(), batch.y_order, batch_idx)
                 loss_risk = F.mse_loss(risk_logits.float(), batch.y_risk)
-                loss = loss_order + 0.3 * loss_risk
+                loss = (loss_order + 0.3 * loss_risk) / grad_accum
+            loss.backward()
+            if (step + 1) % grad_accum == 0 or (step + 1) == len(train_loader):
+                optimizer.step()
+                optimizer.zero_grad()
 
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
-
-            total_loss += loss.item()
+            total_loss += loss.item() * grad_accum
             n_batches += 1
 
         avg_loss = total_loss / max(n_batches, 1)
+        scheduler.step()
 
-        if (epoch + 1) % 10 == 0 or epoch == 0 or epoch == epochs - 1:
-            ddp_model.eval()
-            all_metrics = {"kendall": [], "top5": [], "top10": []}
+        # Evaluate every epoch with per-graph metrics on the global val set
+        ddp_model.eval()
+        all_metrics = {"kendall": [], "top5": [], "top10": []}
 
-            with torch.no_grad():
-                for batch in val_loader:
-                    batch = batch.to(device)
-                    with torch.amp.autocast("cuda", dtype=torch.bfloat16):
-                        order_logits, _ = ddp_model(batch)
-                    metrics = compute_metrics(order_logits.float(), batch.y_order)
+        with torch.no_grad():
+            for batch in val_loader:
+                batch = batch.to(device)
+                batch_idx = getattr(batch, "batch", None)
+                with torch.amp.autocast("cuda", dtype=torch.bfloat16):
+                    order_logits, _ = ddp_model(batch)
+                order_logits = order_logits.float()
+                if batch_idx is not None:
+                    for gid in range(int(batch_idx.max().item()) + 1):
+                        mask = batch_idx == gid
+                        if mask.sum() < 2:
+                            continue
+                        m = compute_metrics(order_logits[mask], batch.y_order[mask])
+                        for k in all_metrics:
+                            all_metrics[k].append(m[k])
+                else:
+                    m = compute_metrics(order_logits, batch.y_order)
                     for k in all_metrics:
-                        all_metrics[k].append(metrics[k])
+                        all_metrics[k].append(m[k])
 
-            local = torch.tensor(
-                [sum(all_metrics["kendall"]) / max(len(all_metrics["kendall"]), 1)],
-                device=device,
-            )
-            dist.all_reduce(local, op=dist.ReduceOp.AVG)
-            avg_kendall = local.item()
+        # Average tau globally across ranks via all_reduce, with proper counts
+        local_count = torch.tensor([len(all_metrics["kendall"])], device=device, dtype=torch.float32)
+        # Sum counts across ranks
+        dist.all_reduce(local_count, op=dist.ReduceOp.SUM)
+        total_count = local_count.item()
+        # Compute local sum
+        local_sum = torch.tensor([sum(all_metrics["kendall"])], device=device, dtype=torch.float32)
+        dist.all_reduce(local_sum, op=dist.ReduceOp.SUM)
+        avg_kendall = (local_sum.item() / total_count) if total_count > 0 else 0.0
 
-            if rank == 0:
-                gpu_mem = torch.cuda.memory_allocated() / 1e9
-                elapsed = time.time() - train_start
+        if rank == 0:
+            gpu_mem = torch.cuda.memory_allocated() / 1e9
+            elapsed = time.time() - train_start
+            current_lr = optimizer.param_groups[0]["lr"]
+            if (epoch + 1) % 10 == 0 or epoch == 0 or epoch == epochs - 1:
+                avg_top5 = sum(all_metrics["top5"]) / max(len(all_metrics["top5"]), 1)
                 print(
                     f"Epoch {epoch + 1:>3}/{epochs} | "
-                    f"loss={avg_loss:.4f} | "
-                    f"val tau={avg_kendall:.4f} top5={sum(all_metrics['top5']) / len(all_metrics['top5']):.3f} | "
-                    f"GPU0={gpu_mem:.1f}GB | {elapsed:.0f}s",
+                    f"loss={avg_loss:.4f} lr={current_lr:.2e} | "
+                    f"val tau={avg_kendall:.4f} top5={avg_top5:.3f} | "
+                    f"GPU0={gpu_mem:.1f}GB | {elapsed:.0f}s | data_hash={data_hash}",
                     flush=True,
                 )
 
-                if avg_kendall > best_val_kendall:
-                    best_val_kendall = avg_kendall
+            if avg_kendall > best_val_kendall:
+                best_val_kendall = avg_kendall
+                payload = {
+                    "model_state_dict": model.state_dict() if not hasattr(model, "_orig_mod") else model._orig_mod.state_dict(),  # type: ignore[attr-defined]
+                    "state_dict": model.state_dict() if not hasattr(model, "_orig_mod") else model._orig_mod.state_dict(),
+                    "model_config": {"input_features": 6, "hidden_dim": 256, "embedding_dim": 128, "heads": 8},
+                    "epochs": epoch + 1,
+                    "n_graphs": n_graphs,
+                    "seed": seed,
+                    "data_hash": data_hash,
+                    "best_val_kendall": best_val_kendall,
+                    "val_split": val_split,
+                    "world_size": world_size,
+                }
+                try:
+                    torch.save(payload, model_path)
+                except Exception:
                     torch.save(model.state_dict(), model_path)
-                    print(f"  -> Saved best model (tau={best_val_kendall:.4f})", flush=True)
+                print(f"  -> Saved best model (tau={best_val_kendall:.4f})", flush=True)
 
     if rank == 0:
         total_time = time.time() - train_start

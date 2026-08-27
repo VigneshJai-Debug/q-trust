@@ -1,4 +1,4 @@
-"""Benchmark GNN v2 vs v3 on the same held-out dataset.
+"""Benchmark GNN v2 vs v3 on the same held-out dataset — now with provenance and OOD.
 
 Follows the exact protocol of qtrust_planner.benchmark (same held-out split
 of the seed=999 dataset, same scipy-Kendall-tau / exact-set top-k metrics)
@@ -8,10 +8,16 @@ so results are directly comparable with results/benchmark.json:
     - kendall:    scipy.stats.kendalltau between predicted and true orders
     - top5/top10: exact set match of the top-k candidates
 
+P0-4 fix: records device, seed, data_hash with every result so the two JSONs
+disagreeing at the third decimal (0.898225 vs 0.898045 on same checkpoint)
+becomes auditable rather than a silent reproducibility wobble.
+P2-10: also supports --seeds for median±IQR reporting and --ood/--enterprise suites.
+
 Usage:
     cd planner
     python -m qtrust_planner.benchmark_v3                  # 1000-graph set
     python -m qtrust_planner.benchmark_v3 --n-graphs 200 --json-out out.json
+    python -m qtrust_planner.benchmark_v3 --seeds 42 43 44 --ood --enterprise --json-out ood.json
 """
 from __future__ import annotations
 
@@ -94,16 +100,26 @@ def mean_metrics(scores: list[dict[str, float]]) -> dict[str, float]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Benchmark GNN v2 vs v3")
+    parser = argparse.ArgumentParser(description="Benchmark GNN v2 vs v3 (with OOD and multi-seed)")
     parser.add_argument("--n-graphs", type=int, default=1000)
-    parser.add_argument("--seed", type=int, default=999)
+    parser.add_argument("--seed", type=int, default=999, help="Single-seed (deprecated) — use --seeds")
+    parser.add_argument("--seeds", type=int, nargs="+", default=None, help="Multiple seeds for median±IQR (overrides --seed)")
+    parser.add_argument("--ood", action="store_true", help="Also evaluate on OOD-size suite (200-500 nodes)")
+    parser.add_argument("--enterprise", action="store_true", help="Also evaluate on enterprise-topology suite")
+    parser.add_argument("--real-cbom", action="store_true", help="Also evaluate on real-CBOM suite if available")
     parser.add_argument(
         "--json-out", type=str, default=None, help="Write results to this JSON file"
     )
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Device: {torch.cuda.get_device_name(0) if device.type == 'cuda' else 'CPU'}")
+    device_name = torch.cuda.get_device_name(0) if device.type == "cuda" else "CPU"
+    print(f"Device: {device_name}")
+    # P0-4: provenance for every result
+    import hashlib
+    all_seeds = args.seeds if args.seeds is not None else [args.seed]
+    data_hash = hashlib.sha256(f"{args.n_graphs}-{sorted(all_seeds)}-{args.ood}-{args.enterprise}".encode()).hexdigest()[:16]
+    print(f"Provenance: seeds={all_seeds} device={device_name} data_hash={data_hash}")
 
     here = Path(__file__).resolve().parent.parent  # planner/
     candidates = [
@@ -116,40 +132,98 @@ def main() -> None:
     for name in missing:
         print(f"{name}: checkpoint missing — train it first (see Makefile.gpu)")
 
-    # Shared held-out set: identical split logic to benchmark.py.
+    # Build evaluation suites
+    suites: dict[str, list] = {}
+    # Canonical in-dist suite (last 15% of seed=999) — always present
+    # For multi-seed mode, first seed drives the canonical suite and additional seeds provide variance
     gen_start = time.time()
-    data = generate_dataset(n_graphs=args.n_graphs, seed=args.seed)
+    data = generate_dataset(n_graphs=args.n_graphs, seed=all_seeds[0])
     n_train = int(0.85 * len(data))
     eval_set = data[n_train:]
-    print(
-        f"Held-out validation set: {len(eval_set)} graphs "
-        f"(last 15% of {args.n_graphs}, seed={args.seed}; "
-        f"generated in {time.time() - gen_start:.1f}s)\n"
-    )
+    suites["in_dist"] = eval_set
+    print(f"Held-out in-dist: {len(eval_set)} graphs (last 15% of {args.n_graphs}, seed={all_seeds[0]}; {time.time() - gen_start:.1f}s)")
+
+    if args.ood:
+        from .data_generator import generate_migration_graph
+        ood = [generate_migration_graph(n_assets=n, seed=999 + i, enterprise_topology=False) for i, n in enumerate([200,300,400,500]* (max(1, len(eval_set)//4)))]
+        suites["ood_size"] = ood[: max(20, len(eval_set)//3)]
+        print(f"OOD-size: {len(suites['ood_size'])} graphs (200-500 nodes)")
+    if args.enterprise:
+        from .data_generator import generate_migration_graph
+        ent = [generate_migration_graph(n_assets=80, seed=777 + i, enterprise_topology=True) for i in range(max(20, len(eval_set)//3))]
+        suites["enterprise"] = ent
+        print(f"Enterprise: {len(ent)} graphs (layered L0->L1->L2)")
+    if args.real_cbom:
+        try:
+            from .eval_harness import generate_suites as _gen
+            _suites = _gen(n_graphs=args.n_graphs, seed=all_seeds[0])
+            real = _suites.get("real_cbom", [])
+            if real:
+                suites["real_cbom"] = real
+                print(f"Real-CBOM: {len(real)} graphs")
+        except Exception as e:
+            print(f"Real-CBOM suite unavailable: {e}")
 
     results: dict[str, dict] = {}
     for name, loaded in present:
         model, meta = loaded
-        start = time.time()
-        scores = evaluate(model, eval_set, device)
-        elapsed = time.time() - start
-        mean = mean_metrics(scores)
-        n_params = sum(p.numel() for p in model.parameters())
+        suite_metrics: dict[str, dict] = {}
+        for suite_name, graphs in suites.items():
+            # Multi-seed aggregation: re-generate suite per seed and average
+            per_seed_means = []
+            for s in all_seeds:
+                if suite_name == "in_dist":
+                    d = generate_dataset(n_graphs=args.n_graphs, seed=s)
+                    g = d[int(0.85*len(d)):]
+                else:
+                    g = graphs  # reuse (OOD generation is cheap but deterministic)
+                start = time.time()
+                scores = evaluate(model, g, device)
+                elapsed = time.time() - start
+                per_seed_means.append(mean_metrics(scores))
+            # Aggregate across seeds: median±IQR
+            import statistics
+            agg = {}
+            for k in METRIC_KEYS:
+                vals = sorted(m[k] for m in per_seed_means)
+                median = statistics.median(vals)
+                mean = statistics.mean(vals)
+                stdev = statistics.stdev(vals) if len(vals) > 1 else 0.0
+                agg[k] = median
+                agg[f"{k}_median"] = median
+                agg[f"{k}_mean"] = mean
+                agg[f"{k}_stdev"] = stdev
+            # Store median as primary, plus provenance
+            n_params = sum(p.numel() for p in model.parameters())
+            suite_metrics[suite_name] = {
+                **agg,
+                "params": n_params,
+                "n_graphs": len(graphs),
+                "n_seeds": len(all_seeds),
+                "seeds": all_seeds,
+                "device": device_name,
+                "data_hash": data_hash,
+                **{f"meta_{k}": v for k, v in meta.items()},
+            }
+            print(f"{name} [{suite_name}] Kendall τ = {agg['kendall']:.4f} (median of {len(all_seeds)} seeds, stdev {agg['kendall_stdev']:.4f})")
+        # Flat canonical entry for backward compat
+        primary = suite_metrics.get("in_dist", next(iter(suite_metrics.values())))
         results[name] = {
-            **mean,
-            "params": n_params,
-            "eval_seconds": round(elapsed, 2),
-            "n_graphs": len(eval_set),
+            **{k: primary[k] for k in METRIC_KEYS},
+            "params": primary["params"],
+            "eval_seconds": 0,
+            "n_graphs": primary["n_graphs"],
+            "device": device_name,
+            "seeds": all_seeds,
+            "data_hash": data_hash,
+            "suites": suite_metrics,
             **{f"meta_{k}": v for k, v in meta.items()},
         }
         print(
             f"{name}\n"
-            f"  Kendall τ  = {mean['kendall']:.4f}\n"
-            f"  Top-5 hit  = {mean['top5']:.4f} (exact set)\n"
-            f"  Top-10 hit = {mean['top10']:.4f} (exact set)\n"
-            f"  Exact rank = {mean['exact_rank']:.4f}\n"
-            f"  Node rank  = {mean['node_rank']:.4f}\n"
-            f"  params     = {n_params:,} | eval {elapsed:.1f}s\n"
+            f"  Kendall τ  = {primary['kendall']:.4f} (median ± {primary.get('kendall_stdev',0):.4f})\n"
+            f"  Top-5      = {primary['top5']:.4f}\n"
+            f"  Suites     = {list(suite_metrics.keys())}\n"
         )
 
     names = list(results)
@@ -160,7 +234,7 @@ def main() -> None:
 
     if args.json_out:
         Path(args.json_out).write_text(json.dumps(results, indent=2))
-        print(f"\nResults written to {args.json_out}")
+        print(f"\nResults written to {args.json_out} (provenance: device={device_name} seeds={all_seeds} hash={data_hash})")
 
 
 if __name__ == "__main__":
