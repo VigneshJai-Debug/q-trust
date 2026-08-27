@@ -3,6 +3,6 @@ torch-geometric>=2.5
 scipy>=1.12
 fastapi>=0.110
 uvicorn>=0.29
-pydantic>=2.6
+pydantic>=2.13.4
 numpy>=1.26
 redis>=5.0.0
