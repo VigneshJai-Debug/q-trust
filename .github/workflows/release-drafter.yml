@@ -1,0 +1,67 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Release Drafter — maintains a draft GitHub Release for the next version.
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# HOW IT WORKS
+#   Every time PRs merge to `main`, this workflow regenerates a *draft*
+#   release ("v?.?.? 🛡" placeholder resolves against the latest published
+#   tag). Release notes are assembled from merged PR titles/labels using the
+#   taxonomy in `.github/release-drafter.yml`.
+#
+#   Nothing is published automatically. A maintainer reviews the draft at
+#   Releases → edit → fills in the tag (e.g. v0.1.0-alpha.1) → "Publish".
+#   Publishing is the trigger for:
+#     • publish-pypi.yml   (release: published  → qtrust-sdk / qtrust-inspector)
+#     • publish-docker.yml (tag push v*         → GHCR backend/planner images)
+#
+# FIRST-RUN SETUP (see AUTOMATION-GUIDE.md for the full runbook)
+#   1. Merge this file and `.github/release-drafter.yml` to the default
+#      branch (config is read from the default branch only).
+#   2. Create the labels referenced by the config (feat, fix, security,
+#      perf, docs, chore, deps, major, minor, skip-changelog) under
+#      Issues → Labels — release-drafter does not create them for you.
+#   3. Label merged PRs; the next push to `main` produces the first draft.
+#
+# PINNING NOTE: the repo's existing 7 workflows pin actions by commit SHA.
+# This file uses the readable `@v6` tag so it works out of the box; once
+# adopted, consider pinning to the full commit SHA to match repo style:
+#   release-drafter/release-drafter@<full-sha> # v6.x.x
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Release Drafter
+
+on:
+  push:
+    branches:
+      - main
+    # Docs-only pushes don't change shipped artifacts (the docs site is
+    # deployed by docs.yml), so skip note drafting for them.
+    paths-ignore:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "**.md"
+  workflow_dispatch:
+
+permissions:
+  contents: write       # create/update the draft release
+  pull-requests: write  # read merged PR metadata (titles, labels, authors)
+
+concurrency:
+  group: release-drafter
+  # Never cancel a mid-flight draft update; queue instead so no merged PR
+  # is ever dropped from the notes.
+  cancel-in-progress: false
+
+jobs:
+  update_release_draft:
+    name: Draft release notes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Create / update the next draft release
+        # Drafts release notes from merged PRs, grouped by label into the
+        # categories defined in .github/release-drafter.yml. Maintainers
+        # publish when ready — this step never publishes on its own.
+        uses: release-drafter/release-drafter@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

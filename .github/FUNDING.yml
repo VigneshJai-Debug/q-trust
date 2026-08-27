@@ -1,0 +1,42 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# FUNDING.yml — the "Sponsor this project" button configuration.
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Everything below is intentionally COMMENTED OUT: the repo is pre-release
+# and has no funding channel configured yet. Committing an empty/fully
+# commented file does nothing; when you're ready, uncomment exactly ONE
+# platform key and fill in your account/URL. Supported keys:
+#   github:  [username]                      → GitHub Sponsors profile
+#   patreon: # Patreon username
+#   open_collective: # Open Collective username
+#   ko_fi:   # Ko-fi username
+#   tidelift: # platform-name/package-name    → e.g. npm/babel
+#   community_bridge: # e.g. neutron
+#   liberapay: # Liberapay username
+#   issuehunt: # IssueHunt username
+#   lfx_crowdfunding: # e.g. cloud-foundry
+#   polar:   # Polar username
+#   buy_me_a_coffee: # Buy Me a Coffee username
+#   custom:  # up to 4 arbitrary https:// links (list form)
+#
+# Example (GitHub Sponsors, most common for solo OSS maintainers):
+#   github: [humoge7502]
+#
+# The button appears on the repo homepage once a key is active. Sponsorship
+# only makes sense after the first public release — see AUTOMATION-GUIDE.md
+# for the v0.1.0-alpha.1 runbook.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# github: []
+# patreon:
+# open_collective:
+# ko_fi:
+# tidelift:
+# community_bridge:
+# liberapay:
+# issuehunt:
+# lfx_crowdfunding:
+# polar:
+# buy_me_a_coffee:
+# custom:
+#   - https://your-custom-link.example

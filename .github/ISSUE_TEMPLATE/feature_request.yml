@@ -1,52 +1,78 @@
+# Feature request — GitHub issue FORMS (yaml form schema).
+# Schema reference: https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/syntax-for-issue-forms
+# Top-level keys: name, description, labels, body. Each body item: type, id,
+# attributes, validations.
+
 name: Feature request
-description: Propose an enhancement or new capability for Q-Trust.
+description: Propose a new capability or an improvement to an existing one.
 title: "[Feature]: "
-labels: ["enhancement", "triage"]
+labels: ["enhancement"]
 body:
   - type: markdown
+    id: intro
     attributes:
       value: |
-        Have an idea? Check existing issues first, then describe the problem
-        you're trying to solve — not just the solution you have in mind.
+        Thanks for helping shape Q-Trust. Before filing, please:
+
+        - Search [existing issues](https://github.com/humoge7502/q-trust/issues?q=is%3Aissue+label%3Aenhancement)
+          and [Discussions](https://github.com/humoge7502/q-trust/discussions) — your idea may already be tracked.
+        - Describe the **problem** you're facing first, and the solution second.
+          A feature that solves a real workflow blocker beats a speculative
+          nice-to-have, and makes triage (and the changelog) honest.
+
   - type: dropdown
-    id: component
+    id: subsystem
     attributes:
-      label: Component
+      label: Affected subsystem
+      description: Which component would this change touch?
       options:
-        - contracts (Solidity)
-        - backend (Fastify API)
-        - frontend (Next.js)
-        - sdk (Python qtrust)
-        - inspector (qtrust_inspector)
-        - planner (GNN microservice)
-        - ops/infra (docker compose, prometheus)
-        - docs
-      default: 1
+        - contracts (Solidity, Foundry)
+        - backend (Fastify 5 API / relayer / indexer)
+        - frontend (Next.js dashboard)
+        - inspector (qtrust-inspector scanner)
+        - sdk (qtrust-sdk Python package)
+        - planner (GNN + RL migration planner)
+        - docs (mkdocs site)
+        - infra (CI, Docker, ops/, deployment)
+      default: 0
     validations:
       required: true
+
   - type: textarea
     id: problem
     attributes:
       label: Problem statement
-      description: What are you trying to achieve? What's blocking you today?
+      description: What are you trying to accomplish, and what blocks you today? Include your role/context (e.g. "inventory lead migrating 400 endpoints off RSA-2048").
+      placeholder: "I can generate a CBOM for my Python estate, but I have no way to rank the 400 flagged assets by quantum risk × business criticality before budgeting the migration."
     validations:
       required: true
+
   - type: textarea
-    id: proposal
+    id: proposed-solution
     attributes:
       label: Proposed solution
-      description: What should happen? Include API shapes or contract interfaces if relevant.
+      description: What should exist instead? Concrete beats vague — API shapes, CLI flags, or contract interface sketches are gold.
+      placeholder: "Add `crypto-inspector plan --cbom x.json --budget 6mo` that calls the planner service and emits a phased migration schedule (CSV + roadmap)."
     validations:
       required: true
+
   - type: textarea
     id: alternatives
     attributes:
       label: Alternatives considered
+      description: What workarounds or other tools did you evaluate? Why don't they cut it? (Optional, but it prevents us from re-walking your dead ends.)
+    validations:
+      required: false
+
   - type: checkboxes
-    id: constraints
+    id: contribution
     attributes:
-      label: Constraints
+      label: Willingness to contribute
+      description: This helps us gauge momentum — it is not a commitment, and "no" is a perfectly fine answer.
       options:
-        - label: This change keeps on-chain data backward-compatible
-        - label: This change does not require a contract upgrade (or documents the UUPS path)
-        - label: I am willing to help implement/test this
+        - label: I would be willing to submit a PR for this feature
+          required: false
+        - label: I would be willing to test an early prototype and give feedback
+          required: false
+        - label: I can share real-world CBOM / migration data to help validate the design
+          required: false

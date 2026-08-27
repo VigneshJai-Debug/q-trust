@@ -1,11 +1,16 @@
-<!-- Q-Trust flagship README — design kit v1.0
+<!-- Q-Trust flagship README — design kit v2.0
      Recommended repo topics: cryptography, post-quantum, pqc, cbom, cyclonedx,
      blockchain, base, solidity, foundry, gnn, machine-learning, security-scanner,
      compliance, nist, cnsa, fastify, nextjs, python, typescript
-     Social preview: assets/og-image.png (1280x640) -->
+     Social preview: primary assets/og-github.png (1280×640, GitHub) ·
+     variants assets/og-x.png (X/Twitter) · assets/og-linkedin.png (LinkedIn) -->
 
 <h1 align="center">
-  <img src="assets/logo.png" width="84" alt="Q-Trust logo" align="top" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-glow.png" />
+    <source media="(prefers-color-scheme: light)" srcset="assets/logo-solid.png" />
+    <img src="assets/logo-glow.png" width="84" alt="Q-Trust logo" align="top" />
+  </picture>
   Q-Trust
 </h1>
 
@@ -17,7 +22,11 @@
 </p>
 
 <div align="center">
-  <img src="assets/banner.png" width="100%" alt="Q-Trust — the post-quantum trust protocol" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/hero-dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="assets/hero-light.png" />
+    <img width="100%" src="assets/hero-dark.png" alt="Q-Trust — the post-quantum trust protocol" />
+  </picture>
 </div>
 
 <br/>
@@ -43,9 +52,18 @@
 <a href="https://github.com/humoge7502/q-trust/discussions"><img src="https://img.shields.io/github/discussions/humoge7502/q-trust?style=flat-square&label=DISCUSSIONS&color=blueviolet" alt="Discussions"/></a>
 <a href="https://github.com/humoge7502/q-trust/issues"><img src="https://img.shields.io/github/issues/humoge7502/q-trust?style=flat-square&color=orange" alt="Issues"/></a>
 <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square" alt="PRs Welcome"/></a>
+
+</div>
+
+<div align="center">
+
 <a href="https://github.com/humoge7502/q-trust/graphs/contributors"><img src="https://img.shields.io/github/contributors/humoge7502/q-trust?style=flat-square&color=success" alt="Contributors"/></a>
 <a href="https://github.com/humoge7502/q-trust/commits"><img src="https://img.shields.io/github/last-commit/humoge7502/q-trust?style=flat-square&color=blueviolet" alt="Last Commit"/></a>
 <a href="https://github.com/humoge7502/q-trust"><img src="https://img.shields.io/github/languages/code-size/humoge7502/q-trust?style=flat-square&color=lightgrey" alt="Code Size"/></a>
+<a href="https://pypi.org/project/qtrust-sdk/"><img src="https://img.shields.io/pypi/v/qtrust-sdk?style=flat-square&label=SDK&logo=pypi&logoColor=white&color=%233776AB" alt="qtrust-sdk on PyPI"/></a>
+<a href="https://pypi.org/project/qtrust-inspector/"><img src="https://img.shields.io/pypi/v/qtrust-inspector?style=flat-square&label=INSPECTOR&logo=pypi&logoColor=white&color=%233776AB" alt="qtrust-inspector on PyPI"/></a>
+<a href="https://github.com/humoge7502/q-trust"><img src="https://tokei.rs/b1/github/humoge7502/q-trust?style=flat-square&category=code" alt="Lines of code"/></a>
+<a href="https://github.com/humoge7502/q-trust/commits"><img src="https://img.shields.io/github/commit-activity/m/humoge7502/q-trust?style=flat-square" alt="Commit activity"/></a>
 
 </div>
 
@@ -61,14 +79,15 @@
 
 <div align="center">
 
-<a href="#-the-threat"><b>⚠️ The Threat</b></a> ·
+<a href="#%EF%B8%8F-the-threat"><b>⚠️ The Threat</b></a> ·
 <a href="#%EF%B8%8F-pipeline"><b>⚙️ Pipeline</b></a> ·
 <a href="#-demo"><b>🎬 Demo</b></a> ·
 <a href="#-capabilities"><b>✨ Capabilities</b></a> ·
-<a href="#%EF%B8%8F-architecture"><b>📐 Architecture</b></a> ·
+<a href="#-architecture"><b>📐 Architecture</b></a> ·
 <a href="#-measured-results"><b>📊 Results</b></a> ·
 <a href="#-quick-start"><b>🚀 Quick Start</b></a> ·
-<a href="#%EF%B8%8F-roadmap"><b>🗺 Roadmap</b></a> ·
+<a href="#-ecosystem--packages"><b>🧩 Ecosystem</b></a> ·
+<a href="#-roadmap"><b>🗺 Roadmap</b></a> ·
 <a href="#-documentation"><b>📚 Docs</b></a> ·
 <a href="#-contributing"><b>🤝 Contribute</b></a>
 
@@ -91,12 +110,13 @@
 - [⚙️ Pipeline](#️-pipeline)
 - [🎬 Demo](#-demo)
 - [✨ Capabilities](#-capabilities)
-- [📐 Architecture](#️-architecture)
+- [📐 Architecture](#-architecture)
 - [📊 Measured Results](#-measured-results)
 - [🚀 Quick Start](#-quick-start)
 - [⛓ On-Chain Layer](#-on-chain-layer-base-l2)
 - [🧠 GPU Analytics](#-gpu-accelerated-analytics-optional)
-- [🗺 Roadmap](#️-roadmap)
+- [🧩 Ecosystem & Packages](#-ecosystem--packages)
+- [🗺 Roadmap](#-roadmap)
 - [🧪 Reality Check](#-reality-check)
 - [📚 Documentation](#-documentation)
 - [🤝 Contributing](#-contributing)
@@ -184,7 +204,7 @@ flowchart TB
 <table>
 <tr>
 <td width="33%" align="center" valign="top">
-<a href="#on-chain-layer-base-l2"><img src="assets/feature-scan.png" width="280" alt="Enterprise scanner"/></a>
+<a href="#-on-chain-layer-base-l2"><img src="assets/feature-scan.png" width="280" alt="Enterprise scanner"/></a>
 <h4>🔎 Discover</h4>
 <sub><b>TLS · SSH · source · manifests · binaries · configs</b><br/><br/>
 12+ source languages, 10+ manifest formats, OID extraction from binaries, cipher-suite audits — one command, one CBOM.</sub>
@@ -462,6 +482,58 @@ Exposed via REST (`/v1/gpu/*`) and surfaced in the dashboard's **Side Channel** 
 
 ---
 
+<a name="ecosystem"></a>
+## 🧩 Ecosystem & Packages
+
+Q-Trust ships as installable packages, not just a repo. The Python SDK and the inspector CLI are packaged for PyPI, the backend and planner services run as containers, and the full protocol lives on the docs site. Take the piece you need:
+
+**🐍 `qtrust-sdk` — the Python client: on-chain CBOM registration, gasless attestations, risk & compliance engines, W3C VCs + DIDs**
+
+```bash
+pip install qtrust-sdk
+```
+
+```python
+from qtrust import QTrustClient, CBOM, CBOMEntry
+
+client = QTrustClient(
+    private_key="0x...",
+    rpc_url="https://sepolia.base.org",
+    asset_registry_address="0x...",
+)
+
+cbom = CBOM(
+    org_did="did:ethr:0x...",
+    generated_at=1700000000,
+    scanner_version="1.1.0",
+    assets=[CBOMEntry(asset_type="tls_cert", algorithm="RSA-2048", location="example.com:443")],
+)
+asset_id, cid = client.register_cbom(cbom)   # → on-chain attestation + IPFS CID
+```
+
+**🔎 `qtrust-inspector` — the `crypto-inspector` CLI: all 10 scanner modules, one command**
+
+```bash
+pip install qtrust-inspector
+```
+
+```bash
+crypto-inspector scan example.com --risk --compliance nist,cnsa
+```
+
+| Package | What it does | PyPI | Docs |
+|---|---|---|---|
+| `qtrust-sdk` | Python client — CBOM registration, EIP-712 gasless signing, risk & compliance engines, W3C VCs + DIDs | [qtrust-sdk](https://pypi.org/project/qtrust-sdk/) | [sdk/README.md](sdk/README.md) |
+| `qtrust-inspector` | `crypto-inspector` CLI — 10 scanner modules → risk report, CycloneDX 1.7 CBOM, SARIF 2.1 | [qtrust-inspector](https://pypi.org/project/qtrust-inspector/) | [inspector/README.md](inspector/README.md) |
+| Docker images | Fastify API + relayer and GNN planner microservices — `ghcr.io/humoge7502/qtrust-backend` · `qtrust-planner` | GHCR — built by [publish-docker.yml](.github/workflows/publish-docker.yml) on `vX` tags | [docker-compose.yml](docker-compose.yml) |
+| Docs site | Whitepaper, ADRs, deployment guides, runbooks, performance methodology | — | [humoge7502.github.io/q-trust](https://humoge7502.github.io/q-trust) |
+
+> 📦 PyPI releases flow through [`publish-pypi.yml`](.github/workflows/publish-pypi.yml) (trusted publishing) · GHCR images through [`publish-docker.yml`](.github/workflows/publish-docker.yml) on `vX` tags.
+>
+> 🚧 Docs v2 — a VitePress site is staged in [`docs-v2/`](docs-v2/), migration-ready.
+
+---
+
 <a name="roadmap"></a>
 ## 🗺 Roadmap
 
@@ -534,6 +606,8 @@ Found a security issue? Follow the [responsible-disclosure policy](SECURITY.md) 
 | [Case study](docs/case-studies/) | `example.com` — TLS → CBOM → on-chain → verify |
 | [Bank pilot](pilot/) | End-to-end PQC migration demo |
 
+> 🚧 **VitePress v2 site** — staged in [`docs-v2/`](docs-v2/), migration-ready (brand-dark, Mermaid-native).
+
 ---
 
 <a name="contributing"></a>
@@ -587,7 +661,7 @@ MIT — see [LICENSE](LICENSE). © Q-Trust Contributors.
 
 <b>Q-Trust</b> — trust, proven post-quantum.
 
-[![Back to top](https://img.shields.io/badge/⬆_BACK_TO_TOP-00D9FF?style=for-the-badge)]#-the-threat)
+<a href="#%EF%B8%8F-the-threat"><img src="https://img.shields.io/badge/%E2%AC%86_BACK_TO_TOP-00D9FF?style=for-the-badge" alt="Back to top"/></a>
 
 <sub>Built with ❤️ and an unreasonable love for cryptographic inventory.</sub>
 

@@ -1,9 +1,28 @@
-# Default ownership
-* @humoge7502
+# ─────────────────────────────────────────────────────────────────────────────
+# CODEOWNERS — who is requested to review changes by path.
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# The line below makes @humoge7502 the default owner for EVERY file in the
+# repository: any PR touching a path without a more specific rule requests
+# review from the owner. This is the correct setup for a single-maintainer
+# project — nothing merges without maintainer review, and branch protection
+# can enforce it (Settings → Branches → Protect `main` → require review
+# from Code Owners).
+#
+# When the team grows, add more-specific rules BELOW the wildcard — later
+# (more specific-path) entries take precedence, e.g.:
+#   /contracts/            @humoge7502 @solidity-reviewer
+#   /backend/              @humoge7502 @backend-reviewer
+#   /frontend/             @humoge7502 @frontend-reviewer
+#   /sdk/                  @humoge7502 @python-reviewer
+#   /inspector/            @humoge7502 @python-reviewer
+#   /planner/              @humoge7502 @ml-reviewer
+#   /.github/workflows/    @humoge7502            # automation changes are sensitive
+#   /docs/                 @humoge7502 @docs-reviewer
+#
+# SECURITY NOTE: CODEOWNERS files can live at repo root or in .github/ or
+# docs/ — GitHub uses the first found. Keep exactly one to avoid ambiguity.
+# A team name (@q-trust/core) can replace usernames once an org exists.
+# ─────────────────────────────────────────────────────────────────────────────
 
-# Per-directory ownership
-/contracts @humoge7502
-/backend @humoge7502
-/frontend @humoge7502
-/sdk @humoge7502
-/inspector @humoge7502
+* @humoge7502

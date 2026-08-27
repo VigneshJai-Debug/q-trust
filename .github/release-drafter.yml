@@ -1,0 +1,97 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Release Drafter configuration.
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Consumed by `.github/workflows/release-drafter.yml` (must live on the
+# default branch). Merged PRs are bucketed into changelog sections by label;
+# the version number is derived from the labels of the PRs since the last
+# release. Placeholders ($NEXT_PATCH_VERSION, $RESOLVED_VERSION, $CHANGES,
+# $CONTRIBUTORS, $PREVIOUS_TAG) are expanded by Release Drafter itself.
+#
+# LABEL SETUP (one-time): create these labels under Issues → Labels —
+#   Categories : feat, enhancement, fix, bug, security, perf, docs, chore, deps
+#   Versioning : major, minor
+#   Suppression: skip-changelog
+# The label → category mapping (incl. conventional-commit equivalents) is
+# documented in AUTOMATION-GUIDE.md.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name-template: 'v$NEXT_PATCH_VERSION 🛡'
+tag-template: 'v$NEXT_PATCH_VERSION'
+
+# PRs carrying this label are omitted from the notes entirely
+# (e.g. internal chores that would only add noise).
+exclude-labels:
+  - skip-changelog
+
+# Changelog sections, in display order. A PR matching multiple labels
+# appears in each matching section.
+categories:
+  - title: '🚀 Features'
+    labels:
+      - 'feat'
+      - 'enhancement'
+  - title: '🐛 Bug Fixes'
+    labels:
+      - 'fix'
+      - 'bug'
+  - title: '🔒 Security'
+    labels:
+      - 'security'
+  - title: '⚡ Performance'
+    labels:
+      - 'perf'
+  - title: '📚 Documentation'
+    labels:
+      - 'docs'
+  - title: '🧰 Maintenance'
+    labels:
+      - 'chore'
+      - 'deps'
+
+# One line per merged PR, e.g.:
+#   - Add ML-KEM-768 attestation support @humoge7502 (#42)
+change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
+
+# Escape these characters in PR titles so they render as literal text and
+# cannot inject markdown / HTML into the release notes.
+change-title-escapes: '\<*_&'
+
+# Semver resolution: any PR labelled `major` forces a major bump; any PR
+# labelled `minor` forces a minor bump; everything else bumps the patch.
+version-resolver:
+  major:
+    labels:
+      - 'major'
+  minor:
+    labels:
+      - 'minor'
+  patch:
+    default: true
+
+# Body header / footer. $RESOLVED_VERSION expands to the version computed
+# by the resolver above; $PREVIOUS_TAG to the latest published tag.
+header: |
+  ## Q-Trust v$RESOLVED_VERSION
+
+  Post-quantum cryptography migration & attestation protocol — CBOM scanning,
+  GPU-accelerated analysis, GNN/RL migration planning, verifiable provenance
+  on Base L2.
+
+# $CHANGES renders the category sections defined above (each headed by its
+# category title, followed by its `change-template` lines). PRs whose labels
+# match no category fall under an implicit "Other Changes" section.
+template: |
+  ## What's Changed
+
+  $CHANGES
+
+footer: |
+  ---
+
+  **Full changelog**: https://github.com/humoge7502/q-trust/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+
+  ## 💜 Contributors
+
+  Thank you $CONTRIBUTORS — Q-Trust is built in the open, and every
+  contribution counts: code, docs, bug reports, and CBOM feedback alike.

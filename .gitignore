@@ -122,3 +122,13 @@ docs/assessments/
 Q-Trust_v2.0.0_Senior_Engineer_Codebase_Audit.pdf
 .ipynb_checkpoints/
 Q-Trust*.pdf
+
+# ─── GitHub kit delivery — profile repo is separate (humoge7502/humoge7502) ─
+# The folder `profile-repo/` is a prepared copy of the profile kit for
+# humoge7502/humoge7502. It is NOT part of the q-trust codebase and must not
+# be committed to this repo. Create the profile repo from it via:
+#   gh repo create humoge7502 --public   (or via GitHub UI: new repo named humoge7502)
+#   cp -R profile-repo/* /path/to/humoge7502/ && cd /path/to/humoge7502 && git push
+# Keep this ignore so `git status` stays clean while the kit remains locally
+# available for delivery.
+profile-repo/

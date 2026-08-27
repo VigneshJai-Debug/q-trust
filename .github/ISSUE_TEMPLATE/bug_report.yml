@@ -1,71 +1,93 @@
+# Bug report — GitHub issue FORMS (yaml form schema).
+# Schema reference: https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/syntax-for-issue-forms
+# Top-level keys: name, description, labels, body. Each body item: type, id,
+# attributes, validations.
+
 name: Bug report
-description: Report a defect in Q-Trust contracts, backend, SDK, frontend, or inspector.
+description: Report a reproducible defect in a Q-Trust component.
 title: "[Bug]: "
-labels: ["bug", "triage"]
+labels: ["bug"]
 body:
   - type: markdown
+    id: intro
     attributes:
       value: |
-        Thanks for taking the time to file a bug. Please fill in the details
-        below so we can reproduce and fix it quickly.
-        **Security vulnerabilities must NOT be reported here** — see our
-        [security disclosure policy](../../SECURITY.md) for private reporting.
+        Thanks for taking the time to file a bug report — Q-Trust is
+        pre-release software and every well-formed report makes the first
+        stable cut better.
+
+        **Security vulnerabilities are never reported here.** Suspected
+        vulnerabilities go through private reporting:
+        [GitHub Security Advisories](https://github.com/humoge7502/q-trust/security/advisories/new)
+        (see [SECURITY.md](../../SECURITY.md) for the disclosure policy and
+        response SLAs). This form is for reproducible functional defects only.
+
   - type: dropdown
-    id: severity
+    id: subsystem
     attributes:
-      label: Severity
-      description: How badly does this affect you? Security disclosures go through SECURITY.md instead.
+      label: Affected subsystem
+      description: Which Q-Trust component is misbehaving?
       options:
-        - "security-disclosure (use SECURITY.md, do not file here)"
-        - critical (data loss / funds at risk / service down)
-        - major (core feature broken, workaround exists)
-        - minor (annoyance, limited impact)
-        - docs-only
-      default: 2
+        - contracts (Solidity, Foundry)
+        - backend (Fastify 5 API / relayer / indexer)
+        - frontend (Next.js dashboard)
+        - inspector (qtrust-inspector scanner)
+        - sdk (qtrust-sdk Python package)
+        - planner (GNN + RL migration planner)
+        - docs (mkdocs site)
+        - infra (CI, Docker, ops/, deployment)
+      default: 0
     validations:
       required: true
-  - type: dropdown
-    id: component
+
+  - type: input
+    id: version
     attributes:
-      label: Component
-      options:
-        - contracts (Solidity)
-        - backend (Fastify API)
-        - frontend (Next.js)
-        - sdk (Python qtrust)
-        - inspector (qtrust_inspector)
-        - planner (GNN microservice)
-        - ops/infra (docker compose, prometheus)
-        - docs
-      default: 1
+      label: Version / commit
+      description: >
+        Git commit SHA you're running, plus the installed package version if
+        applicable (`pip show qtrust-sdk qtrust-inspector`) or Docker image
+        tag (e.g. `ghcr.io/humoge7502/qtrust-backend:latest`).
+      placeholder: "e.g. commit a1b2c3d, qtrust-inspector 1.1.0, image qtrust-backend:0.1.0"
     validations:
       required: true
+
   - type: textarea
     id: what-happened
     attributes:
       label: What happened?
-      description: Expected vs actual behavior.
+      description: What did you expect to happen, and what actually happened? One or two crisp paragraphs beats a wall of text.
+      placeholder: "Expected the attestation relay to return 200 with a tx hash; instead got a 500 with 'nonce conflict' after the first retry."
     validations:
       required: true
+
   - type: textarea
-    id: repro
+    id: reproduction
     attributes:
-      label: Reproduction steps
+      label: Steps to reproduce
+      description: Minimal sequence — commands, API calls, or a failing test file. If it needs a local Anvil chain or specific env vars, say so.
       placeholder: |
-        1. `forge test --match-contract AuditRegistry`
-        2. ...
-      render: bash
+        1. cd sdk && pip install -e ".[dev]"
+        2. pytest sdk/tests/test_vc.py -k expired
+        3. ...
     validations:
       required: true
-  - type: textarea
-    id: environment
-    attributes:
-      label: Environment
-      placeholder: OS, node/foundry/python versions, commit SHA, chain (anvil/Base Sepolia/Base)
-    validations:
-      required: true
+
   - type: textarea
     id: logs
     attributes:
       label: Relevant log output
+      description: Paste verbatim output (stack trace, forge/pytest failures, server logs). Redact any secrets, keys, or API tokens first — gitleaks runs on this repo and public logs are scraped by bots.
       render: shell
+      placeholder: "pytest output, forge test trace, curl -v response, docker logs …"
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment details
+      description: OS, Python/Node/Foundry versions, network (Anvil / Base Sepolia / Base mainnet), anything unusual about your setup.
+      placeholder: "Ubuntu 24.04, Python 3.12, Node 20, forge 0.3.x, Base Sepolia"
+    validations:
+      required: false

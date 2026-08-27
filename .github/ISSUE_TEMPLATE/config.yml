@@ -1,21 +1,34 @@
-# GitHub Issue Template config — controls the "New issue" page.
-# See https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/configuring-issue-templates-for-your-repository#configuring-the-template-chooser
+# ─────────────────────────────────────────────────────────────────────────────
+# Issue template chooser — controls what users see at "New issue".
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# blank_issues_enabled: false hides the "Open a blank issue" option, so every
+# issue arrives through the structured forms (bug_report.yml /
+# feature_request.yml) with the metadata maintainers need for triage:
+# subsystem, version/commit, reproduction steps, logs.
+#
+# Contact links below redirect conversations that don't belong in the issue
+# tracker to the right channel. SECURITY IS DELIBERATELY NOT AN ISSUE FORM:
+# never report vulnerabilities via public issues — use the private Security
+# Advisories channel (first link block below), as required by SECURITY.md.
+# ─────────────────────────────────────────────────────────────────────────────
 
 blank_issues_enabled: false
-
 contact_links:
-  - name: Ask a question / discussion
-    url: https://github.com/humoge7502/q-trust/discussions
-    about: Use Discussions for questions, ideas, and general support — faster than an issue.
-  - name: Report a security vulnerability (private)
-    url: https://github.com/humoge7502/q-trust/security/advisories/new
-    about: Do NOT open a public issue. Use Security Advisories or see SECURITY.md for email/PGP.
-  - name: Security policy
-    url: https://github.com/humoge7502/q-trust/blob/main/SECURITY.md
-    about: Supported versions, scope, SLAs, and safe-harbor.
-  - name: Contributing guide
-    url: https://github.com/humoge7502/q-trust/blob/main/CONTRIBUTING.md
-    about: Development setup, testing, and PR process.
-  - name: Documentation
+  - name: 📚 Documentation
     url: https://humoge7502.github.io/q-trust
-    about: Architecture, whitepaper, deployment, ADRs, and runbooks.
+    about: >
+      Architecture, ADRs, API reference, runbooks, and the CBOM conformance
+      guide — check the docs before filing; many answers live there.
+  - name: 💬 Discussions & Q&A
+    url: https://github.com/humoge7502/q-trust/discussions
+    about: >
+      Questions, migration-planning ideas, CBOM feedback, and show-and-tell —
+      open-ended conversation belongs here, not in the issue tracker.
+  - name: 🔒 Report a security vulnerability (PRIVATE)
+    url: https://github.com/humoge7502/q-trust/security/advisories/new
+    about: >
+      Privately report suspected vulnerabilities via GitHub Security
+      Advisories (see SECURITY.md for the full disclosure policy and SLAs).
+      NEVER report vulnerabilities via public issues or discussions —
+      public reports cannot be embargoed and put downstream users at risk.

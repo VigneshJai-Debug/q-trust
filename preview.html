@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Q-Trust README preview</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.5.1/github-dark.min.css"/>
+<style>
+  body { box-sizing: border-box; background: #0d1117; margin: 0; padding: 32px 0; }
+  .markdown-body {
+    min-width: 200px; max-width: 1012px; margin: 0 auto; padding: 32px 48px;
+    background: #0d1117; color: #c9d1d9; font-family: -apple-system, 'Segoe UI', Roboto, 'Noto Sans', Arial, sans-serif;
+    font-size: 16px; line-height: 1.6;
+  }
+  .markdown-body h1, .markdown-body h2 { border-bottom: 1px solid #21262d; padding-bottom: .3em; }
+  .markdown-body table { border-collapse: collapse; }
+  .mermaid { background: #0d1117; text-align: center; margin: 1em 0; }
+  img { max-width: 100%; }
+  details summary { cursor: pointer; }
+</style>
+</head>
+<body>
+<article class="markdown-body">
+<!-- Q-Trust flagship README — design kit v2.0
+     Recommended repo topics: cryptography, post-quantum, pqc, cbom, cyclonedx,
+     blockchain, base, solidity, foundry, gnn, machine-learning, security-scanner,
+     compliance, nist, cnsa, fastify, nextjs, python, typescript
+     Social preview: primary assets/og-github.png (1280×640, GitHub) ·
+     variants assets/og-x.png (X/Twitter) · assets/og-linkedin.png (LinkedIn) -->
+
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-glow.png" />
+    <source media="(prefers-color-scheme: light)" srcset="assets/logo-solid.png" />
+    <img src="assets/logo-glow.png" width="84" alt="Q-Trust logo" align="top" />
+  </picture>
+  Q-Trust
+</h1>
+
+<h3 align="center">Post-Quantum Cryptography Migration &amp; Attestation Protocol</h3>
+
+<p align="center">
+  <em>Scan your cryptographic estate · score it against NIST &amp; CNSA 2.0 ·
+  plan migration with a GNN · seal tamper-proof attestations on Base L2.</em>
+</p>
+
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/hero-dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="assets/hero-light.png" />
+    <img width="100%" src="assets/hero-dark.png" alt="Q-Trust — the post-quantum trust protocol" />
+  </picture>
+</div>
+
+<p><br/></p>
+<div align="center">
+
+<a href="https://github.com/humoge7502/q-trust/stargazers"><img src="https://img.shields.io/github/stars/humoge7502/q-trust?style=for-the-badge&logo=github&label=STARS&color=%23EAC54F" alt="Stars"/></a>
+<a href="https://github.com/humoge7502/q-trust/network/members"><img src="https://img.shields.io/github/forks/humoge7502/q-trust?style=for-the-badge&logo=github&label=FORKS&color=%2300D9FF" alt="Forks"/></a>
+<a href="https://github.com/humoge7502/q-trust/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/humoge7502/q-trust/ci.yml?style=for-the-badge&label=CI&logo=githubactions&logoColor=white&color=%2322C55E" alt="CI"/></a>
+<a href="https://github.com/humoge7502/q-trust/actions/workflows/pqc-scan.yml"><img src="https://img.shields.io/github/actions/workflow/status/humoge7502/q-trust/pqc-scan.yml?style=for-the-badge&label=PQC%20SELF-SCAN&color=%2300D9FF" alt="PQC Self-Scan"/></a>
+<a href="https://github.com/humoge7502/q-trust/releases"><img src="https://img.shields.io/github/v/release/humoge7502/q-trust?style=for-the-badge&logo=semver&logoColor=white&color=%23A855F7" alt="Release"/></a>
+<a href="https://humoge7502.github.io/q-trust"><img src="https://img.shields.io/badge/DOCS-mkdocs%20material-00D9FF?style=for-the-badge&logo=readthedocs&logoColor=white" alt="Docs"/></a>
+<a href="LICENSE"><img src="https://img.shields.io/badge/LICENSE-MIT-22C55E?style=for-the-badge&logo=opensourceinitiative&logoColor=white" alt="License"/></a>
+
+</div>
+
+<div align="center">
+
+<a href="https://github.com/humoge7502/q-trust/actions/workflows/security.yml"><img src="https://img.shields.io/github/actions/workflow/status/humoge7502/q-trust/security.yml?style=flat-square&label=SECURITY&color=%239333EA" alt="Security"/></a>
+<a href="https://github.com/humoge7502/q-trust/actions/workflows/halmos.yml"><img src="https://img.shields.io/github/actions/workflow/status/humoge7502/q-trust/halmos.yml?style=flat-square&label=HALMOS%20SYMBOLIC&color=%236366F1" alt="Halmos"/></a>
+<a href="https://github.com/humoge7502/q-trust/actions/workflows/publish-docker.yml"><img src="https://img.shields.io/github/actions/workflow/status/humoge7502/q-trust/publish-docker.yml?style=flat-square&label=DOCKER&logo=docker&logoColor=white&color=%232496ED" alt="Docker"/></a>
+<a href="https://github.com/humoge7502/q-trust/actions/workflows/publish-pypi.yml"><img src="https://img.shields.io/github/actions/workflow/status/humoge7502/q-trust/publish-pypi.yml?style=flat-square&label=PYPI&logo=pypi&logoColor=white&color=%233776AB" alt="PyPI"/></a>
+<a href="https://github.com/humoge7502/q-trust/discussions"><img src="https://img.shields.io/github/discussions/humoge7502/q-trust?style=flat-square&label=DISCUSSIONS&color=blueviolet" alt="Discussions"/></a>
+<a href="https://github.com/humoge7502/q-trust/issues"><img src="https://img.shields.io/github/issues/humoge7502/q-trust?style=flat-square&color=orange" alt="Issues"/></a>
+<a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square" alt="PRs Welcome"/></a>
+
+</div>
+
+<div align="center">
+
+<a href="https://github.com/humoge7502/q-trust/graphs/contributors"><img src="https://img.shields.io/github/contributors/humoge7502/q-trust?style=flat-square&color=success" alt="Contributors"/></a>
+<a href="https://github.com/humoge7502/q-trust/commits"><img src="https://img.shields.io/github/last-commit/humoge7502/q-trust?style=flat-square&color=blueviolet" alt="Last Commit"/></a>
+<a href="https://github.com/humoge7502/q-trust"><img src="https://img.shields.io/github/languages/code-size/humoge7502/q-trust?style=flat-square&color=lightgrey" alt="Code Size"/></a>
+<a href="https://pypi.org/project/qtrust-sdk/"><img src="https://img.shields.io/pypi/v/qtrust-sdk?style=flat-square&label=SDK&logo=pypi&logoColor=white&color=%233776AB" alt="qtrust-sdk on PyPI"/></a>
+<a href="https://pypi.org/project/qtrust-inspector/"><img src="https://img.shields.io/pypi/v/qtrust-inspector?style=flat-square&label=INSPECTOR&logo=pypi&logoColor=white&color=%233776AB" alt="qtrust-inspector on PyPI"/></a>
+<a href="https://github.com/humoge7502/q-trust"><img src="https://tokei.rs/b1/github/humoge7502/q-trust?style=flat-square&category=code" alt="Lines of code"/></a>
+<a href="https://github.com/humoge7502/q-trust/commits"><img src="https://img.shields.io/github/commit-activity/m/humoge7502/q-trust?style=flat-square" alt="Commit activity"/></a>
+
+</div>
+
+<p><br/></p>
+<div align="center">
+  <a href="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=18&pause=1200&color=00D9FF&center=true&vCenter=true&random=false&width=650&separator=%3B&lines=Quantum+is+coming.+RSA+has+an+expiry+date.;Scan+your+crypto+estate+before+2030.;CBOM+%E2%86%92+risk+%E2%86%92+GNN+plan+%E2%86%92+on-chain+attestation.;Trust%2C+proven+post-quantum.">
+    <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=18&pause=1200&color=00D9FF&center=true&vCenter=true&random=false&width=650&separator=%3B&lines=Quantum+is+coming.+RSA+has+an+expiry+date.;Scan+your+crypto+estate+before+2030.;CBOM+%E2%86%92+risk+%E2%86%92+GNN+plan+%E2%86%92+on-chain+attestation.;Trust%2C+proven+post-quantum." alt="Typing SVG" />
+  </a>
+</div>
+
+<p><br/></p>
+<div align="center">
+
+<a href="#%EF%B8%8F-the-threat"><b>⚠️ The Threat</b></a> ·
+<a href="#%EF%B8%8F-pipeline"><b>⚙️ Pipeline</b></a> ·
+<a href="#-demo"><b>🎬 Demo</b></a> ·
+<a href="#-capabilities"><b>✨ Capabilities</b></a> ·
+<a href="#-architecture"><b>📐 Architecture</b></a> ·
+<a href="#-measured-results"><b>📊 Results</b></a> ·
+<a href="#-quick-start"><b>🚀 Quick Start</b></a> ·
+<a href="#-ecosystem--packages"><b>🧩 Ecosystem</b></a> ·
+<a href="#-roadmap"><b>🗺 Roadmap</b></a> ·
+<a href="#-documentation"><b>📚 Docs</b></a> ·
+<a href="#-contributing"><b>🤝 Contribute</b></a>
+
+</div>
+
+<p><br/></p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">⛓ <strong>11</strong><br>UUPS registries on Base L2</th>
+<th style="text-align: center;">🔎 <strong>10</strong><br>scanner modules</th>
+<th style="text-align: center;">🧠 <strong>τ 0.961</strong><br>GNN ranking accuracy</th>
+<th style="text-align: center;">🧪 <strong>189</strong><br>contract tests</th>
+<th style="text-align: center;">🛡 <strong>7</strong><br>compliance frameworks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">EIP-712 gasless · 7-day timelock</td>
+<td style="text-align: center;">TLS · SSH · source · binary</td>
+<td style="text-align: center;">PyTorch Geometric + RL agent</td>
+<td style="text-align: center;">unit · invariant · fuzz · attack</td>
+<td style="text-align: center;">NIST · CNSA 2.0 · FIPS · NIS2 · FISMA · FedRAMP · CMMC</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>📖 Contents</h2>
+<details open>
+<summary><b>Click to expand / collapse</b></summary>
+
+- [⚠️ The Threat](#️-the-threat)
+- [⚙️ Pipeline](#️-pipeline)
+- [🎬 Demo](#-demo)
+- [✨ Capabilities](#-capabilities)
+- [📐 Architecture](#-architecture)
+- [📊 Measured Results](#-measured-results)
+- [🚀 Quick Start](#-quick-start)
+- [⛓ On-Chain Layer](#-on-chain-layer-base-l2)
+- [🧠 GPU Analytics](#-gpu-accelerated-analytics-optional)
+- [🧩 Ecosystem & Packages](#-ecosystem--packages)
+- [🗺 Roadmap](#-roadmap)
+- [🧪 Reality Check](#-reality-check)
+- [📚 Documentation](#-documentation)
+- [🤝 Contributing](#-contributing)
+- [🌟 Community](#-community)
+- [📜 License](#-license)
+
+</details>
+
+<hr />
+<p><a name="threat"></a></p>
+<h2>⚠️ The Threat</h2>
+<div align="center">
+<img src="https://img.shields.io/badge/NIST_IR_8547-RSA%2FECC_signatures_disallowed_after_2030%E2%80%932035-248,81,73?style=flat-square&labelColor=1F2937" alt="NIST IR 8547"/>
+<img src="https://img.shields.io/badge/HNDL-harvest_now%2C_decrypt_later-F59E0B?style=flat-square&labelColor=1F2937" alt="HNDL"/>
+<img src="https://img.shields.io/badge/EU_NIS2_%2F_FedRAMP-CBOM_expected-00D9FF?style=flat-square&labelColor=1F2937" alt="Regulatory"/>
+</div>
+
+<p><br/></p>
+<p><strong>The migration deadline is set by standards bodies, not by attackers.</strong></p>
+<ul>
+<li><strong>NIST IR 8547</strong> disallows RSA and ECC signatures on US federal systems after <strong>2030–2035</strong>, and CNSA 2.0 pulls National Security Systems to ML-KEM / ML-DSA on an overlapping schedule.</li>
+<li><strong>Harvest-now-decrypt-later</strong> makes the effective deadline for long-lived secrets <em>today</em>: traffic captured now gets decrypted the day a cryptographically-relevant quantum computer arrives.</li>
+<li><strong>EU NIS2, FISMA and FedRAMP</strong> increasingly expect a Cryptographic Bill of Materials (CBOM) — you cannot migrate what you have not inventoried.</li>
+</ul>
+<p>Every enterprise faces the same wall: cryptography is scattered across TLS endpoints, source code, package manifests, binaries and configs — owned by different teams, with <strong>no shared evidence layer</strong> between vendors, auditors and customers. Q-Trust closes that loop.</p>
+<div align="center">
+
+**`discover → score → plan → attest`**
+
+</div>
+
+<hr />
+<p><a name="pipeline"></a></p>
+<h2>⚙️ Pipeline</h2>
+<div class="mermaid">flowchart TB
+    subgraph SCAN[&quot;① SCAN — inspector&quot;]
+        direction LR
+        tls[&quot;TLS / SSH probes&quot;]
+        src[&quot;Source · Manifests&lt;br/&gt;Binaries · Configs&quot;]
+    end
+
+    subgraph SCORE[&quot;② SCORE — risk engine&quot;]
+        risk[&quot;NIST SP 800-131A · CNSA 2.0 · FIPS 140-3&lt;br/&gt;NIS2 · FISMA · FedRAMP · CMMC&quot;]
+    end
+
+    subgraph PLAN[&quot;③ PLAN — GNN + RL&quot;]
+        gnn[&quot;PyTorch Geometric GNN&lt;br/&gt;Kendall τ 0.961 · RL agent&quot;]
+    end
+
+    subgraph ATTEST[&quot;④ ATTEST — Base L2&quot;]
+        chain[&quot;11 UUPS registries&lt;br/&gt;EIP-712 gasless · 7-day timelock&quot;]
+    end
+
+    SCAN --&gt;|&quot;CycloneDX 1.7 CBOM&quot;| SCORE
+    SCORE --&gt;|&quot;risk-ranked inventory&quot;| PLAN
+    PLAN --&gt;|&quot;migration steps&quot;| ATTEST
+    be[&quot;⚡ Fastify 5 API + indexer&quot;] -.-&gt;|&quot;relays &amp; anchors&quot;| ATTEST
+    fe[&quot;🖥 Next.js 16 dashboard&quot;] --&gt; be
+    sdk[&quot;🐍 Python SDK&quot;] --&gt;|&quot;verify / attest&quot;| be
+</div>
+<hr />
+<p><a name="demo"></a></p>
+<h2>🎬 Demo</h2>
+<div align="center">
+<img src="assets/demo-terminal.gif" width="880" alt="Q-Trust live demo — scan, plan, attest" />
+</div>
+
+<p><sub><strong>Real CLI, real flow</strong>: <code>crypto-inspector</code> scans a live endpoint and emits a CycloneDX 1.7 CBOM, the GNN planner ranks migrations (τ 0.961 vs heuristic optimum), and the evidence root is anchored on Base L2.</sub></p>
+<hr />
+<p><a name="capabilities"></a></p>
+<h2>✨ Capabilities</h2>
+<table>
+<tr>
+<td width="33%" align="center" valign="top">
+<a href="#-on-chain-layer-base-l2"><img src="assets/feature-scan.png" width="280" alt="Enterprise scanner"/></a>
+<h4>🔎 Discover</h4>
+<sub><b>TLS · SSH · source · manifests · binaries · configs</b><br/><br/>
+12+ source languages, 10+ manifest formats, OID extraction from binaries, cipher-suite audits — one command, one CBOM.</sub>
+</td>
+<td width="33%" align="center" valign="top">
+<a href="#-measured-results"><img src="assets/feature-ai.png" width="280" alt="GNN planner"/></a>
+<h4>🧠 Plan</h4>
+<sub><b>GNN priority ranking + RL sequencing</b><br/><br/>
+PyTorch Geometric model scores Kendall τ 0.961 against heuristic optimum; RL agent sequences migrations with cost estimates.</sub>
+</td>
+<td width="33%" align="center" valign="top">
+<a href="#-gpu-accelerated-analytics-optional"><img src="assets/feature-chain.png" width="280" alt="On-chain anchoring"/></a>
+<h4>⛓ Attest</h4>
+<sub><b>Tamper-proof on-chain evidence</b><br/><br/>
+Hash-chained evidence ledger anchored to Base L2 via EIP-712 gasless relays — publicly verifiable, revocable, Merkle-rooted.</sub>
+</td>
+</tr>
+</table>
+
+<details>
+<summary><b>🔬 Scanner modules — full matrix</b></summary>
+<br/>
+
+| Module | Target | Detects |
+|---|---|---|
+| TLS scanner | Network endpoints | Certificate algorithms, key sizes, expiry |
+| SSH scanner | Network endpoints | Host key algorithms, key types |
+| Source scanner | 12+ languages | Crypto API usage, hardcoded keys |
+| Manifest scanner | 10+ formats | Crypto library dependencies |
+| Binary scanner | Compiled artifacts | Algorithm strings, OIDs |
+| Config scanner | YAML / TOML / JSON | Cipher suites, crypto settings |
+| PCAP / netlog | Packet captures | HNDL exposure analysis |
+| Evidence ledger | All findings | Hash-chained, tamper-evident audit trail |
+
+**Output formats** — CycloneDX 1.7 CBOM · SARIF 2.1 (GitHub Advanced Security) · JSON risk/compliance reports · migration roadmap.
+
+</details>
+
+<details>
+<summary><b>🧮 Compliance frameworks — 7 rule sets</b></summary>
+<br/>
+
+| Framework | Scope | Sample rules |
+|---|---|---|
+| NIST SP 800-131A | Algorithm deprecation | RSA key sizes, ECDSA curves, hash algorithms |
+| CNSA 2.0 | NSA-approved algorithms | ML-KEM-1024, ML-DSA-87, AES-256, SHA-384+ |
+| FIPS 140-3 | Module validation | Approved algorithms, key sizes, modes |
+| EU NIS2 | EU cybersecurity | Crypto measures, quantum risk, incident reporting |
+| FISMA | Federal systems | FIPS modules, NIST algorithms, key management |
+| FedRAMP | Cloud services | CNSA Suite, TLS 1.2+, validated modules |
+| CMMC | DoD supply chain | CUI protection, key management, audit trails |
+
+</details>
+
+<hr />
+<p><a name="architecture"></a></p>
+<h2>🏗 Architecture</h2>
+<div align="center">
+<img src="assets/architecture.png" width="100%" alt="Q-Trust layered architecture"/>
+</div>
+
+<p><strong>Six independently deployable subsystems:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Subsystem</th>
+<th>Stack</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>contracts/</code></td>
+<td>Solidity · Foundry</td>
+<td>11 UUPS registries, governance, timelock</td>
+</tr>
+<tr>
+<td><code>inspector/</code></td>
+<td>Python</td>
+<td>Multi-language PQC scanner + risk engine</td>
+</tr>
+<tr>
+<td><code>planner/</code></td>
+<td>Python · PyTorch Geometric</td>
+<td>GNN migration planner + RL agent</td>
+</tr>
+<tr>
+<td><code>backend/</code></td>
+<td>TypeScript · Fastify 5 · viem</td>
+<td>API, indexer, gasless relayer, webhooks</td>
+</tr>
+<tr>
+<td><code>frontend/</code></td>
+<td>Next.js 16</td>
+<td>Scanner dashboard, risk gauge, roadmap UI</td>
+</tr>
+<tr>
+<td><code>sdk/</code></td>
+<td>Python</td>
+<td><code>QTrustClient</code>, risk, compliance, W3C VCs, DID</td>
+</tr>
+</tbody>
+</table>
+<details>
+<summary><b>📡 Deep dive — attestation lifecycle (sequence)</b></summary>
+<br/>
+
+
+<div class="mermaid">sequenceDiagram
+    autonumber
+    participant V as Vendor
+    participant SDK as Python SDK
+    participant API as Fastify API
+    participant R as Relayer
+    participant C as EvidenceRegistry (Base L2)
+
+    V-&gt;&gt;SDK: sign EIP-712 attestation (nonce-bound)
+    SDK-&gt;&gt;API: POST /v1/relay/attestation
+    API-&gt;&gt;API: verify signature + nonce anti-replay
+    API-&gt;&gt;R: enqueue gasless transaction
+    R-&gt;&gt;C: submit meta-tx
+    C--&gt;&gt;API: EvidenceRoot event (indexer)
+    API--&gt;&gt;SDK: tx hash + public verification URL
+    Note over C: admin ops behind 7-day timelock
+</div>
+
+
+</details>
+
+<details>
+<summary><b>🧩 Full component graph</b></summary>
+<br/>
+
+
+<div class="mermaid">flowchart LR
+    subgraph clients[&quot;Clients&quot;]
+        fe[&quot;Next.js 16&lt;br/&gt;dashboard&quot;]
+        sdk[&quot;Python SDK&quot;]
+        cli[&quot;crypto-inspector CLI&quot;]
+    end
+    subgraph services[&quot;Services (Docker Compose)&quot;]
+        api[&quot;Fastify 5 API&lt;br/&gt;147.8 req/s · p95 11.3 ms&quot;]
+        wh[&quot;Webhook watcher&quot;]
+        plan[&quot;Planner microservice&lt;br/&gt;(GNN inference)&quot;]
+        idx[&quot;Indexer (viem watchEvent)&quot;]
+    end
+    subgraph data[&quot;State&quot;]
+        pg[(&quot;Postgres 16&lt;br/&gt;read model&quot;)]
+        rd[(&quot;Redis&lt;br/&gt;queues + locks&quot;)]
+    end
+    subgraph chain[&quot;Base L2&quot;]
+        reg[&quot;11 UUPS registries&lt;br/&gt;+ governance + timelock&quot;]
+    end
+    fe --&gt; api
+    sdk --&gt; api
+    cli --&gt;|CBOM| api
+    api --&gt; pg
+    api --&gt; rd
+    api --&gt; plan
+    idx --&gt; pg
+    idx --&gt;|watchEvent| reg
+    api --&gt;|EIP-712 relay| reg
+    wh --&gt;|HMAC| vendors[&quot;Vendor webhooks&quot;]
+</div>
+
+
+</details>
+
+<hr />
+<p><a name="results"></a></p>
+<h2>📊 Measured Results</h2>
+<table>
+<thead>
+<tr>
+<th>Capability</th>
+<th>Result</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Migration ranking</td>
+<td>Kendall <strong>τ 0.961</strong> vs heuristic optimum (held-out)</td>
+<td><a href="planner/results/benchmark.json"><code>planner/results/benchmark.json</code></a></td>
+</tr>
+<tr>
+<td>GNN v3 @ scale</td>
+<td>100K graphs · BF16 — held-out <strong>τ 0.898</strong></td>
+<td><a href="planner/results/benchmark_v3.json"><code>planner/results/benchmark_v3.json</code></a></td>
+</tr>
+<tr>
+<td>RL migration agent</td>
+<td>mean reward <strong>+6.24</strong> (untrained baseline −8.6)</td>
+<td><a href="planner/"><code>planner/rl_agent.pt</code></a></td>
+</tr>
+<tr>
+<td>API throughput</td>
+<td><strong>147.8 req/s</strong> @ 100 VUs · p95 <strong>11.3 ms</strong> (anvil, 24-core / A100)</td>
+<td><a href="docs/PERFORMANCE.md"><code>docs/PERFORMANCE.md</code></a></td>
+</tr>
+<tr>
+<td>Contract tests</td>
+<td><strong>189</strong> — unit + invariant (1000 runs) + fuzz + attack</td>
+<td><a href="CHANGELOG.md"><code>CHANGELOG.md</code></a></td>
+</tr>
+<tr>
+<td>Scanner coverage</td>
+<td><strong>12+</strong> source languages · <strong>10+</strong> manifest formats</td>
+<td><a href="inspector/"><code>inspector/</code></a></td>
+</tr>
+<tr>
+<td>Side-channel detector</td>
+<td>clean → <strong>0.05</strong> VERIFIED · leaky → <strong>0.95</strong> HIGH_RISK (calibrated)</td>
+<td><a href="docs/GPU_FEATURES.md"><code>docs/GPU_FEATURES.md</code></a></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Full methodology: <a href="docs/PERFORMANCE.md">docs/PERFORMANCE.md</a> · <a href="docs/GPU_FEATURES.md">docs/GPU_FEATURES.md</a></p>
+</blockquote>
+<hr />
+<p><a name="quickstart"></a></p>
+<h2>🚀 Quick Start</h2>
+<h3>⏱ 60 seconds — scan something real</h3>
+<pre><code class="language-bash">git clone https://github.com/humoge7502/q-trust &amp;&amp; cd q-trust/inspector
+pip install -e .
+
+# Scan a live TLS endpoint → risk + compliance report
+crypto-inspector scan example.com --risk --compliance nist,cnsa
+
+# Full evidence trail → CycloneDX 1.7 CBOM + migration roadmap
+crypto-inspector scan example.com --cyclonedx cbom.json \
+    --evidence ledger.json --roadmap plan.json
+</code></pre>
+<h3>🐳 10 minutes — full stack on Docker</h3>
+<pre><code class="language-bash">cd q-trust
+cp .env.example .env      # set REDIS_PASSWORD, POSTGRES_PASSWORD, GRAFANA_PASSWORD
+docker compose up -d --build
+./scripts/verify_all.sh   # 9-step full-stack verification
+</code></pre>
+<p>Dashboard at <code>http://localhost:3000</code> · API at <code>http://localhost:3001</code> · Grafana at <code>http://localhost:3002</code> · public verification page at <code>/v/&lt;asset-id&gt;</code>.</p>
+<details>
+<summary><b>🧩 Per-component development setup</b></summary>
+<br/>
+
+
+<pre><code class="language-bash"># Contracts (Foundry — 189 tests incl. invariant + fuzz + attack)
+cd contracts &amp;&amp; forge test
+
+# Planner (PyTorch Geometric)
+cd planner &amp;&amp; python -m qtrust_planner.train
+python -m qtrust_planner.predict /tmp/bank_cbom.json
+
+# SDK
+pip install -e ./sdk &amp;&amp; python -c &quot;from qtrust import QTrustClient; print('OK')&quot;
+
+# Backend (Fastify 5)
+cd backend &amp;&amp; npm install &amp;&amp; npm run build
+
+# Frontend (Next.js 16)
+cd frontend &amp;&amp; npm install &amp;&amp; npm run dev
+</code></pre>
+
+
+</details>
+
+<details>
+<summary><b>🐍 Use the Python SDK</b></summary>
+<br/>
+
+
+<pre><code class="language-python">from qtrust import QTrustClient, RiskScoringEngine, ComplianceEngine
+
+client = QTrustClient(base_url=&quot;http://localhost:3001&quot;)
+
+# Verify an on-chain attestation from any chain
+result = client.verify(asset_id=&quot;...&quot;)
+print(result.risk_score, result.compliance)
+
+# Score a CBOM locally
+engine = RiskScoringEngine()
+report = engine.score(&quot;cbom.json&quot;)
+</code></pre>
+
+
+</details>
+
+<hr />
+<p><a name="onchain"></a></p>
+<h2>⛓ On-Chain Layer (Base L2)</h2>
+<p>Eleven UUPS-upgradeable registries behind a <strong>7-day timelock</strong>, with <strong>EIP-712 gasless submission</strong> paths for all write types. Design decisions are recorded as <a href="docs/adr/">ADRs</a>.</p>
+<details>
+<summary><b>📋 The 11 registries</b></summary>
+<br/>
+
+| Contract | Purpose |
+|---|---|
+| `AssetRegistry` | CBOM hash registration & verification |
+| `VendorRegistry` | PQC-readiness attestations |
+| `MigrationRegistry` | Migration step recording |
+| `AuditRegistry` | Third-party audit attestations |
+| `EvidenceRegistry` | Evidence ledger root anchoring |
+| `ComplianceAttestation` | Compliance score attestation |
+| `TrustAnchorRegistry` | Issuer accreditation |
+| `RevocationAnchor` | Merkle-root revocation |
+| `PolicyCommitment` | Versioned policy hashes |
+| `SchemaRegistry` | Schema registration |
+| `QTrustGovernance` | Timelock-controlled admin |
+
+Key ADRs: [ADR-0002 — EIP-712 gasless relay](docs/adr/0002-eip712-gasless-relay-all-writes.md) · [ADR-0003 — UUPS + timelock](docs/adr/0003-uups-timelock-governance.md) · [ADR-0001 — Base L2 selection](docs/adr/0001-base-l2-selection.md)
+
+</details>
+
+<hr />
+<p><a name="gpu"></a></p>
+<h2>🧠 GPU-Accelerated Analytics (optional)</h2>
+<p>On CUDA hardware (<code>QTRUST_GPU_ENABLED=true</code>), Q-Trust unlocks <strong>six GPU features</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Feature</th>
+<th>Hardware</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>100K-graph BF16 GNN training</td>
+<td>A100-class</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Timing side-channel analysis of PQC implementations (liboqs traces)</td>
+<td>A100-class</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Shor quantum-threat estimation &amp; simulation</td>
+<td>A100-class</td>
+</tr>
+<tr>
+<td>4</td>
+<td>RL migration agent training (10K episodes)</td>
+<td>A100-class</td>
+</tr>
+<tr>
+<td>5</td>
+<td>GPU-batch risk scoring for enterprise scans</td>
+<td>any CUDA</td>
+</tr>
+<tr>
+<td>6</td>
+<td>CBOM anomaly detection</td>
+<td>any CUDA</td>
+</tr>
+</tbody>
+</table>
+<p>Exposed via REST (<code>/v1/gpu/*</code>) and surfaced in the dashboard's <strong>Side Channel</strong> tab. Methodology &amp; checkpoints: <a href="docs/GPU_FEATURES.md">docs/GPU_FEATURES.md</a>.</p>
+<hr />
+<p><a name="ecosystem"></a></p>
+<h2>🧩 Ecosystem &amp; Packages</h2>
+<p>Q-Trust ships as installable packages, not just a repo. The Python SDK and the inspector CLI are packaged for PyPI, the backend and planner services run as containers, and the full protocol lives on the docs site. Take the piece you need:</p>
+<p><strong>🐍 <code>qtrust-sdk</code> — the Python client: on-chain CBOM registration, gasless attestations, risk &amp; compliance engines, W3C VCs + DIDs</strong></p>
+<pre><code class="language-bash">pip install qtrust-sdk
+</code></pre>
+<pre><code class="language-python">from qtrust import QTrustClient, CBOM, CBOMEntry
+
+client = QTrustClient(
+    private_key=&quot;0x...&quot;,
+    rpc_url=&quot;https://sepolia.base.org&quot;,
+    asset_registry_address=&quot;0x...&quot;,
+)
+
+cbom = CBOM(
+    org_did=&quot;did:ethr:0x...&quot;,
+    generated_at=1700000000,
+    scanner_version=&quot;1.1.0&quot;,
+    assets=[CBOMEntry(asset_type=&quot;tls_cert&quot;, algorithm=&quot;RSA-2048&quot;, location=&quot;example.com:443&quot;)],
+)
+asset_id, cid = client.register_cbom(cbom)   # → on-chain attestation + IPFS CID
+</code></pre>
+<p><strong>🔎 <code>qtrust-inspector</code> — the <code>crypto-inspector</code> CLI: all 10 scanner modules, one command</strong></p>
+<pre><code class="language-bash">pip install qtrust-inspector
+</code></pre>
+<pre><code class="language-bash">crypto-inspector scan example.com --risk --compliance nist,cnsa
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Package</th>
+<th>What it does</th>
+<th>PyPI</th>
+<th>Docs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>qtrust-sdk</code></td>
+<td>Python client — CBOM registration, EIP-712 gasless signing, risk &amp; compliance engines, W3C VCs + DIDs</td>
+<td><a href="https://pypi.org/project/qtrust-sdk/">qtrust-sdk</a></td>
+<td><a href="sdk/README.md">sdk/README.md</a></td>
+</tr>
+<tr>
+<td><code>qtrust-inspector</code></td>
+<td><code>crypto-inspector</code> CLI — 10 scanner modules → risk report, CycloneDX 1.7 CBOM, SARIF 2.1</td>
+<td><a href="https://pypi.org/project/qtrust-inspector/">qtrust-inspector</a></td>
+<td><a href="inspector/README.md">inspector/README.md</a></td>
+</tr>
+<tr>
+<td>Docker images</td>
+<td>Fastify API + relayer and GNN planner microservices — <code>ghcr.io/humoge7502/qtrust-backend</code> · <code>qtrust-planner</code></td>
+<td>GHCR — built by <a href=".github/workflows/publish-docker.yml">publish-docker.yml</a> on <code>vX</code> tags</td>
+<td><a href="docker-compose.yml">docker-compose.yml</a></td>
+</tr>
+<tr>
+<td>Docs site</td>
+<td>Whitepaper, ADRs, deployment guides, runbooks, performance methodology</td>
+<td>—</td>
+<td><a href="https://humoge7502.github.io/q-trust">humoge7502.github.io/q-trust</a></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>📦 PyPI releases flow through <a href=".github/workflows/publish-pypi.yml"><code>publish-pypi.yml</code></a> (trusted publishing) · GHCR images through <a href=".github/workflows/publish-docker.yml"><code>publish-docker.yml</code></a> on <code>vX</code> tags.</p>
+<p>🚧 Docs v2 — a VitePress site is staged in <a href="docs-v2/"><code>docs-v2/</code></a>, migration-ready.</p>
+</blockquote>
+<hr />
+<p><a name="roadmap"></a></p>
+<h2>🗺 Roadmap</h2>
+<div class="mermaid">gantt
+    title Q-Trust Roadmap (dates indicative)
+    dateFormat YYYY-MM
+    axisFormat %b %Y
+
+    section Landed
+    11 registries + 189 tests        :done, 2025-11, 2026-02
+    v2.0 scanner (10 modules)        :done, 2026-02, 2026-05
+    GNN planner (τ 0.961)            :done, 2026-03, 2026-06
+    7 CI pipelines + docs site       :done, 2026-05, 2026-07
+
+    section In flight
+    Base Sepolia deployment          :active, 2026-08, 2026-10
+    External security audit          :2026-10, 2026-12
+
+    section Next
+    Multi-chain anchoring            :2026-12, 2027-03
+    ZK compliance proofs             :2027-01, 2027-06
+    Enterprise pilot expansion       :2027-03, 2027-09
+</div>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">Status</th>
+<th>Milestone</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">✅</td>
+<td>v2.0 — 10-module scanner, 7 compliance frameworks, CycloneDX 1.7 + SARIF 2.1</td>
+</tr>
+<tr>
+<td style="text-align: center;">✅</td>
+<td>GNN planner (τ 0.961) + RL migration agent</td>
+</tr>
+<tr>
+<td style="text-align: center;">✅</td>
+<td>Bank pilot end-to-end demo (<code>pilot/</code>)</td>
+</tr>
+<tr>
+<td style="text-align: center;">🔄</td>
+<td>Base Sepolia deployment + public verification page</td>
+</tr>
+<tr>
+<td style="text-align: center;">🔄</td>
+<td>Independent security audit</td>
+</tr>
+<tr>
+<td style="text-align: center;">⬜</td>
+<td>Multi-chain anchoring beyond Base</td>
+</tr>
+<tr>
+<td style="text-align: center;">⬜</td>
+<td>ZK compliance proofs (private attestations)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><a name="reality"></a></p>
+<h2>🧪 Reality Check</h2>
+<p>Read this before trusting the stack with anything real:</p>
+<ul>
+<li><strong>No independent audit</strong> — contracts have never been reviewed by an external firm; treat them as reference implementations.</li>
+<li><strong>No public deployment</strong> — registry addresses default to a local anvil chain; Base Sepolia deployment is pending a funded key.</li>
+<li><strong>Relayer trust</strong> — all gasless writes flow through a backend-held key; the timelock controller is currently administered by the deployer EOA.</li>
+</ul>
+<p>Found a security issue? Follow the <a href="SECURITY.md">responsible-disclosure policy</a> — SLA: critical <strong>48 h</strong> / high <strong>72 h</strong>.</p>
+<blockquote>
+<p>💬 <strong>Maintainer's note:</strong> this repo runs <a href=".github/workflows/pqc-scan.yml">pqc-scan.yml</a> on itself every Monday — the protocol eats its own cooking.</p>
+</blockquote>
+<hr />
+<p><a name="docs"></a></p>
+<h2>📚 Documentation</h2>
+<div align="center">
+
+<b>Full docs site → <a href="https://humoge7502.github.io/q-trust">humoge7502.github.io/q-trust</a></b>
+
+</div>
+
+<table>
+<thead>
+<tr>
+<th>Doc</th>
+<th>What it covers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="docs/WHITEPAPER.md">Whitepaper</a></td>
+<td>Protocol specification and threat model</td>
+</tr>
+<tr>
+<td><a href="docs/ARCHITECTURE.md">Architecture</a></td>
+<td>System design, data flow, trust model</td>
+</tr>
+<tr>
+<td><a href="docs/adr/">ADRs</a></td>
+<td>All 7 architecture decision records</td>
+</tr>
+<tr>
+<td><a href="docs/deployment/">Deployment guides</a></td>
+<td>Base Sepolia, multi-chain, go-live checklist</td>
+</tr>
+<tr>
+<td><a href="docs/runbook/">Runbooks</a></td>
+<td>Incident response, backup &amp; restore</td>
+</tr>
+<tr>
+<td><a href="docs/PERFORMANCE.md">Performance</a></td>
+<td>k6 load tests, GPU latencies</td>
+</tr>
+<tr>
+<td><a href="docs/case-studies/">Case study</a></td>
+<td><code>example.com</code> — TLS → CBOM → on-chain → verify</td>
+</tr>
+<tr>
+<td><a href="pilot/">Bank pilot</a></td>
+<td>End-to-end PQC migration demo</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>🚧 <strong>VitePress v2 site</strong> — staged in <a href="docs-v2/"><code>docs-v2/</code></a>, migration-ready (brand-dark, Mermaid-native).</p>
+</blockquote>
+<hr />
+<p><a name="contributing"></a></p>
+<h2>🤝 Contributing</h2>
+<p>PRs are welcome — read <a href="CONTRIBUTING.md">CONTRIBUTING.md</a> for dev setup, pre-commit hooks and PR conventions.</p>
+<p><strong>CI runs on every push &amp; PR:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Pipeline</th>
+<th>Checks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ci.yml</code></td>
+<td>Foundry unit/invariant/fuzz/attack · pytest · vitest · Playwright · Hypothesis</td>
+</tr>
+<tr>
+<td><code>security.yml</code></td>
+<td>npm audit · pip-audit · secret scanning</td>
+</tr>
+<tr>
+<td><code>halmos.yml</code></td>
+<td>EVM symbolic execution (report-only)</td>
+</tr>
+<tr>
+<td><code>pqc-scan.yml</code></td>
+<td>Weekly post-quantum self-scan of this repo</td>
+</tr>
+<tr>
+<td><code>publish-*.yml</code></td>
+<td>Docker (GHCR) · PyPI (<code>qtrust-sdk</code>, <code>qtrust-inspector</code>)</td>
+</tr>
+<tr>
+<td><code>docs.yml</code></td>
+<td>MkDocs Material → GitHub Pages</td>
+</tr>
+</tbody>
+</table>
+<p>Good first issues: <a href="https://github.com/humoge7502/q-trust/labels/good%20first%20issue"><code>good first issue</code></a> · Discussions: <a href="https://github.com/humoge7502/q-trust/discussions">Q&amp;A</a></p>
+<hr />
+<p><a name="community"></a></p>
+<h2>🌟 Community</h2>
+<div align="center">
+
+<a href="https://github.com/humoge7502/q-trust/stargazers"><img src="https://reporoster.com/stars/dark/humoge7502/q-trust?limit=100" alt="Stargazers repo roster for humoge7502/q-trust"/></a>
+
+<a href="https://github.com/humoge7502/q-trust/graphs/contributors">
+<img src="https://contrib.rocks/image?repo=humoge7502/q-trust&max=100&columns=12" width="90%" alt="Contributors"/>
+</a>
+
+<a href="https://star-history.com/#humoge7502/q-trust&Date"><img src="https://api.star-history.com/svg?repos=humoge7502/q-trust&type=Date" alt="Star History Chart"/></a>
+
+</div>
+
+<hr />
+<p><a name="license"></a></p>
+<h2>📜 License</h2>
+<p>MIT — see <a href="LICENSE">LICENSE</a>. © Q-Trust Contributors.</p>
+<div align="center">
+<img src="assets/wave-divider.svg" width="100%" alt=""/>
+
+<br/>
+
+<img src="assets/orbit-badge.svg" width="120" alt="Q-Trust orbit badge"/>
+
+<b>Q-Trust</b> — trust, proven post-quantum.
+
+<a href="#%EF%B8%8F-the-threat"><img src="https://img.shields.io/badge/%E2%AC%86_BACK_TO_TOP-00D9FF?style=for-the-badge" alt="Back to top"/></a>
+
+<sub>Built with ❤️ and an unreasonable love for cryptographic inventory.</sub>
+
+</div>
+</article>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { primaryColor: '#101a30', primaryTextColor: '#c9d1d9', primaryBorderColor: '#00d9ff', lineColor: '#7c8bff', fontSize: '14px' } });
+</script>
+</body>
+</html>

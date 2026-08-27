@@ -1,162 +1,142 @@
 # Contributing to Q-Trust
 
-## Welcome
+Thank you for your interest in contributing to Q-Trust — the protocol that
+helps organizations coordinate the migration from classical to post-quantum
+cryptography. Every contribution counts: code, documentation, bug reports,
+benchmark results, and feature ideas.
 
-Thank you for your interest in contributing to Q-Trust. This protocol helps organizations coordinate the migration from classical to post-quantum cryptography. Every contribution — code, documentation, bug reports, feature ideas — is valuable.
+> **Status:** research / pre-release, solo-maintained. Reviews may take a few
+> days — please be patient, and keep PRs small and focused.
 
-## Getting Started
-
-### Fork and Clone
+## Getting started
 
 ```bash
 # Fork the repository on GitHub, then:
 git clone https://github.com/<your-username>/q-trust.git
 cd q-trust
 git remote add upstream https://github.com/humoge7502/q-trust.git
+cp .env.example .env   # fill in what your subsystem needs
 ```
 
 ### Prerequisites
 
-- Node.js 20+
-- Python 3.10+
-- Foundry (for Solidity tooling)
-- Docker (for integration tests)
+- Node.js 20+ (backend, frontend, docs)
+- Python 3.10+ (inspector, SDK, planner) — 3.11 in CI
+- [Foundry](https://getfoundry.sh) (`curl -L https://foundry.paradigm.xyz | bash && foundryup`)
+- Docker (integration stack via `docker-compose.yml`)
 
-### Development Setup
+## Monorepo map
+
+| Directory | What it is | Build/test tooling |
+| --- | --- | --- |
+| `contracts/` | 11 UUPS registries + timelock governance on Base L2 | Foundry (`forge`) |
+| `backend/` | Fastify 5 verification API, EIP-712 relayer, viem indexer | npm, TypeScript, vitest |
+| `frontend/` | Next.js dashboard & public verify pages | npm, vitest, Playwright |
+| `inspector/` | `crypto-inspector` PQC scanner CLI (CycloneDX 1.7, SARIF) | pip, pytest |
+| `sdk/` | `qtrust-sdk` — on-chain client, trust/VC/DID engines | pip, pytest, ruff, mypy |
+| `planner/` | FastAPI + PyTorch Geometric migration planner | pip, pytest |
+| `docs/` + `mkdocs.yml` | current docs site | mkdocs-material |
+| `docs-v2/` | staged VitePress next-gen docs | npm, VitePress |
+
+## Development environment per subsystem
+
+Use the same commands CI uses (`.github/workflows/ci.yml`):
 
 ```bash
-# Install dependencies
-npm install
+# Contracts (Solidity 0.8.24)
+cd contracts && forge build && forge test -vvv
 
-# Install Foundry (if not already installed)
-curl -L https://foundry.paradigm.xyz | bash
-foundryup
+# Backend (Fastify 5)
+cd backend && npm ci && npm run typecheck && npm run build && npm run test
 
-# Install Python dependencies
-pip install -r requirements.txt
+# Frontend (Next.js)
+cd frontend && npm ci && npm run build && npm test          # vitest
+cd frontend && npm run test:e2e                             # Playwright
 
-# Copy environment template
-cp .env.example .env
-# Edit .env with your local configuration
+# Inspector
+pip install -e "./inspector[dev,ml]" && pytest inspector/tests/ -v
 
-# Compile contracts
-cd contracts && forge build && cd ..
+# SDK
+pip install -e "./sdk[dev]" && pytest sdk/tests/ -v && ruff check sdk/
 
-# Run all linters
-npm run lint
+# Planner (CPU torch is fine for tests)
+pip install -r planner/requirements.txt
+QTRUST_PLANNER_DEVICE=cpu pytest planner/tests/ -v
+
+# Whole-repo smoke check
+./scripts/verify_all.sh
 ```
 
-## Repository Structure
+The Docker Compose profile starts the full backend stack (API, webhooks,
+Postgres, Redis, planner, Prometheus, Alertmanager, Grafana):
+`cp .env.example .env && docker compose up -d`.
 
-```
-q-trust/
-├── contracts/      Solidity smart contracts (Base L2, UUPS proxies)
-├── sdk/            Python SDK for scanner, risk engine, and planner
-├── inspector/      Cryptographic asset scanner (source code, TLS, packages)
-├── planner/        AI migration planner (GCN + GAT model)
-├── backend/        Node.js API server and relayer network
-├── frontend/       Web dashboard (React, TypeScript)
-├── scripts/        Deployment, verification, and CI scripts
-└── docs/           Whitepaper, architecture, API docs
-```
+## Workflow: branches, commits, PRs
 
-## Development Workflow
+- **Branch naming:** `feat/<short-slug>`, `fix/<short-slug>`,
+  `docs/<short-slug>`, `chore/<short-slug>` — branched from `main`.
+- **Conventional commits:** `feat:`, `fix:`, `docs:`, `test:`, `refactor:`,
+  `chore:`, `perf:` — e.g. `fix(inspector): dedupe AST+regex findings`.
+- **PRs:** target `main`, fill in
+  [`.github/PULL_REQUEST_TEMPLATE.md`](https://github.com/humoge7502/q-trust/blob/main/.github/PULL_REQUEST_TEMPLATE.md)
+  (summary, changes, testing checklist, security considerations, breaking
+  changes), and link issues with `Closes #N` / `Refs #N`.
 
-1. Create a feature branch from `main`:
-   ```bash
-   git checkout -b feature/my-feature
-   ```
+## Testing expectations
 
-2. Make your changes.
+Every PR is expected to keep the suite green for the subsystems it touches,
+and to **add tests for new behavior**:
 
-3. Run tests for the component you modified.
+| Subsystem | Expectation |
+| --- | --- |
+| Contracts | `forge test -vvv` passes; invariant suite runs under `fail_on_revert=true` (runs=1000, depth=100); new registry functions need invariant + fuzz coverage |
+| Backend | `vitest run` + `npm run typecheck` pass; new endpoints get TypeBox-validated schemas + tests |
+| Frontend | `vitest run` passes; user-visible components get component tests; flows that touch wallet/API get Playwright coverage |
+| Inspector / SDK / Planner | `pytest` passes; bug fixes should include a regression test; SDK ships Hypothesis property tests (CI runs a 1000-example profile) |
 
-4. Run linters and typecheck.
+## Measured-claims policy
 
-5. Submit a pull request against `main`.
+Numbers in docs, README, and marketing material must be **reproducible from
+the repo**: cite the benchmark/artifact that produced them (e.g. "147.8
+req/s @ 100 VUs, p95 = 11.3 ms" → `docs/PERFORMANCE.md` + k6 scripts in
+`ops/loadtest/`; "189 contract tests" → `forge test` under the strict
+invariant config; "Kendall τ 0.961" → `planner/results/benchmark_v3.json`).
+If you can't cite it, don't claim it — and if a claim becomes stale, fix the
+claim, not the reader's expectations.
 
-## Testing
+## Code style
 
-Each component has its own test suite:
-
-| Component | Command |
-|-----------|---------|
-| Contracts | `cd contracts && forge test` |
-| SDK | `cd sdk && pytest` |
-| Inspector | `cd inspector && pytest` |
-| Planner | `cd planner && pytest` |
-| Backend | `cd backend && npm test` |
-| Frontend | `cd frontend && npm test` |
-| Full stack | `./scripts/verify_all.sh` |
-
-## Code Style
-
-### Solidity
-
-- Version: 0.8.24
-- Follow OpenZeppelin conventions
-- Use NatSpec for all public/external functions
-- Inherit from `Initializable`, `UUPSUpgradeable`, `AccessControlUpgradeable` where appropriate
-- No hardcoded addresses — use constructor/initializer parameters
-
-### Python
-
-- Linter: ruff (`ruff check .`)
-- Type hints on all function signatures
-- Pydantic models for data structures
-- Docstrings in Google style
-
-### TypeScript
-
-- Strict mode enabled
-- ESLint with the project config
-- Prefer `readonly` for immutable data
-- Use `interface` over `type` for object shapes
+- **Solidity** — 0.8.24, OpenZeppelin conventions, NatSpec on all
+  public/external functions, `Initializable`/`UUPSUpgradeable`/
+  `AccessControlUpgradeable` where appropriate, no hardcoded addresses.
+- **Python** — `ruff` (`ruff check .`), type hints everywhere, Pydantic
+  models for data structures, Google-style docstrings.
+- **TypeScript** — strict mode, ESLint with the project config, prefer
+  `readonly` and `interface` for object shapes.
 
 ## Security
 
-- **Never commit secrets, private keys, or API tokens.** Use environment variables.
-- **Never store keys in code or config files.** Use hardware security modules or key vaults.
-- **All admin operations go through the governance TimelockController.** No bypasses.
-- **Report vulnerabilities** to security@qtrust.dev. Do not open public issues for security bugs.
-- **Run `npm audit` and `pip audit`** before submitting security-sensitive changes.
+- **Never commit secrets, private keys, or API tokens** — use environment
+  variables (`.env.example` documents them).
+- **All admin operations go through timelock governance. No bypasses.**
+- Report vulnerabilities via GitHub private vulnerability reporting
+  (Security tab → *Report a vulnerability*) — see [SECURITY.md](SECURITY.md).
+  Never open public issues for security bugs.
+- Run `npm audit` and `pip audit` before submitting security-sensitive
+  changes (CI already does `npm audit --audit-level=high`).
 
-## Pull Request Process
+## Updating docs
 
-1. Fill out the PR template completely.
-2. Include tests for new features or bug fixes.
-3. Update documentation if you change behavior or add functionality.
-4. Link related issues using `Closes #<issue>` or `Refs #<issue>`.
-5. Ensure all CI checks pass before requesting review.
-6. Request review from a maintainer familiar with the affected component.
+If your change alters user-visible behavior — CLI flags, API endpoints, env
+vars, contract events — update the docs in the same PR: `docs/` (current
+site), plus `docs-v2/` pages and `sdk/README.md` / CLI `--help` text where
+relevant. Mermaid diagrams in docs must stay ≤12 nodes and match the code.
 
-## Architecture Decisions
+## Architecture decisions
 
-### Why Base L2
-
-Base is an Ethereum L2 with sub-cent transaction costs and full EVM compatibility. This lets us use Solidity, Hardhat/Foundry, and the existing Ethereum ecosystem without compromising on security. The L2 inherits Ethereum's consensus security while providing the throughput needed for high-frequency attestation writes.
-
-### Why UUPS Proxy Upgradeability
-
-Smart contracts on-chain cannot be modified after deployment. UUPS proxies let us upgrade contract logic while preserving storage layout. The `TimelockController` governance layer ensures upgrades go through a delay period, giving the community time to review changes before execution.
-
-### Why CycloneDX 1.7
-
-CycloneDX is an OWASP standard for Software Bill of Materials (SBOM) and Cryptographic Bill of Materials (CBOM). Version 1.7 introduced explicit cryptographic property support, making it the industry standard for PQC inventory. Using CBOM ensures interoperability with existing security tooling and regulatory reporting.
-
-### Why Hash-Chained Evidence
-
-Hash chaining creates a tamper-evident sequence: every evidence record includes the hash of the previous record. This means any modification to historical records is immediately detectable. Combined with on-chain root anchoring, this provides cryptographic proof of evidence integrity without requiring a blockchain write for every individual record.
-
-## Anti-Decay Checklist (Engineering Elevation Blueprint §A.4)
-
-Every PR must defend the gains from decaying — the same mechanism that keeps the 7 CI workflows honest:
-
-- [ ] Every badge resolves. Link-check the README in the docs workflow; a badge is a claim.
-- [ ] Every number has a source link. New metrics enter `docs/_data/metrics.json` first, prose second; a number without a source link does not merge.
-- [ ] One metric, one value. If the same quantity appears in two documents, one of them imports it or one of them is deleted. The 127/189 → 211 test-count incident is the cautionary tale.
-- [ ] Zero superlatives, zero unverifiable claims. Reviewer check on every README/docs PR.
-- [ ] Limitations stay stated. When a Reality-check item is fixed (external audit obtained, contracts deployed), the section updates — it never silently disappears.
-- [ ] Screenshots are real and current. A UI PR that changes a landing-page-visible surface re-captures the asset in the same PR.
-- [ ] Reference material is generated, never hand-copied. API tables render from `openapi.yaml`; env tables from `.env.example`.
-- [ ] No binaries in git. `pre-commit`'s 500 KB cap is absolute; artifacts ride Releases. Run `git ls-files | xargs ls -lh | grep -E "\.pt|\.pdf"` before merge.
+Significant design changes should land as an ADR in `docs/adr/` (see
+ADR-0000 for the format). Existing decisions worth reading before proposing
+changes: Base L2 selection (0001), EIP-712 gasless relay for all writes
+(0002), UUPS + 7-day timelock (0003), Postgres read model with RPC fallback
+(0004), in-house Python VC/DID (0005), deterministic content-addressed IDs
+(0006).

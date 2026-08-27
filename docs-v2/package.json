@@ -1,0 +1,20 @@
+{
+  "name": "qtrust-docs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Q-Trust documentation (docs-v2) — VitePress site with native Mermaid support.",
+  "scripts": {
+    "docs:dev": "vitepress dev",
+    "docs:build": "vitepress build",
+    "docs:preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "mermaid": "^10.9.3",
+    "vitepress": "^1.6.3",
+    "vitepress-plugin-mermaid": "^2.0.17"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

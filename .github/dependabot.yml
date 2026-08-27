@@ -1,110 +1,277 @@
-# Dependabot dependency updates.
+# ─────────────────────────────────────────────────────────────────────────────
+# Dependabot dependency updates — one entry per manifest location.
+# ─────────────────────────────────────────────────────────────────────────────
 #
-# Grouped minor/patch updates per ecosystem to reduce PR noise;
-# major bumps still arrive as individual PRs. Weekly cadence.
+# Monorepo layout covered (paths verified against the repository):
+#   • github-actions → .github/workflows/*            (root)
+#   • npm            → backend/package.json           (Fastify API)
+#   • npm            → frontend/package.json          (Next.js)
+#   • pip            → inspector/pyproject.toml       (qtrust-inspector)
+#   • pip            → sdk/pyproject.toml             (qtrust-sdk)
+#   • pip            → planner/requirements.txt       (GNN/RL planner)
+#   • pip            → requirements-gpu.txt           (root, GPU training stack)
+#   • docker         → backend/Dockerfile             (GHCR qtrust-backend)
+#   • docker         → planner/Dockerfile             (GHCR qtrust-planner)
+#
+# Grouping strategy: minor + patch updates for an ecosystem arrive as ONE
+# grouped PR ("chore(deps): …"); major version bumps stay individual so
+# breaking changes (e.g. Fastify 5→6, viem majors, OZ contracts majors)
+# get reviewed in isolation. Weekly cadence, cooldown to dampen churn on
+# freshly-released versions.
+#
+# NOTE (upgrade over the current repo file): the repo already ships a
+# `.github/dependabot.yml`; this version adds the planner + root pip
+# manifests, the `chore(deps)` commit-message convention, labels, and
+# pattern-based group rules. Replace the old file with this one (or diff
+# and merge the additions — the existing entries are a strict subset).
+#
+# First-run setup:
+#   • Labels must exist under Issues → Labels (dependabot creates the
+#     default `dependencies` label automatically; the extras below are
+#     created on first use by Dependabot, but creating them upfront keeps
+#     the label filter tidy).
+#   • Inspect Insights → Dependency graph after the first run to confirm
+#     all 9 manifests were detected.
+# ─────────────────────────────────────────────────────────────────────────────
 
 version: 2
 
 updates:
-  # ── Backend (npm) ─────────────────────────────────────────────
-  - package-ecosystem: npm
-    directory: /backend
-    cooldown:
-      default-days: 7
+  # ── GitHub Actions (workflow action references) ────────────────────────
+  # The repo pins actions by commit SHA, so Dependabot bumps the trailing
+  # "# vX.Y.Z" comments — keep that comment style when adding new actions.
+  - package-ecosystem: github-actions
+    directory: /
     schedule:
       interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    reviewers:
+      - humoge7502
+    labels:
+      - "chore"
+      - "deps"
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps)"
     groups:
-      minor-and-patch:
+      actions-deps:
+        applies-to: version-updates
+        patterns:
+          - "actions/*"
+          - "github/*"
+          - "foundry-rs/*"
+          - "docker/*"
         update-types:
           - "minor"
           - "patch"
+    cooldown:
+      default-days: 7
+
+  # ── Backend (npm) ───────────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
     reviewers:
       - humoge7502
-    open-pull-requests-limit: 10
+    labels:
+      - "chore"
+      - "deps"
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(dev-deps)"
+    groups:
+      backend-minor-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "fastify"
+          - "viem"
+          # Runtime-critical: majors reviewed individually, minors still grouped.
+        update-types:
+          - "minor"
+          - "patch"
+    cooldown:
+      default-days: 7
 
-  # ── Frontend (npm) ────────────────────────────────────────────
+  # ── Frontend (npm) ──────────────────────────────────────────────────────
   - package-ecosystem: npm
     directory: /frontend
-    cooldown:
-      default-days: 7
     schedule:
       interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    reviewers:
+      - humoge7502
+    labels:
+      - "chore"
+      - "deps"
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(dev-deps)"
     groups:
-      minor-and-patch:
+      frontend-minor-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+          - "wagmi"
+          - "viem"
+          # Framework + wallet stack: majors reviewed individually.
         update-types:
           - "minor"
           - "patch"
-    reviewers:
-      - humoge7502
-    open-pull-requests-limit: 10
+    cooldown:
+      default-days: 7
 
-  # ── Inspector (pip) ───────────────────────────────────────────
+  # ── Inspector (pip, pyproject.toml) ─────────────────────────────────────
   - package-ecosystem: pip
     directory: /inspector
-    cooldown:
-      default-days: 7
     schedule:
       interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    reviewers:
+      - humoge7502
+    labels:
+      - "chore"
+      - "deps"
+    commit-message:
+      prefix: "chore(deps)"
     groups:
-      minor-and-patch:
+      inspector-minor-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
         update-types:
           - "minor"
           - "patch"
-    reviewers:
-      - humoge7502
-    open-pull-requests-limit: 10
+    cooldown:
+      default-days: 7
 
-  # ── SDK (pip) ─────────────────────────────────────────────────
+  # ── SDK (pip, pyproject.toml) ───────────────────────────────────────────
   - package-ecosystem: pip
     directory: /sdk
-    cooldown:
-      default-days: 7
     schedule:
       interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    reviewers:
+      - humoge7502
+    labels:
+      - "chore"
+      - "deps"
+    commit-message:
+      prefix: "chore(deps)"
     groups:
-      minor-and-patch:
+      sdk-minor-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
         update-types:
           - "minor"
           - "patch"
-    reviewers:
-      - humoge7502
-    open-pull-requests-limit: 10
-
-  # ── Dockerfile base images ────────────────────────────────────
-  - package-ecosystem: docker
-    directory: /backend
     cooldown:
       default-days: 7
+
+  # ── Planner (pip, requirements.txt) ─────────────────────────────────────
+  # PyTorch itself is pinned deliberately for GPU training reproducibility —
+  # it is excluded from grouping so its bumps stay individually reviewable.
+  - package-ecosystem: pip
+    directory: /planner
     schedule:
       interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    reviewers:
+      - humoge7502
+    labels:
+      - "chore"
+      - "deps"
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      planner-minor-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "torch"
+          - "torchvision"
+        update-types:
+          - "minor"
+          - "patch"
+    cooldown:
+      default-days: 7
+
+  # ── Root GPU training stack (pip, requirements-gpu.txt) ─────────────────
+  # Slow-moving, pinned for 8-GPU training runs; still tracked so CVEs in
+  # the training stack surface as PRs instead of surprises.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    reviewers:
+      - humoge7502
+    labels:
+      - "chore"
+      - "deps"
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      gpu-stack-minor-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "torch"
+          - "torchvision"
+        update-types:
+          - "minor"
+          - "patch"
+    cooldown:
+      default-days: 7
+
+  # ── Docker base images ──────────────────────────────────────────────────
+  # backend/ and planner/ are the only Dockerfiles in the repo (verified);
+  # both are published to GHCR by publish-docker.yml.
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    reviewers:
+      - humoge7502
+    labels:
+      - "chore"
+      - "deps"
+    commit-message:
+      prefix: "chore(deps)"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: docker
     directory: /planner
-    cooldown:
-      default-days: 7
     schedule:
       interval: weekly
-    groups:
-      minor-and-patch:
-        update-types:
-          - "minor"
-          - "patch"
+      day: monday
+    open-pull-requests-limit: 5
     reviewers:
       - humoge7502
-    open-pull-requests-limit: 10
-
-  # ── GitHub Actions versions ───────────────────────────────────
-  - package-ecosystem: github-actions
-    directory: /
+    labels:
+      - "chore"
+      - "deps"
+    commit-message:
+      prefix: "chore(deps)"
     cooldown:
       default-days: 7
-    schedule:
-      interval: weekly
-    groups:
-      minor-and-patch:
-        update-types:
-          - "minor"
-          - "patch"
-    reviewers:
-      - humoge7502
-    open-pull-requests-limit: 10

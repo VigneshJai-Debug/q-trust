@@ -1,72 +1,89 @@
 # Security Policy
 
-Q-Trust is a post-quantum trust infrastructure platform: Solidity contracts, a Node.js backend, a Python SDK, a cryptography inspector, a planner, and a web frontend. We take the security of this stack — and of the systems that depend on it — seriously.
+Q-Trust is a post-quantum cryptography migration & attestation protocol:
+Solidity contracts on Base L2, a Fastify backend, a Python SDK
+(`qtrust-sdk`), a cryptography inspector (`crypto-inspector`), a GNN
+migration planner, and a Next.js frontend. We take the security of this
+stack — and of the systems that will depend on it — seriously.
 
-## Supported Versions
+> **Honesty first:** Q-Trust is **research / pre-release** software. It is a
+> solo-maintained project with no external audit yet. Contracts are deployed
+> to Base Sepolia (testnet) only. Please do not anchor production trust
+> decisions to it in its current state.
 
-| Version | Supported          | Notes                                          |
-|---------|--------------------|------------------------------------------------|
-| 2.0.x   | :white_check_mark: | Current release line; receives fixes           |
-| 1.1.x   | :white_check_mark: | Security fixes only until 2027-01-31           |
-| < 1.1   | :x:                | Pre-GA; upgrade to a supported release         |
+## Supported versions
 
-## Reporting a Vulnerability
+| Version | Supported | Notes |
+| ------- | --------- | ----- |
+| `main` branch | ✅ | The only supported line — fixes land here first |
+| Tagged pre-releases (if any) | ⚠️ Best effort | Upgrade to `main` for security fixes |
+| No stable/production release exists | — | No mainnet deployment; no LTS promises |
 
-**Preferred:** Open a private report via [GitHub Security Advisories](https://github.com/security/advisories/new) on this repository. This keeps the report confidential end-to-end and lets us coordinate disclosure and CVE assignment in one place.
+## Reporting a vulnerability
 
-**Alternative:** Email `security@q-trust.example` (placeholder — replace with your operational mailbox before production). Encrypt sensitive reports with our PGP key published at `/.well-known/security.txt`.
+**Preferred — GitHub private vulnerability reporting:** go to the
+repository's **Security tab → "Report a vulnerability"**
+(<https://github.com/humoge7502/q-trust/security>). This keeps the report
+confidential end-to-end and lets us coordinate disclosure and CVE assignment
+in one place.
 
-Please include:
+<!-- TODO(owner): confirm private vulnerability reporting is ENABLED in
+     repo Settings → Code security and analysis, and optionally publish a
+     security@ contact / PGP key at /.well-known/security.txt. Until then,
+     GitHub private reporting is the only supported channel. -->
 
-- Affected component and version/commit (`contracts/`, `backend/`, `sdk/`, `inspector/`, `planner/`, `frontend/`)
-- A minimal reproduction (PoC, transaction calldata, HTTP request, or test case)
-- Impact assessment and any exploitation prerequisites
-- Whether you wish to be credited
+Please **do not open public GitHub issues, PRs, or discussions** for
+suspected vulnerabilities.
 
-Do **not** open public GitHub issues for suspected vulnerabilities.
+### What to include
 
-## Response SLAs
-
-| Severity | Triage acknowledgment | Fix target            |
-|----------|----------------------|-----------------------|
-| Critical | 48 hours             | 7 days                |
-| High     | 72 hours             | 14 days               |
-| Medium   | 5 business days      | Next minor release    |
-| Low      | 10 business days     | Best effort / next release |
-
-Triage means a maintainer has reproduced or credibly assessed the issue and replied with severity and a plan. Severity follows CVSS v3.1, adjusted for exploitability against deployed contract state.
-
-## Disclosure Policy
-
-- Reports are handled under coordinated disclosure. We will not publish or discuss details publicly before a fix ships.
-- Once a patch is released, we publish a GitHub Security Advisory with affected versions, remediation guidance, and credit to the reporter (unless anonymity is requested).
-- Embargo default is 90 days from initial report; we may request extensions for complex migrations (e.g., contract upgrades requiring timelock execution).
-- Safe-harbor: good-faith research that respects user data and avoids service degradation will not be pursued legally.
+- Affected component and the exact commit (`contracts/`, `backend/`,
+  `frontend/`, `sdk/`, `inspector/`, `planner/`, CI workflows)
+- A minimal reproduction: PoC, transaction calldata, HTTP request, or test case
+- Impact assessment and exploitation prerequisites
+- Whether you wish to be credited publicly
 
 ## Scope
 
-In scope:
+**In scope:** `contracts/` (incl. upgrade/timelock mechanics and deployment
+scripts), `backend/` (API, relayer, indexer, webhook delivery), `sdk/`
+(incl. DID resolution and VC verification — e.g. SSRF in `DIDResolver`,
+signature-validation bypasses), `inspector/` (CLI and analysis engine),
+`planner/`, `frontend/`, and the GitHub Actions workflows.
 
-- `contracts/` — Solidity contracts, deployment scripts, upgrade/timelock mechanics
-- `backend/` — Node.js API server, webhook handling, indexer
-- `sdk/` — Python SDK (`qtrust`), DID/VC verification logic
-- `inspector/` — PQC scanner CLI and analysis engine
-- `planner/` — migration planning services
-- `frontend/` — web application served to users
+**Out of scope:** third-party dependency bugs without a demonstrable exploit
+path in Q-Trust code (report upstream — we track advisories via Dependabot);
+volumetric DoS; missing best-practice flags without concrete impact;
+self-XSS; social engineering; test-only mocks and fixtures; issues in
+unsupported versions.
 
-Out of scope:
+## Response targets (SLM — service level commitment, not SLA)
 
-- Vulnerabilities in third-party dependencies without a demonstrable exploit path in Q-Trust code (report upstream; we track advisories continuously)
-- Denial of service via volumetric network flooding of public infrastructure
-- Missing security headers or best-practice hardening flags without concrete impact (e.g., CSP reports)
-- Self-XSS and attacks requiring an attacker-controlled browser/device of the victim
-- Social engineering, phishing, or physical attacks against team members or hosting providers
-- Issues affecting only unsupported versions (< 1.0) or clearly marked experimental branches
-- Test-only contracts, mocks, and fixtures never intended for mainnet deployment
+- **Acknowledgment target: 72 hours** (a maintainer confirms receipt and
+  begins triage).
+- Fix timelines are severity-dependent and set after triage — this is a
+  solo-maintained research project, so treat these as targets, not
+  contractual commitments. We will tell you honestly if a fix will take
+  weeks (e.g. contract changes needing timelock execution).
 
-## Security Controls (Reference)
+## Disclosure & safe harbor
 
-- Continuous scanning: Slither, Semgrep, CodeQL, pip-audit (`.github/workflows/security.yml`) and PQC readiness scans (`pqc-scan.yml`)
-- Contract changes route through timelock governance with an operational role separate from deployer privileges
-- Evidence chains use SHA-256 integrity hashing; VC verification fails closed on verification errors
-- Webhook secrets are redacted from logs; outbound requests apply SSRF protections including DNS pinning
+- Reports are handled under **coordinated disclosure**; details stay private
+  until a fix ships.
+- After a patch, we publish a GitHub Security Advisory with affected
+  versions, remediation guidance, and reporter credit (unless you prefer
+  anonymity).
+- Default embargo: **90 days**, extendable by mutual agreement — contract
+  upgrades legitimately need the 7-day timelock plus scheduling.
+- **Safe harbor:** good-faith research that respects user data, avoids
+  service degradation, and stays out of scope boundaries will not be pursued
+  legally.
+
+## Security controls (for context)
+
+Continuous scanning runs on every push/PR and daily: Slither (fail on HIGH),
+Semgrep, and CodeQL (`.github/workflows/security.yml`) plus PQC-readiness
+scans (`pqc-scan.yml`). Contracts route all admin mutations through the
+7-day timelock governor (ADR-0003) with role separation; EIP-712 relayed
+writes use per-signer nonces; evidence chains are SHA-256 hash-chained; VC
+verification fails closed.
