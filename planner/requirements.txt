@@ -5,4 +5,4 @@ fastapi>=0.110
 uvicorn>=0.29
 pydantic>=2.6
 numpy>=1.26
-redis>=5.0.0
+redis>=8.1.0
