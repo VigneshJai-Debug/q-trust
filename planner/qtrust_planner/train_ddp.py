@@ -37,11 +37,11 @@ if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from model_v3 import MigrationGNNv3
     from data_generator import generate_dataset
-    from train_gpu import listMLE_loss, per_graph_listMLE_loss, compute_metrics
+    from train_gpu import per_graph_listMLE_loss, compute_metrics
 else:
     from .model_v3 import MigrationGNNv3
     from .data_generator import generate_dataset
-    from .train_gpu import listMLE_loss, per_graph_listMLE_loss, compute_metrics
+    from .train_gpu import per_graph_listMLE_loss, compute_metrics
 
 
 def _setup(dist_backend_init: bool = True) -> tuple[int, int]:
@@ -74,6 +74,7 @@ def train_ddp(
     model_path: str,
     seed: int,
     val_split: float = 0.1,
+    norm: str = "batch",
 ) -> None:
     """Train MigrationGNNv3 across all visible GPUs with DDP."""
     rank, world_size = _setup()
@@ -124,6 +125,7 @@ def train_ddp(
         dropout=0.15,
         use_centrality=True,
         variant="hybrid",
+        norm=norm,
     ).to(device)
     # P2-10: torch.compile
     try:
@@ -148,7 +150,6 @@ def train_ddp(
         return 0.1 + 0.9 * 0.5 * (1.0 + math.cos(math.pi * progress))
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda)
     # P0 fix: no GradScaler for bf16 (fp16-only tool, no-op under bf16)
-    scaler = None
     grad_accum = int(os.environ.get("QTRUST_GRAD_ACCUM", "1"))
     if grad_accum < 1:
         grad_accum = 1
@@ -239,7 +240,8 @@ def train_ddp(
                 payload = {
                     "model_state_dict": model.state_dict() if not hasattr(model, "_orig_mod") else model._orig_mod.state_dict(),  # type: ignore[attr-defined]
                     "state_dict": model.state_dict() if not hasattr(model, "_orig_mod") else model._orig_mod.state_dict(),
-                    "model_config": {"input_features": 6, "hidden_dim": 256, "embedding_dim": 128, "heads": 8},
+                    "model_config": {"input_features": 6, "hidden_dim": 256, "embedding_dim": 128,
+                                     "heads": 8, "dropout": 0.15, "variant": "hybrid", "norm": norm},
                     "epochs": epoch + 1,
                     "n_graphs": n_graphs,
                     "seed": seed,
@@ -247,6 +249,7 @@ def train_ddp(
                     "best_val_kendall": best_val_kendall,
                     "val_split": val_split,
                     "world_size": world_size,
+                    "norm": norm,
                 }
                 try:
                     torch.save(payload, model_path)
@@ -278,6 +281,8 @@ def main() -> None:
         type=str,
         default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "model_ddp_v3.pt"),
     )
+    parser.add_argument("--norm", choices=("batch", "layer", "graph"), default="batch",
+                        help="hidden normalization; 'layer' recommended (model_v3 AUDIT NOTE)")
     parser.add_argument("--nproc", type=int, default=0, help="GPUs for plain-script mp.spawn mode (0 = all)")
     parser.add_argument("--quick", action="store_true", help="Quick test: 1K graphs, 10 epochs")
     args = parser.parse_args()
@@ -297,6 +302,7 @@ def main() -> None:
             model_path=args.model_path,
             seed=args.seed,
             val_split=args.val_split,
+            norm=args.norm,
         )
         return
 
@@ -313,6 +319,7 @@ def main() -> None:
             weight_decay=args.weight_decay,
             seed=args.seed,
             model_path=args.model_path,
+            norm=args.norm,
         )
         return
 
@@ -337,6 +344,7 @@ def _spawn_entry(rank: int, world_size: int, args: argparse.Namespace) -> None:
         model_path=args.model_path,
         seed=args.seed,
         val_split=args.val_split,
+        norm=args.norm,
     )
 
 

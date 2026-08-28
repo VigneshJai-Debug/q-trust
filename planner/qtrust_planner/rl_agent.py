@@ -483,7 +483,6 @@ def train_agent_ppo(
         batch_log_probs: list[torch.Tensor] = []
         batch_values: list[torch.Tensor] = []
         batch_rewards: list[list[float]] = []
-        batch_actions: list[int] = []
         # For PPO we need old log_probs before update
         rollout_rewards: list[float] = []
 
@@ -540,6 +539,11 @@ def train_agent_ppo(
         if batch_size is None:
             batch_size = min(256, len(advantages))
         n_batches = max(1, len(advantages) // batch_size)
+        # The inner epochs all reuse log_probs_t / values_t from the rollout, i.e.
+        # they share one autograd graph — so instead of calling backward() per
+        # mini-batch (which frees the graph and would raise on the second call),
+        # accumulate every mini-batch loss and backpropagate once per rollout.
+        accumulated_loss: torch.Tensor | None = None
         for _ in range(ppo_epochs):
             perm = torch.randperm(len(advantages))
             for i in range(n_batches):
@@ -560,10 +564,11 @@ def train_agent_ppo(
                 # Entropy bonus: approximate as -mean(log_probs)
                 entropy = -log_probs_t[idx].mean()
                 loss = actor_loss + value_coef * critic_loss - entropy_coef * entropy
-                optimizer.zero_grad()
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(agent.parameters(), max_norm=max_grad_norm)
-                optimizer.step()
+                accumulated_loss = loss if accumulated_loss is None else accumulated_loss + loss
+        optimizer.zero_grad()
+        accumulated_loss.backward()
+        torch.nn.utils.clip_grad_norm_(agent.parameters(), max_norm=max_grad_norm)
+        optimizer.step()
         scheduler.step()
         total_steps += len(rollout_rewards)
 

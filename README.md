@@ -95,7 +95,7 @@
 
 <br/>
 
-| ⛓ **11**<br>UUPS registries on Base L2 | 🔎 **10**<br>scanner modules | 🧠 **τ 0.961**<br>GNN ranking accuracy | 🧪 **189**<br>contract tests | 🛡 **7**<br>compliance frameworks |
+| ⛓ **11**<br>UUPS registries on Base L2 | 🔎 **10**<br>scanner modules | 🧠 **τ 0.972**<br>GNN ranking accuracy | 🧪 **189**<br>contract tests | 🛡 **7**<br>compliance frameworks |
 |:---:|:---:|:---:|:---:|:---:|
 | EIP-712 gasless · 7-day timelock | TLS · SSH · source · binary | PyTorch Geometric + RL agent | unit · invariant · fuzz · attack | NIST · CNSA 2.0 · FIPS · NIS2 · FISMA · FedRAMP · CMMC |
 
@@ -170,7 +170,7 @@ flowchart TB
     end
 
     subgraph PLAN["③ PLAN — GNN + RL"]
-        gnn["PyTorch Geometric GNN<br/>Kendall τ 0.961 · RL agent"]
+        gnn["PyTorch Geometric GNN<br/>Kendall τ 0.972 · RL agent"]
     end
 
     subgraph ATTEST["④ ATTEST — Base L2"]
@@ -194,7 +194,7 @@ flowchart TB
 <img src="assets/demo-terminal.gif" width="880" alt="Q-Trust live demo — scan, plan, attest" />
 </div>
 
-<sub>**Real CLI, real flow**: `crypto-inspector` scans a live endpoint and emits a CycloneDX 1.7 CBOM, the GNN planner ranks migrations (τ 0.961 vs heuristic optimum), and the evidence root is anchored on Base L2.</sub>
+<sub>**Real CLI, real flow**: `crypto-inspector` scans a live endpoint and emits a CycloneDX 1.7 CBOM, the GNN planner ranks migrations (τ 0.972 vs heuristic optimum), and the evidence root is anchored on Base L2.</sub>
 
 ---
 
@@ -213,7 +213,7 @@ flowchart TB
 <a href="#-measured-results"><img src="assets/feature-ai.png" width="280" alt="GNN planner"/></a>
 <h4>🧠 Plan</h4>
 <sub><b>GNN priority ranking + RL sequencing</b><br/><br/>
-PyTorch Geometric model scores Kendall τ 0.961 against heuristic optimum; RL agent sequences migrations with cost estimates.</sub>
+PyTorch Geometric model scores Kendall τ 0.972 against heuristic optimum; RL agent sequences migrations with cost estimates.</sub>
 </td>
 <td width="33%" align="center" valign="top">
 <a href="#-gpu-accelerated-analytics-optional"><img src="assets/feature-chain.png" width="280" alt="On-chain anchoring"/></a>
@@ -350,7 +350,7 @@ flowchart LR
 | Capability | Result | Source |
 |---|---|---|
 | Migration ranking | Kendall **τ 0.961** vs heuristic optimum (held-out) | [`planner/results/benchmark.json`](planner/results/benchmark.json) |
-| GNN v3 @ scale | 100K graphs · BF16 — held-out **τ 0.898** | [`planner/results/benchmark_v3.json`](planner/results/benchmark_v3.json) |
+| GNN v3 @ scale | 100K graphs · BF16 · LayerNorm retrain — held-out **τ 0.972** | [`planner/results/benchmark_v3.json`](planner/results/benchmark_v3.json) |
 | RL migration agent | mean reward **+6.24** (untrained baseline −8.6) | [`planner/rl_agent.pt`](planner/) |
 | API throughput | **147.8 req/s** @ 100 VUs · p95 **11.3 ms** (anvil, 24-core / A100) | [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) |
 | Contract tests | **189** — unit + invariant (1000 runs) + fuzz + attack | [`CHANGELOG.md`](CHANGELOG.md) |

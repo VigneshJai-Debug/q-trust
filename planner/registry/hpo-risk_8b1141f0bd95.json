@@ -1,0 +1,16 @@
+{
+  "run_id": "8b1141f0bd95",
+  "run_name": "hpo-risk",
+  "timestamp": "2026-08-27T17:06:58Z",
+  "git_commit": "862706227fd2",
+  "params": {
+    "track": "risk",
+    "n_trials": 3
+  },
+  "metrics": {
+    "best_value": 0.5483100999519666
+  },
+  "tags": {},
+  "artifact_path": null,
+  "data_hash": null
+}

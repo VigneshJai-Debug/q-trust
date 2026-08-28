@@ -24,7 +24,7 @@ convention.
 **Measured outcome (v2.1):** trained at 100K-graph scale with continuous
 best-val checkpointing; own-split val τ reached **0.703** (plateaued from
 epoch ~130 of 200). Under the corrected per-node-rank canonical protocol
-(`benchmark_v3.py`), v2 scores τ 0.961 and v3 τ 0.898 — see
+(`benchmark_v3.py`), v2 scores τ 0.961 and the LayerNorm-retrained v3 τ 0.972 — see
 `planner/results/benchmark_v3.json`. The earlier "τ 0.387" figure was an artifact
 of a sequence-correlation bug in `benchmark.score_order`, fixed in v2.1.
 

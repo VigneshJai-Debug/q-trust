@@ -1,0 +1,12 @@
+# Ruff config — matches the repo's pinned ruff (v0.5.0) default rule set.
+# Only the excludes differ: qtrust_ai/artifacts/ holds downloaded third-party
+# source trees (cached datasets), fine-tuned model weights and generated
+# reports — none of which should be linted.
+exclude = [
+    "qtrust_ai/artifacts",
+    ".git",
+    "__pycache__",
+    "node_modules",
+    "build",
+    "dist",
+]

@@ -20,6 +20,7 @@ import argparse
 import os
 import random
 import time
+from pathlib import Path
 
 import torch
 import torch.nn.functional as F
@@ -133,6 +134,7 @@ def train_gpu(
     val_split: float = 0.1,
     device_name: str | None = None,
     extra_graphs: list | None = None,
+    norm: str = "batch",
 ) -> str:
     """Train MigrationGNNv3 with BF16 mixed precision.
 
@@ -141,6 +143,10 @@ def train_gpu(
             cbom_to_dependency_graph) mixed into the synthetic dataset.
             The combined dataset is shuffled so real graphs land in both
             train and validation splits.
+        norm: Hidden-layer normalization — "batch" (legacy BatchNorm1d,
+            checkpoint-compatible), "layer" (LayerNorm, recommended: per-node
+            stats are batch-agnostic under PyG batching, no cross-graph
+            leakage — see model_v3 AUDIT NOTE), or "graph" (GraphNorm).
 
     Returns the path the best model was saved to.
     """
@@ -185,10 +191,10 @@ def train_gpu(
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, **loader_kwargs)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, **loader_kwargs)
 
-    model = MigrationGNNv3(input_features=6).to(device)
+    model = MigrationGNNv3(input_features=6, norm=norm).to(device)
 
     n_params = sum(p.numel() for p in model.parameters())
-    print(f"Model parameters: {n_params:,}")
+    print(f"Model parameters: {n_params:,} (norm={norm})")
 
     # P2-10: torch.compile for 2-4x throughput on A100 when available
     if use_cuda:
@@ -209,9 +215,8 @@ def train_gpu(
         progress = (epoch - warmup_epochs) / max(1, epochs - warmup_epochs)
         return 0.1 + 0.9 * 0.5 * (1.0 + math.cos(math.pi * progress))
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda)
-    # P0/P2 fix: GradScaler is for fp16 only; bf16 is numerically stable without scaling
-    # Do not create a scaler when using bf16 autocast (documented no-op + wasted memory)
-    scaler = None  # bf16 does not need GradScaler
+    # P0/P2 fix: no GradScaler — it is an fp16-only tool; bf16 is numerically
+    # stable without scaling (a scaler here would be a documented no-op + wasted memory).
     # Grad accumulation for long sequences (seq len 2048-8192) — default 1 (no accumulation)
     grad_accum = int(os.environ.get("QTRUST_GRAD_ACCUM", "1"))
     if grad_accum < 1:
@@ -219,7 +224,6 @@ def train_gpu(
 
     # Data provenance for registry (hash of generation params)
     import hashlib
-    import json as _json
     data_hash = hashlib.sha256(f"{n_graphs}-{seed}-{batch_size}".encode()).hexdigest()[:16]
 
     best_val_kendall = -1.0
@@ -321,7 +325,8 @@ def train_gpu(
             payload = {
                 "model_state_dict": model.state_dict() if not hasattr(model, "_orig_mod") else model._orig_mod.state_dict(),  # type: ignore[attr-defined]
                 "state_dict": model.state_dict() if not hasattr(model, "_orig_mod") else model._orig_mod.state_dict(),  # compat
-                "model_config": {"input_features": 6, "hidden_dim": 256, "embedding_dim": 128, "heads": 8},
+                "model_config": {"input_features": 6, "hidden_dim": 256, "embedding_dim": 128,
+                                 "heads": 8, "dropout": 0.15, "variant": "hybrid", "norm": norm},
                 "epochs": epoch + 1,
                 "n_graphs": n_graphs,
                 "seed": seed,
@@ -332,9 +337,11 @@ def train_gpu(
                 "val_split": val_split,
                 "learning_rate": learning_rate,
                 "weight_decay": weight_decay,
+                "norm": norm,
             }
             # Handle compiled model unwrapping
             try:
+                Path(model_path).parent.mkdir(parents=True, exist_ok=True)
                 torch.save(payload, model_path)
             except Exception:
                 torch.save(model.state_dict(), model_path)
@@ -354,6 +361,9 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--norm", choices=("batch", "layer", "graph"), default="batch",
+                        help="hidden normalization; 'layer' recommended for the v3 retrain "
+                             "(see model_v3 AUDIT NOTE)")
     parser.add_argument("--quick", action="store_true", help="Quick test: 10K graphs, 20 epochs")
     args = parser.parse_args()
 
@@ -367,4 +377,5 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
         learning_rate=args.lr,
         seed=args.seed,
+        norm=args.norm,
     )

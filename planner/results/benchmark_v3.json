@@ -6,19 +6,154 @@
     "kendall": 0.9606702074411669,
     "node_rank": 0.43568273941393965,
     "params": 9282,
-    "eval_seconds": 3.57,
+    "eval_seconds": 0,
     "n_graphs": 150,
+    "device": "NVIDIA A100-SXM4-80GB",
+    "seeds": [
+      999
+    ],
+    "data_hash": "364ef521f6c726ea",
+    "suites": {
+      "in_dist": {
+        "exact_rank": 0.0,
+        "exact_rank_median": 0.0,
+        "exact_rank_mean": 0.0,
+        "exact_rank_stdev": 0.0,
+        "top5": 0.6733333333333333,
+        "top5_median": 0.6733333333333333,
+        "top5_mean": 0.6733333333333333,
+        "top5_stdev": 0.0,
+        "top10": 0.52,
+        "top10_median": 0.52,
+        "top10_mean": 0.52,
+        "top10_stdev": 0.0,
+        "kendall": 0.9606702074411669,
+        "kendall_median": 0.9606702074411669,
+        "kendall_mean": 0.9606702074411669,
+        "kendall_stdev": 0.0,
+        "node_rank": 0.43568273941393965,
+        "node_rank_median": 0.43568273941393965,
+        "node_rank_mean": 0.43568273941393965,
+        "node_rank_stdev": 0.0,
+        "params": 9282,
+        "n_graphs": 150,
+        "n_seeds": 1,
+        "seeds": [
+          999
+        ],
+        "device": "NVIDIA A100-SXM4-80GB",
+        "data_hash": "364ef521f6c726ea",
+        "meta_epochs": 80,
+        "meta_n_graphs": 1200
+      }
+    },
     "meta_epochs": 80,
     "meta_n_graphs": 1200
   },
   "v3 (GPU-trained, 256-dim)": {
-    "exact_rank": 0.0,
-    "top5": 0.52,
-    "top10": 0.2733333333333333,
-    "kendall": 0.8982254246510997,
-    "node_rank": 0.2269920306863125,
+    "exact_rank": 0.013333333333333334,
+    "top5": 0.7333333333333333,
+    "top10": 0.56,
+    "kendall": 0.9718233582567961,
+    "node_rank": 0.5336087020306598,
     "params": 237070,
-    "eval_seconds": 1.36,
-    "n_graphs": 150
+    "eval_seconds": 0,
+    "n_graphs": 150,
+    "device": "NVIDIA A100-SXM4-80GB",
+    "seeds": [
+      999
+    ],
+    "data_hash": "364ef521f6c726ea",
+    "suites": {
+      "in_dist": {
+        "exact_rank": 0.013333333333333334,
+        "exact_rank_median": 0.013333333333333334,
+        "exact_rank_mean": 0.013333333333333334,
+        "exact_rank_stdev": 0.0,
+        "top5": 0.7333333333333333,
+        "top5_median": 0.7333333333333333,
+        "top5_mean": 0.7333333333333333,
+        "top5_stdev": 0.0,
+        "top10": 0.56,
+        "top10_median": 0.56,
+        "top10_mean": 0.56,
+        "top10_stdev": 0.0,
+        "kendall": 0.9718233582567961,
+        "kendall_median": 0.9718233582567961,
+        "kendall_mean": 0.9718233582567961,
+        "kendall_stdev": 0.0,
+        "node_rank": 0.5336087020306598,
+        "node_rank_median": 0.5336087020306598,
+        "node_rank_mean": 0.5336087020306598,
+        "node_rank_stdev": 0.0,
+        "params": 237070,
+        "n_graphs": 150,
+        "n_seeds": 1,
+        "seeds": [
+          999
+        ],
+        "device": "NVIDIA A100-SXM4-80GB",
+        "data_hash": "364ef521f6c726ea",
+        "meta_norm": "layer",
+        "meta_epochs": 117,
+        "meta_n_graphs": 100000,
+        "meta_seed": 42,
+        "meta_best_val_kendall": 0.971170054193016
+      }
+    },
+    "meta_norm": "layer",
+    "meta_epochs": 117,
+    "meta_n_graphs": 100000,
+    "meta_seed": 42,
+    "meta_best_val_kendall": 0.971170054193016
+  },
+  "v3 DDP (400K graphs, 256-dim)": {
+    "exact_rank": 0.0,
+    "top5": 0.5333333333333333,
+    "top10": 0.3,
+    "kendall": 0.9060970364393044,
+    "node_rank": 0.2443604177055123,
+    "params": 237070,
+    "eval_seconds": 0,
+    "n_graphs": 150,
+    "device": "NVIDIA A100-SXM4-80GB",
+    "seeds": [
+      999
+    ],
+    "data_hash": "364ef521f6c726ea",
+    "suites": {
+      "in_dist": {
+        "exact_rank": 0.0,
+        "exact_rank_median": 0.0,
+        "exact_rank_mean": 0.0,
+        "exact_rank_stdev": 0.0,
+        "top5": 0.5333333333333333,
+        "top5_median": 0.5333333333333333,
+        "top5_mean": 0.5333333333333333,
+        "top5_stdev": 0.0,
+        "top10": 0.3,
+        "top10_median": 0.3,
+        "top10_mean": 0.3,
+        "top10_stdev": 0.0,
+        "kendall": 0.9060970364393044,
+        "kendall_median": 0.9060970364393044,
+        "kendall_mean": 0.9060970364393044,
+        "kendall_stdev": 0.0,
+        "node_rank": 0.2443604177055123,
+        "node_rank_median": 0.2443604177055123,
+        "node_rank_mean": 0.2443604177055123,
+        "node_rank_stdev": 0.0,
+        "params": 237070,
+        "n_graphs": 150,
+        "n_seeds": 1,
+        "seeds": [
+          999
+        ],
+        "device": "NVIDIA A100-SXM4-80GB",
+        "data_hash": "364ef521f6c726ea",
+        "meta_norm": "batch"
+      }
+    },
+    "meta_norm": "batch"
   }
 }

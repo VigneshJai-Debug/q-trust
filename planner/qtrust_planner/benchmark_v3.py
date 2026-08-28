@@ -64,22 +64,32 @@ def _load_v2(path: Path):
 def _load_v3(path: Path):
     if not path.exists():
         return None
-    model = V3(
-        input_features=6,
-        hidden_dim=256,
-        embedding_dim=128,
-        heads=8,
-        dropout=0.15,
-        use_centrality=True,
-        variant="hybrid",
-    )
     # nosemgrep — torch.load with weights_only=True: safe deserialization
     payload = torch.load(path, map_location="cpu", weights_only=True)
+    cfg = payload.get("model_config", {}) if isinstance(payload, dict) else {}
+    if not isinstance(cfg, dict):
+        cfg = {}
+    # Reconstruct with the checkpoint's own architecture config. Legacy
+    # checkpoints (pre-norm retrain) default to BatchNorm, matching how
+    # they were trained; LayerNorm retrain checkpoints carry norm in
+    # model_config and are reconstructed exactly.
+    model = V3(
+        input_features=cfg.get("input_features", 6),
+        hidden_dim=cfg.get("hidden_dim", 256),
+        embedding_dim=cfg.get("embedding_dim", 128),
+        heads=cfg.get("heads", 8),
+        dropout=cfg.get("dropout", 0.15),
+        use_centrality=cfg.get("use_centrality", True),
+        variant=cfg.get("variant", "hybrid"),
+        norm=cfg.get("norm", "batch"),
+    )
     if isinstance(payload, dict) and "state_dict" in payload:
         model.load_state_dict(payload["state_dict"])
     else:
         model.load_state_dict(payload)
-    return model.eval(), {}
+    meta = {"norm": cfg.get("norm", "batch"), **{k: payload[k] for k in
+            ("epochs", "n_graphs", "seed", "best_val_kendall") if isinstance(payload, dict) and k in payload}}
+    return model.eval(), meta
 
 
 def evaluate(model, graphs, device) -> list[dict[str, float]]:
@@ -177,9 +187,7 @@ def main() -> None:
                     g = d[int(0.85*len(d)):]
                 else:
                     g = graphs  # reuse (OOD generation is cheap but deterministic)
-                start = time.time()
                 scores = evaluate(model, g, device)
-                elapsed = time.time() - start
                 per_seed_means.append(mean_metrics(scores))
             # Aggregate across seeds: median±IQR
             import statistics
