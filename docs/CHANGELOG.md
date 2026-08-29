@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### HPO real objectives + QTrace-FM real loss (2026-08-29)
+
+- **HPO no longer scores dummy/random objectives.** `planner/qtrust_planner/hpo.py`
+  previously returned a random-ish score from `_objective_dummy` (its own
+  docstring said "Placeholder objective — replace with real training +
+  eval_harness()"). Every track now runs a **real, reduced-scale training + held-out
+  evaluation**: `plan` trains a small MigrationGNNv3 and reports Kendall τ on a
+  held-out suite (canonical `score_order` protocol); `code` trains
+  `CryptoCodeDetector` and reports macro-F1; `risk` fits the QRisk ensemble and
+  reports held-out accuracy; `trace` runs the real masked-patch reconstruction
+  loss. Trial budgets are recorded in the result JSON and the winner is
+  retrained at full scale (relative ranking only — no reduced-scale number is
+  presented as a final benchmark).
+- **QTrace-FM pretraining loss was a stub.** `pretrain_step` returned
+  `recon.mean() * 0.01` (never compared against input). It is now a real
+  MAE-style masked-patch reconstruction: a learnable mask token replaces masked
+  patch embeddings and the loss is MSE over the masked patches vs original
+  patch pixels (`planner/qtrust_planner/qtrace_fm.py`).
+
 ### Model-training rigor campaign — every checkpoint retrained and benchmarked (2026-08-28)
 
 Rigorous retraining of every shipped model with honest, verified metrics:

@@ -351,11 +351,24 @@ flowchart LR
 |---|---|---|
 | Migration ranking | Kendall **τ 0.961** vs heuristic optimum (held-out) | [`planner/results/benchmark.json`](planner/results/benchmark.json) |
 | GNN v3 @ scale | 100K graphs · BF16 · per-graph ListMLE — held-out **τ 0.975** | [`planner/results/benchmark_v3.json`](planner/results/benchmark_v3.json) |
-| RL migration agent | **100%** migration completion on feasible CBOMs · mean reward **+106** (training reward −2, reproducibility in [`planner/results/rl_benchmark.json`](planner/results/) · [`scripts/eval_rl_agent.py`](scripts/eval_rl_agent.py)) | [`planner/rl_agent.pt`](planner/) |
+| RL migration agent | **100%** migration completion on feasible CBOMs · mean reward **+107.7** vs random **+107.1** (reproducibility in [`planner/results/rl_benchmark.json`](planner/results/) · [`scripts/eval_rl_agent.py`](scripts/eval_rl_agent.py)) | [`planner/rl_agent.pt`](planner/) |
 | API throughput | **147.8 req/s** @ 100 VUs · p95 **11.3 ms** (anvil, 24-core / A100) | [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) |
 | Contract tests | **211** — unit + invariant (1000 runs) + fuzz + attack | [`CHANGELOG.md`](CHANGELOG.md) |
 | Scanner coverage | **12+** source languages · **10+** manifest formats | [`inspector/`](inspector/) |
 | Side-channel detector | clean → **0.05** VERIFIED · leaky → **0.95** HIGH_RISK (calibrated) | [`docs/GPU_FEATURES.md`](docs/GPU_FEATURES.md) |
+
+> **Validation status (honest scope):** planner τ and RL rewards are measured on
+> **synthetic** migration graphs whose ranking labels are produced by the same
+> priority formula used as the heuristic baseline (`data_generator.py`), so
+> they demonstrate the model's fidelity to the doctrine rule on generated data —
+> not yet proof of superiority on real enterprise estates. Real-CBOM suites are
+> exercised by `planner/qtrust_planner/eval_harness.py --real-cbom` (convert
+> real CBOMs via `cbom_to_dependency_graph`) and real-data training runs in
+> `scripts/train_real_models.py` / `scripts/train_qtrust_all.py --real`. The
+> RL agent is trained on the same feasible (20–50 asset) distribution it is
+> evaluated on and beats the random baseline; the criticality-priority
+> heuristic remains the near-optimal policy for this reward (see
+> `scripts/retrain_rl_feasible.py`).
 
 > Full methodology: [docs/PERFORMANCE.md](docs/PERFORMANCE.md) · [docs/GPU_FEATURES.md](docs/GPU_FEATURES.md)
 

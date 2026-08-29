@@ -20,7 +20,12 @@ import time
 from pathlib import Path
 from typing import Any
 
-REGISTRY_DIR = Path(os.environ.get("QTRUST_REGISTRY_DIR", "planner/registry"))
+# Anchor the default registry at the repo's planner/registry regardless of
+# the caller's working directory (HPO/training can be launched from planner/
+# or from the repo root; a relative default would silently create a nested
+# planner/planner/registry instead of the tracked one).
+_DEFAULT_REGISTRY = Path(__file__).resolve().parents[1] / "registry"
+REGISTRY_DIR = Path(os.environ.get("QTRUST_REGISTRY_DIR", str(_DEFAULT_REGISTRY)))
 REGISTRY_DIR.mkdir(parents=True, exist_ok=True)
 
 def _git_commit() -> str:
