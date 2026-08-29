@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-29T20:52:25.133503+00:00",
+  "generated_at": "2026-08-29T21:38:39.524557+00:00",
   "epochs": 5,
   "rl_episodes": 40,
   "real_datasets": true,
@@ -12,7 +12,7 @@
     {
       "model": "discovery/CryptoCodeDetector",
       "status": "trained",
-      "seconds": 206.05,
+      "seconds": 202.54,
       "train": {
         "epochs": 5,
         "examples": 10294,
@@ -67,32 +67,32 @@
           "epochs": 2,
           "examples": 10294,
           "batch_size": 24,
-          "train_accuracy": 0.9516,
-          "final_loss": 0.1196,
+          "train_accuracy": 0.9494,
+          "final_loss": 0.1264,
           "gpus_visible": 1,
           "saved_to": "/home/nvidia/Project/qtrust_ai/artifacts/crypto_codebert"
         },
         "_eval": {
-          "precision": 0.9094,
-          "recall": 0.7844,
-          "f1": 0.8423,
-          "accuracy": 0.8191,
-          "false_negatives": 367,
-          "fn_rate": 0.2156,
+          "precision": 0.9216,
+          "recall": 0.7732,
+          "f1": 0.8409,
+          "accuracy": 0.8198,
+          "false_negatives": 386,
+          "fn_rate": 0.2268,
           "coverage": 1.0,
           "n": 2764,
           "per_language": {
             "javascript": {
               "tp": 37,
-              "fp": 4,
+              "fp": 3,
               "fn": 5,
-              "tn": 170
+              "tn": 171
             },
             "shell": {
-              "tp": 38,
-              "fp": 3,
-              "fn": 15,
-              "tn": 12
+              "tp": 36,
+              "fp": 2,
+              "fn": 17,
+              "tn": 13
             },
             "cpp": {
               "tp": 90,
@@ -101,22 +101,22 @@
               "tn": 108
             },
             "c": {
-              "tp": 1071,
-              "fp": 101,
-              "fn": 212,
-              "tn": 319
+              "tp": 1057,
+              "fp": 91,
+              "fn": 226,
+              "tn": 329
             },
             "go": {
-              "tp": 35,
-              "fp": 5,
-              "fn": 5,
-              "tn": 14
+              "tp": 34,
+              "fp": 1,
+              "fn": 6,
+              "tn": 18
             },
             "python": {
-              "tp": 21,
-              "fp": 16,
-              "fn": 84,
-              "tn": 189
+              "tp": 18,
+              "fp": 12,
+              "fn": 87,
+              "tn": 193
             },
             "csharp": {
               "tp": 5,
@@ -125,9 +125,9 @@
               "tn": 0
             },
             "rust": {
-              "tp": 29,
+              "tp": 30,
               "fp": 0,
-              "fn": 5,
+              "fn": 4,
               "tn": 52
             },
             "swift": {
@@ -138,9 +138,9 @@
             },
             "typescript": {
               "tp": 0,
-              "fp": 1,
+              "fp": 0,
               "fn": 0,
-              "tn": 64
+              "tn": 65
             },
             "solidity": {
               "tp": 9,
@@ -164,7 +164,7 @@
     {
       "model": "discovery/AlgorithmPurposeClassifier",
       "status": "trained",
-      "seconds": 4.98,
+      "seconds": 5.1,
       "train": {
         "examples": 820,
         "distribution": {
@@ -264,7 +264,7 @@
     {
       "model": "graph/TemporalGNN",
       "status": "trained",
-      "seconds": 13.06,
+      "seconds": 13.37,
       "train": {
         "examples": 301,
         "mae": 4.018,
@@ -346,7 +346,7 @@
     {
       "model": "migration/PQCRecommender",
       "status": "trained",
-      "seconds": 3.14,
+      "seconds": 3.22,
       "train": {
         "examples": 820,
         "classes": [
@@ -402,7 +402,7 @@
     {
       "model": "migration/MigrationCostPredictor",
       "status": "trained",
-      "seconds": 1.19,
+      "seconds": 1.16,
       "train": {
         "examples": 401,
         "weights": {
@@ -435,7 +435,7 @@
     {
       "model": "migration/MigrationFailurePredictor",
       "status": "trained",
-      "seconds": 0.55,
+      "seconds": 0.56,
       "train": {
         "examples": 600,
         "weights": {
@@ -477,7 +477,7 @@
     {
       "model": "migration/InteroperabilityPredictor",
       "status": "trained",
-      "seconds": 3.25,
+      "seconds": 3.06,
       "train": {
         "examples": 505,
         "bias_compat": 0.15,
@@ -518,7 +518,7 @@
     {
       "model": "migration/MultiObjectiveRLAgent",
       "status": "trained",
-      "seconds": 9.54,
+      "seconds": 9.61,
       "train": {
         "episodes": 40,
         "mean_reward": 0.9312,
@@ -578,7 +578,7 @@
     {
       "model": "monitoring/CryptoAnomalyDetector",
       "status": "trained",
-      "seconds": 1.1,
+      "seconds": 1.85,
       "train": {
         "n": 30,
         "algos": 7,
@@ -689,7 +689,7 @@
     {
       "model": "vendor/SupplyChainRiskModel + VendorReadinessModel",
       "status": "trained",
-      "seconds": 0.04,
+      "seconds": 0.03,
       "train": {
         "_scm": {
           "vendor_a": 91.0,
@@ -739,7 +739,7 @@
     {
       "model": "copilot/SecurityCopilot",
       "status": "trained",
-      "seconds": 0.01,
+      "seconds": 0.0,
       "train": {
         "mode": "deterministic",
         "assets_scanned": 1,
@@ -838,6 +838,6 @@
     "errors": 0,
     "anchors_ok": 15,
     "anchors_total": 15,
-    "wall_seconds": 249.37
+    "wall_seconds": 247.0
   }
 }

@@ -835,6 +835,16 @@ class CryptoCodeDetector:
             return {"status": "skipped", "reason": f"import failed: {exc}"}
 
         dev = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        # Deterministic training: seed all RNGs and pin cuDNN so repeated
+        # runs produce bit-identical checkpoints. Without this the headline
+        # held-out F1 changes run-to-run (observed 0.812?0.899), which makes
+        # the benchmark non-reproducible and defeats the measured-results
+        # claims.
+        torch.manual_seed(self.config.seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(self.config.seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
         try:
             tok = AutoTokenizer.from_pretrained(model_name)  # type: ignore
             model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=2)  # type: ignore
@@ -859,12 +869,16 @@ class CryptoCodeDetector:
         n = len(corpus)
         # Shuffle each epoch — source-grouped corpora otherwise train on
         # long homogeneous runs (all-crypto then all-benign) and converge
-        # to a degenerate classifier.
+        # to a degenerate classifier. Use a SEEDED local RNG so repeated
+        # training runs produce identical orderings and a reproducible
+        # checkpoint (the global ``random`` must not be consumed; other
+        # layers share that stream).
         epoch_order = list(range(n))
+        epoch_rng = random.Random(self.config.seed)
         train_acc: Optional[float] = None
         final_loss = 0.0
         for _ in range(epochs):
-            random.shuffle(epoch_order)
+            epoch_rng.shuffle(epoch_order)
             model.train()
             total_loss, correct, seen = 0.0, 0, 0
             for i in range(0, n, batch_size):

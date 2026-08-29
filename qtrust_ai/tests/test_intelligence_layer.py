@@ -63,6 +63,36 @@ def test_purpose_classifier_uses_sklearn_when_available() -> None:
     assert res["has_sklearn"] is True, "sklearn is installed but the TF-IDF/LogReg path failed"
 
 
+def test_code_detector_fine_tune_is_deterministic() -> None:
+    """Regression: the real transformer fine-tune used the UNSET global RNG
+    for per-epoch shuffling (plus cuDNN autotune), so the same corpus + seed
+    produced a different model — and a different held-out F1 — on every run
+    (observed 0.812 vs 0.899 on the same 10K real-code corpus). Benchmark
+    claims are only meaningful if a re-run reproduces the number."""
+    pytest.importorskip("torch")
+    pytest.importorskip("transformers")
+    corpus = [
+        {"code": "import hashlib; hashlib.sha256(b'x')", "language": "python", "label": "HASH", "is_crypto": True},
+        {"code": "def add(a, b): return a + b", "language": "python", "label": "UNKNOWN", "is_crypto": False},
+        {"code": "from Crypto.Cipher import AES; AES.new(k, AES.MODE_GCM)", "language": "python", "label": "AES", "is_crypto": True},
+        {"code": "print('hello')", "language": "python", "label": "UNKNOWN", "is_crypto": False},
+        {"code": "rsa.generate_private_key(2048)", "language": "python", "label": "RSA", "is_crypto": True},
+        {"code": "x = [i for i in range(10)]", "language": "python", "label": "UNKNOWN", "is_crypto": False},
+        {"code": "ecdh.ECDH().generate_keypair()", "language": "python", "label": "RSA/ECC", "is_crypto": True},
+        {"code": "class Foo: pass", "language": "python", "label": "UNKNOWN", "is_crypto": False},
+    ] * 4  # enough to matter for shuffling
+    det1 = CryptoCodeDetector(seed=42)
+    det2 = CryptoCodeDetector(seed=42)
+    r1 = det1.fine_tune(corpus, epochs=1, device="cpu")
+    r2 = det2.fine_tune(corpus, epochs=1, device="cpu")
+    assert r1.get("status") == "trained", f"fine_tune failed: {r1}"
+    assert r1["train_accuracy"] == r2["train_accuracy"], (
+        f"fine_tune is non-deterministic for a fixed seed: "
+        f"run1 acc={r1['train_accuracy']} run2 acc={r2['train_accuracy']} — "
+        "the per-epoch shuffle and/or cuDNN must be seeded"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Phase 2 — Migration intel
 # ---------------------------------------------------------------------------

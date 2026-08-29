@@ -53,9 +53,14 @@ mixing. The fine-tuned `model_real_v3.pt` is now the canonical default
 
 **All 15 qtrust_ai models trained on real data** (`train_qtrust_all.py --real`):
 CryptoCodeDetector fine-tuned CodeBERTa on **10,294 real examples on GPU**
-(train accuracy 0.952 · held-out precision 0.909 / recall 0.784 / F1 0.842),
+(train accuracy 0.949 · held-out precision 0.922 / recall 0.773 / F1 0.841),
 plus purpose classifier, risk, recommender, anomaly, vendor, and regression
 models; RL agent re-benchmarked (106.82 vs random 106.06, 100% completion).
+The fine-tune is now **deterministic** (seeded per-epoch shuffle + pinned
+cuDNN): the same corpus and seed reproduce the same checkpoint and the same
+held-out F1 (verified F1 0.8409 on two consecutive runs), so the benchmark
+claim is reproducible instead of run-to-run luck (previously observed 0.812
+vs 0.899 on the same 10K corpus).
 
 **Discovery ensemble + baseline-honesty fixes (2026-08-29):**
 
@@ -66,7 +71,7 @@ models; RL agent re-benchmarked (106.82 vs random 106.06, 100% completion).
   posted 0.95 train accuracy yet only ~0.51 held-out recall, losing to the
   naive always-crypto baseline. The ML weight is now scaled by confidence and
   a decisive rule fires at `conf ≥ 0.85` when no deterministic layer hits.
-  Held-out **F1 0.674 → 0.842** (recall 0.514 → 0.784, precision 0.978 → 0.909),
+  Held-out **F1 0.674 → 0.841** (recall 0.514 → 0.773, precision 0.978 → 0.922),
   now **beating the majority baseline** (relative gain −0.116 → **+0.105**)
   and rules-only on the §29 adversarial holdout (F1 0.533 vs 0.483).
 - **Fabricated baseline in `BenchmarkComparison.code_detector`.** The
