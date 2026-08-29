@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-29T18:31:14.024512+00:00",
+  "generated_at": "2026-08-29T20:52:25.133503+00:00",
   "epochs": 5,
   "rl_episodes": 40,
   "real_datasets": true,
@@ -12,7 +12,7 @@
     {
       "model": "discovery/CryptoCodeDetector",
       "status": "trained",
-      "seconds": 206.43,
+      "seconds": 206.05,
       "train": {
         "epochs": 5,
         "examples": 10294,
@@ -57,7 +57,7 @@
         },
         "has_torch": true,
         "has_transformers": true,
-        "note": "real fine-tuning would run CryptoCodeBERT here; stub populates priors deterministically",
+        "note": "fallback path (no transformers/GPU); priors populated deterministically \u2014 use fine_tune() for the real CodeBERTa fine-tune",
         "torch_available": true,
         "simulated_loss": 0.532,
         "_fine_tune": {
@@ -67,67 +67,67 @@
           "epochs": 2,
           "examples": 10294,
           "batch_size": 24,
-          "train_accuracy": 0.9528,
-          "final_loss": 0.1204,
+          "train_accuracy": 0.9516,
+          "final_loss": 0.1196,
           "gpus_visible": 1,
           "saved_to": "/home/nvidia/Project/qtrust_ai/artifacts/crypto_codebert"
         },
         "_eval": {
-          "precision": 0.9777,
-          "recall": 0.5141,
-          "f1": 0.6739,
-          "accuracy": 0.6936,
-          "false_negatives": 827,
-          "fn_rate": 0.4859,
+          "precision": 0.9094,
+          "recall": 0.7844,
+          "f1": 0.8423,
+          "accuracy": 0.8191,
+          "false_negatives": 367,
+          "fn_rate": 0.2156,
           "coverage": 1.0,
           "n": 2764,
           "per_language": {
             "javascript": {
               "tp": 37,
-              "fp": 3,
+              "fp": 4,
               "fn": 5,
-              "tn": 171
+              "tn": 170
             },
             "shell": {
-              "tp": 20,
-              "fp": 0,
-              "fn": 33,
-              "tn": 15
+              "tp": 38,
+              "fp": 3,
+              "fn": 15,
+              "tn": 12
             },
             "cpp": {
-              "tp": 45,
-              "fp": 1,
-              "fn": 68,
-              "tn": 110
+              "tp": 90,
+              "fp": 3,
+              "fn": 23,
+              "tn": 108
             },
             "c": {
-              "tp": 707,
-              "fp": 16,
-              "fn": 576,
-              "tn": 404
+              "tp": 1071,
+              "fp": 101,
+              "fn": 212,
+              "tn": 319
             },
             "go": {
-              "tp": 20,
-              "fp": 0,
-              "fn": 20,
-              "tn": 19
+              "tp": 35,
+              "fp": 5,
+              "fn": 5,
+              "tn": 14
             },
             "python": {
-              "tp": 16,
-              "fp": 0,
-              "fn": 89,
-              "tn": 205
+              "tp": 21,
+              "fp": 16,
+              "fn": 84,
+              "tn": 189
             },
             "csharp": {
-              "tp": 2,
+              "tp": 5,
               "fp": 0,
-              "fn": 19,
+              "fn": 16,
               "tn": 0
             },
             "rust": {
-              "tp": 19,
+              "tp": 29,
               "fp": 0,
-              "fn": 15,
+              "fn": 5,
               "tn": 52
             },
             "swift": {
@@ -138,9 +138,9 @@
             },
             "typescript": {
               "tp": 0,
-              "fp": 0,
+              "fp": 1,
               "fn": 0,
-              "tn": 65
+              "tn": 64
             },
             "solidity": {
               "tp": 9,
@@ -164,7 +164,7 @@
     {
       "model": "discovery/AlgorithmPurposeClassifier",
       "status": "trained",
-      "seconds": 5.08,
+      "seconds": 4.98,
       "train": {
         "examples": 820,
         "distribution": {
@@ -264,7 +264,7 @@
     {
       "model": "graph/TemporalGNN",
       "status": "trained",
-      "seconds": 13.96,
+      "seconds": 13.06,
       "train": {
         "examples": 301,
         "mae": 4.018,
@@ -346,7 +346,7 @@
     {
       "model": "migration/PQCRecommender",
       "status": "trained",
-      "seconds": 3.16,
+      "seconds": 3.14,
       "train": {
         "examples": 820,
         "classes": [
@@ -402,7 +402,7 @@
     {
       "model": "migration/MigrationCostPredictor",
       "status": "trained",
-      "seconds": 1.17,
+      "seconds": 1.19,
       "train": {
         "examples": 401,
         "weights": {
@@ -435,7 +435,7 @@
     {
       "model": "migration/MigrationFailurePredictor",
       "status": "trained",
-      "seconds": 0.74,
+      "seconds": 0.55,
       "train": {
         "examples": 600,
         "weights": {
@@ -477,7 +477,7 @@
     {
       "model": "migration/InteroperabilityPredictor",
       "status": "trained",
-      "seconds": 3.18,
+      "seconds": 3.25,
       "train": {
         "examples": 505,
         "bias_compat": 0.15,
@@ -518,7 +518,7 @@
     {
       "model": "migration/MultiObjectiveRLAgent",
       "status": "trained",
-      "seconds": 9.78,
+      "seconds": 9.54,
       "train": {
         "episodes": 40,
         "mean_reward": 0.9312,
@@ -578,7 +578,7 @@
     {
       "model": "monitoring/CryptoAnomalyDetector",
       "status": "trained",
-      "seconds": 0.43,
+      "seconds": 1.1,
       "train": {
         "n": 30,
         "algos": 7,
@@ -838,6 +838,6 @@
     "errors": 0,
     "anchors_ok": 15,
     "anchors_total": 15,
-    "wall_seconds": 250.45
+    "wall_seconds": 249.37
   }
 }

@@ -80,9 +80,13 @@ class BaselineComparison:
 
         model_tp, model_fp, model_fn, model_tn = _confusion(lambda ex: det.predict(ex["code"], ex["language"]).is_crypto)
         rules_tp, rules_fp, rules_fn, _ = _confusion(lambda ex: bool(det._static_layer(ex["code"], ex["language"])))  # noqa: SLF001
-        # majority = always-crypto (real corpus is crypto-majority)
-        maj_tp, maj_fp, maj_fn, _ = (sum(1 for e in eval_c if e.get("is_crypto")), 0,
-                                     sum(1 for e in eval_c if not e.get("is_crypto")), 0)
+        # majority = always-crypto (predicts crypto for every file). Honest
+        # confusion: every real crypto file is a TP, every non-crypto file is a
+        # FP (precision defaults to the dataset's crypto rate — NOT 100%). Older
+        # versions hard-coded maj_fp=0 and reported an impossible 1.0 precision.
+        maj_tp = sum(1 for e in eval_c if e.get("is_crypto"))
+        maj_fp = sum(1 for e in eval_c if not e.get("is_crypto"))
+        maj_fn = 0
         # random = coin flip
         rnd = random.Random(self.seed)
         rand_tp = rand_fp = rand_fn = 0

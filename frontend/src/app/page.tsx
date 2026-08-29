@@ -324,65 +324,25 @@ function ArchitecturePlaceholder() {
           </p>
         </div>
 
-        {/* Visual placeholder — accessible SVG with title/desc; replace with a real diagram image when available */}
         <figure className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 bg-slate-900 px-4 py-2.5">
             <figcaption className="flex items-center gap-2 text-xs font-medium tracking-wide text-slate-300">
               <span className="h-2 w-2 rounded-full bg-emerald-400" aria-hidden="true" />
-              Q-Trust dataflow · replace this placeholder with{" "}
-              <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[11px]">docs/architecture.svg</code>
+              Q-Trust dataflow · 5-layer architecture
             </figcaption>
           </div>
-          <div role="img" aria-labelledby="arch-diagram-title arch-diagram-desc" className="p-4 sm:p-6">
-            <p id="arch-diagram-title" className="sr-only">
-              Q-Trust architecture diagram
-            </p>
-            <p id="arch-diagram-desc" className="sr-only">
-              Inspector scans source, manifest, binary, and TLS sources and emits AssetFindings; Risk and Compliance score them; CycloneDX, SARIF, Evidence, and Roadmap outputs are produced; SDK pins to IPFS and submits EIP-712 gasless transactions to the four registries on Base; Frontend verifies on-chain and visualizes the pipeline.
-            </p>
-            <svg viewBox="0 0 960 280" className="h-auto w-full" role="img" aria-hidden="true">
-              <title>Q-Trust architecture</title>
-              <rect x="0" y="0" width="960" height="280" rx="16" fill="#f8fafc" stroke="#e2e8f0" />
-              {/* nodes */}
-              {[
-                { x: 24, y: 56, w: 164, h: 72, label: "Inspector", sub: "source · manifest · binary · tls", fill: "#ffffff" },
-                { x: 204, y: 56, w: 164, h: 72, label: "Risk & Compliance", sub: "NIST · CNSA · HNDL", fill: "#ffffff" },
-                { x: 384, y: 56, w: 164, h: 72, label: "Outputs", sub: "CBOM · SARIF · Evidence · Roadmap", fill: "#ffffff" },
-                { x: 564, y: 56, w: 184, h: 72, label: "SDK + IPFS", sub: "Pinata · CBOM hash · metadata URI", fill: "#f0fdfa" },
-                { x: 764, y: 56, w: 172, h: 72, label: "Base L2", sub: "Asset · Vendor · Migration · Audit", fill: "#0a675f" },
-              ].map((n) => (
-                <g key={n.label}>
-                  <rect x={n.x} y={n.y} width={n.w} height={n.h} rx="12" fill={n.fill} stroke="#e2e8f0" />
-                  <text x={n.x + n.w / 2} y={n.y + 30} textAnchor="middle" fontSize="12" fontWeight="700" fill={n.fill === "#0a675f" ? "#ffffff" : "#0f172a"} fontFamily="ui-sans-serif, system-ui">
-                    {n.label}
-                  </text>
-                  <text x={n.x + n.w / 2} y={n.y + 48} textAnchor="middle" fontSize="10" fill={n.fill === "#0a675f" ? "#ccfbf1" : "#64748b"} fontFamily="ui-monospace, monospace">
-                    {n.sub}
-                  </text>
-                </g>
-              ))}
-              {/* arrows */}
-              {[104, 284, 464, 654].map((x) => (
-                <g key={x}>
-                  <line x1={x + 84} y1={92} x2={x + 100} y2={92} stroke="#94a3b8" strokeWidth="1.5" markerEnd="url(#arrow)" />
-                </g>
-              ))}
-              <defs>
-                <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8" />
-                </marker>
-              </defs>
-              {/* bottom lane */}
-              <rect x="24" y="160" width="912" height="96" rx="12" fill="#ffffff" stroke="#e2e8f0" strokeDasharray="6 4" />
-              <text x="32" y="182" fontSize="10" fontWeight="600" fill="#475569" fontFamily="ui-sans-serif, system-ui">Presentation</text>
-              <text x="32" y="200" fontSize="11" fill="#334155" fontFamily="ui-sans-serif, system-ui">Frontend — scanner dashboard · risk gauge · compliance panel · provenance graph · public verification (/v/[id])</text>
-              <text x="32" y="218" fontSize="11" fill="#64748b" fontFamily="ui-sans-serif, system-ui">Verifier fetches CBOM from IPFS, checks hash on-chain, renders Code → Scanner → CBOM → Asset → Migration graph</text>
-              <text x="32" y="240" fontSize="10" fill="#64748b" fontFamily="ui-monospace, monospace">Next.js 16 · wagmi 2 · RainbowKit · viem · Tailwind 4 · Radix · dynamic provenance graph</text>
-            </svg>
-            <p className="mt-3 text-center text-[11px] text-slate-500">
-              Placeholder visual — export a high-fidelity diagram to{" "}
-              <code className="rounded bg-slate-100 px-1 py-0.5 font-mono">docs/architecture.svg</code> and replace the inline SVG with an <code className="rounded bg-slate-100 px-1 py-0.5 font-mono">next/image</code> when ready.
-            </p>
+          <div className="p-4 sm:p-6">
+            {/* The canonical diagram lives in docs/architecture.svg and is
+                mirrored to public/assets/architecture.svg — keep them in sync
+                when the architecture changes. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/assets/architecture.svg"
+              alt="Q-Trust architecture: Inspector scans source, manifest, binary, and TLS sources; Risk and Compliance score them; CycloneDX, SARIF, Evidence, and Roadmap outputs are produced; SDK pins to IPFS and submits EIP-712 gasless transactions to the registries on Base; Frontend verifies on-chain and visualizes the pipeline."
+              width={960}
+              height={280}
+              className="h-auto w-full"
+            />
           </div>
         </figure>
 

@@ -53,9 +53,28 @@ mixing. The fine-tuned `model_real_v3.pt` is now the canonical default
 
 **All 15 qtrust_ai models trained on real data** (`train_qtrust_all.py --real`):
 CryptoCodeDetector fine-tuned CodeBERTa on **10,294 real examples on GPU**
-(train accuracy 0.953, eval precision 0.978), plus purpose classifier, risk,
-recommender, anomaly, vendor, and regression models; RL agent re-benchmarked
-(106.82 vs random 106.06, 100% completion).
+(train accuracy 0.952 · held-out precision 0.909 / recall 0.784 / F1 0.842),
+plus purpose classifier, risk, recommender, anomaly, vendor, and regression
+models; RL agent re-benchmarked (106.82 vs random 106.06, 100% completion).
+
+**Discovery ensemble + baseline-honesty fixes (2026-08-29):**
+
+- **Ensemble discarded the trained ML signal.** `CryptoCodeDetector._ensemble`
+  gave the ML layer a flat `0.2` weight below the `0.5` threshold, so a crypto
+  file the fine-tuned transformer flagged at confident probability was never
+  classified crypto when static/AST/data-flow layers were silent — the model
+  posted 0.95 train accuracy yet only ~0.51 held-out recall, losing to the
+  naive always-crypto baseline. The ML weight is now scaled by confidence and
+  a decisive rule fires at `conf ≥ 0.85` when no deterministic layer hits.
+  Held-out **F1 0.674 → 0.842** (recall 0.514 → 0.784, precision 0.978 → 0.909),
+  now **beating the majority baseline** (relative gain −0.116 → **+0.105**)
+  and rules-only on the §29 adversarial holdout (F1 0.533 vs 0.483).
+- **Fabricated baseline in `BenchmarkComparison.code_detector`.** The
+  always-crypto baseline hard-coded `maj_fp=0`, reporting an impossible 100%
+  precision on a corpus with ~1,000 non-crypto files and masking the model's
+  real deficit. The baseline now reports honest confusion (precision = dataset
+  crypto rate). Baseline comparison now shows **6/7 models beat their best
+  baseline**, up from 5/7.
 
 **Strategic analysis + design assets.** `docs/STRATEGIC_ANALYSIS.md` (how the
 developer would take the project further — audit-first, trust decentralization,

@@ -650,14 +650,16 @@ class CryptoCodeDetector:
 
         # Aggregate evidence
         cfg = self.config
-        # layer presence as 0/1 * weight
+        # layer presence as 0/1 * weight; the ML layer's weight is scaled by
+        # its confidence so a *confident* learned signal carries proportional
+        # weight rather than being capped at a flat 0.2 (which previously
+        # discarded otherwise-decisive ML-only detections).
         w_static = cfg.static_weight if static else 0.0
         w_ast = cfg.ast_weight if ast_f else 0.0
         w_dflow = cfg.dataflow_weight if dflow else 0.0
-        w_ml = cfg.ml_weight if ml_is_crypto else 0.0
-        # For non-crypto ML, still contribute slightly negative
-        if not ml_is_crypto:
-            w_ml = cfg.ml_weight * ml_score  # low score -> low weight
+        # ML confidence-scaled in [0, ml_weight]: low score -> low/no weight,
+        # high score -> full ml_weight instead of a hard 0/1 gate.
+        w_ml = cfg.ml_weight * ml_score
 
         total_positive_weight = w_static + w_ast + w_dflow + w_ml
         # Static rules are the trusted deterministic layer — a single real
@@ -669,6 +671,15 @@ class CryptoCodeDetector:
         # If any layer fired but ensemble below threshold, still flag if 2+ layers
         layers_fired = sum(bool(x) for x in [static, ast_f, dflow]) + (1 if ml_is_crypto else 0)
         if layers_fired >= 2:
+            is_crypto = True
+
+        # Decisive high-confidence ML hit: when the fine-tuned transformer is
+        # confidently crypto AND *no* deterministic layer fired, the learned
+        # signal alone should flag the file. This is what recovers obfuscated /
+        # renamed / cross-language crypto that static+AST miss (and previously
+        # fell through because a flat ml_weight < threshold). The high bar
+        # (0.85) keeps precision: weak ML evidence never overrides the ensemble.
+        if ml_is_crypto and not static and not ast_f and not dflow and ml_score >= 0.85:
             is_crypto = True
 
         # Choose algorithm: prefer static > ast > ml
@@ -917,20 +928,23 @@ class CryptoCodeDetector:
         epochs: int = 3,
         lr: float = 2e-5,
     ) -> Dict[str, Any]:
-        """Train / fine-tune the code model (CPU-friendly stub).
+        """Train / fine-tune the code model.
 
-        In production this fine-tunes ``CryptoCodeBERT`` on a 40/30/20/10 mix
-        (synthetic / real / expert / adversarial) per ``qtrust_ai/README.md``
-        § Dataset discipline. On CPU-only or without ``torch`` this runs a
-        deterministic synthetic-corpus simulation that populates label priors
-        and per-language bias so that ``predict`` improves after ``train``.
+        The **real** transformer path is :meth:`fine_tune` (CodeBERTa on the
+        labelled corpus, GPU when available — this is what
+        ``scripts/train_qtrust_all.py --real`` calls). ``train()`` is the
+        lightweight fallback for CPU-only / no-transformers environments: it
+        populates deterministic label priors and per-language bias from the
+        corpus so ``predict`` still improves after ``train``. See
+        ``qtrust_ai/README.md`` § Dataset discipline (40/30/20/10 mix of
+        synthetic / real / expert / adversarial) for the production recipe.
 
         Args:
             corpus: List of ``{"code": str, "language": str, "label": str,
                 "is_crypto": bool}``. If ``None`` a synthetic corpus is generated.
             synthetic_ratio: Fraction of synthetic examples when generating.
-            epochs: Training epochs (stub: controls bias magnitude).
-            lr: Learning rate (stub: scales bias).
+            epochs: Training epochs (fallback: controls bias magnitude).
+            lr: Learning rate (fallback: scales bias).
 
         Returns:
             Dict with ``epochs``, ``examples``, ``label_distribution``,
@@ -960,7 +974,8 @@ class CryptoCodeDetector:
             "per_language_bias": dict(self._ml_bias),
             "has_torch": HAS_TORCH,
             "has_transformers": HAS_TRANSFORMERS,
-            "note": "real fine-tuning would run CryptoCodeBERT here; stub populates priors deterministically",
+            "note": "fallback path (no transformers/GPU); priors populated deterministically — "
+                   "use fine_tune() for the real CodeBERTa fine-tune",
         }
         # If torch available, simulate a training loop log
         if HAS_TORCH:

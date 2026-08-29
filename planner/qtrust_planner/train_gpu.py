@@ -26,7 +26,7 @@ import torch
 import torch.nn.functional as F
 from torch_geometric.loader import DataLoader
 
-from .data_generator import generate_dataset
+from .data_generator import cbom_to_dependency_graph, generate_dataset
 from .model_v3 import MigrationGNNv3
 
 
@@ -243,10 +243,18 @@ def train_gpu(
 
     # P2-11: continue from a prior checkpoint (e.g. flagship retrain) — used
     # to fine-tune on corrected/real data without paying full-training cost.
+    init_epochs: int = 0
+    init_n_graphs: int = 0
     if init_path and Path(init_path).exists():
         payload = torch.load(init_path, map_location=device, weights_only=True)
         if isinstance(payload, dict) and "state_dict" in payload:
             sd = payload["state_dict"]
+            # Carry forward lineage so a fine-tune checkpoint records its
+            # FULL history (epochs/n_graphs from the base + this pass).
+            init_epochs = int(payload.get("epochs", 0) or 0)
+            init_n_graphs = int(payload.get("n_graphs", 0) or 0)
+            if isinstance(payload.get("total_epochs"), (int, float)):
+                init_epochs = int(payload["total_epochs"])
         else:
             sd = payload
         # Map legacy bn* keys -> norm* when the checkpoint uses a different
@@ -257,7 +265,8 @@ def train_gpu(
         if missing or unexpected:
             print(f"  init: missing={sorted(missing)[:5]} unexpected={sorted(unexpected)[:5]} "
                   f"(continuing with {len(sd) - len(unexpected)}/{len(sd)} layers)")
-        print(f"Initialized from checkpoint: {init_path}")
+        print(f"Initialized from checkpoint: {init_path} "
+              f"(prior lineage: {init_epochs} epochs, {init_n_graphs:,} graphs)")
 
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Model parameters: {n_params:,} (norm={norm})")
@@ -408,7 +417,11 @@ def train_gpu(
                 "model_config": {"input_features": 6, "hidden_dim": 256, "embedding_dim": 128,
                                  "heads": 8, "dropout": 0.15, "variant": "hybrid", "norm": norm},
                 "epochs": epoch + 1,
+                "total_epochs": init_epochs + epoch + 1,
                 "n_graphs": n_graphs,
+                "total_n_graphs": init_n_graphs + n_graphs,
+                "n_real_graphs": len(extra_graphs) if extra_graphs else 0,
+                "init_from": Path(init_path).name if init_path and Path(init_path).exists() else None,
                 "seed": seed,
                 "data_hash": data_hash,
                 "best_val_kendall": best_val_kendall,
