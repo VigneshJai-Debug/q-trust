@@ -425,9 +425,13 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Issue a verifiable credential (placeholder)
-         * @description API-key gated. Returns a stub credential object. Full Ed25519 VC
-         *     issuance is available via the Python SDK (`qtrust.vc.VCIssuer`).
+         * Issue a signed verifiable credential (Ed25519Signature2020)
+         * @description API-key gated. Issues a W3C Verifiable Credential v2.0 signed with
+         *     Ed25519Signature2020 under the backend's configured issuer key
+         *     (`QTRUST_VC_ISSUER_KEY`; a deterministic dev key is generated when
+         *     unset). The issuer is a self-contained `did:key` so the credential can
+         *     be verified offline by `POST /v1/credentials/verify` or the Python
+         *     SDK (`qtrust.vc.VCVerifier`).
          */
         post: operations["issueCredential"];
         delete?: never;
@@ -446,9 +450,13 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Verify a verifiable credential presentation (structural only)
-         * @description Structural validation only. Full DID resolution and signature
-         *     verification is available via the Python SDK (`qtrust.vc.VCVerifier`).
+         * Verify a verifiable credential cryptographically (fail-closed)
+         * @description Full cryptographic verification, fail-closed: the credential must be
+         *     structurally valid, not expired, carry a proof, and the Ed25519
+         *     signature must verify against the issuer DID's public key (did:key
+         *     resolved locally, did:web via HTTPS with SSRF guard). Returns a
+         *     structured result with per-check status. Byte-compatible with the
+         *     Python SDK (`qtrust.vc.VCVerifier`) in both directions.
          */
         post: operations["verifyCredential"];
         delete?: never;

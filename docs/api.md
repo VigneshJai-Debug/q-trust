@@ -181,8 +181,8 @@ Planner proxy requires `QTRUST_PLANNER_API_KEY` (audit HIGH-1); returns `503` wh
 | `GET` | `/v1/trust-anchors/{issuer}` | Accreditation from `TrustAnchorRegistry` | — |
 | `GET` | `/v1/revocation/{issuer}` | Revocation Merkle root from `RevocationAnchor` | — |
 | `POST` | `/v1/evaluate` | Policy-based PQC readiness (`confidence` 0–1) | — |
-| `POST` | `/v1/credentials/issue` | Issue VC (stub; full Ed25519 in `qtrust.vc.VCIssuer`) | `X-Api-Key` |
-| `POST` | `/v1/credentials/verify` | Verify VC presentation (structural) | — |
+| `POST` | `/v1/credentials/issue` | Issue W3C VC signed with Ed25519Signature2020 (`did:key` issuer) | `X-Api-Key` |
+| `POST` | `/v1/credentials/verify` | Verify VC cryptographically (fail-closed: structure + expiry + Ed25519 sig vs issuer DID) | — |
 | `GET` | `/v1/revocation/{issuer}` | Revocation root (duplicate listing for discoverability) | — |
 | `POST` | `/v1/webhooks/subscribe` | Subscribe to events (Redis, encrypted secrets) | `X-Api-Key` |
 | `POST` | `/v1/webhooks/unsubscribe` | Unsubscribe | — |

@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Credential verification is now real cryptography (2026-08-29)
+
+Principal-level audit P0: `/v1/credentials/verify` previously returned
+`signature_verification_unavailable_in_backend` (structural checks only) and
+`/v1/credentials/issue` produced an UNSIGNED stub.
+
+- **`backend/src/services/vc.ts`** implements full W3C VC v2.0 issuance and
+  FAIL-CLOSED cryptographic verification in TypeScript (`@noble/curves` +
+  `@scure/base`): Ed25519Signature2020 signing, canonical payload
+  byte-compatible with the Python SDK (`sort_keys` + compact separators +
+  ensure_ascii — verified byte-identical), did:key (offline) and did:web
+  (HTTPS with SSRF guard) resolution.
+- **`/v1/credentials/issue`** now signs a real credential under the backend's
+  did:key issuer (`QTRUST_VC_ISSUER_KEY`).
+- **`/v1/credentials/verify`** now verifies structure + expiry + signature
+  against the issuer DID and returns a structured per-check result.
+- Cross-language verified both ways: backend-issued VC verifies in the Python
+  SDK (`qtrust.vc.VCVerifier`) and SDK-issued VC verifies in the backend.
+- Test coverage: `backend/tests/vc.test.ts` (14 tests — round-trip, tamper,
+  forged-key, unsigned, expired, missing fields, did:web, SSRF guard).
+
 ### Security — external codebase audit remediation (2026-08-26)
 
 Remediates the 2026-08-26 Z.ai engineering audit (`docs/Q-Trust_Codebase_Audit.pdf`).

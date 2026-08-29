@@ -694,10 +694,14 @@ paths:
     post:
       operationId: issueCredential
       tags: [credentials]
-      summary: Issue a verifiable credential (placeholder)
+      summary: Issue a signed verifiable credential (Ed25519Signature2020)
       description: |
-        API-key gated. Returns a stub credential object. Full Ed25519 VC
-        issuance is available via the Python SDK (`qtrust.vc.VCIssuer`).
+        API-key gated. Issues a W3C Verifiable Credential v2.0 signed with
+        Ed25519Signature2020 under the backend's configured issuer key
+        (`QTRUST_VC_ISSUER_KEY`; a deterministic dev key is generated when
+        unset). The issuer is a self-contained `did:key` so the credential can
+        be verified offline by `POST /v1/credentials/verify` or the Python
+        SDK (`qtrust.vc.VCVerifier`).
       security:
         - ApiKeyAuth: []
       requestBody:
@@ -730,10 +734,14 @@ paths:
     post:
       operationId: verifyCredential
       tags: [credentials]
-      summary: Verify a verifiable credential presentation (structural only)
+      summary: Verify a verifiable credential cryptographically (fail-closed)
       description: |
-        Structural validation only. Full DID resolution and signature
-        verification is available via the Python SDK (`qtrust.vc.VCVerifier`).
+        Full cryptographic verification, fail-closed: the credential must be
+        structurally valid, not expired, carry a proof, and the Ed25519
+        signature must verify against the issuer DID's public key (did:key
+        resolved locally, did:web via HTTPS with SSRF guard). Returns a
+        structured result with per-check status. Byte-compatible with the
+        Python SDK (`qtrust.vc.VCVerifier`) in both directions.
       requestBody:
         required: true
         content:
@@ -1523,7 +1531,7 @@ components:
     # ── Credentials ────────────────────────────────────────────────
     IssueCredentialRequest:
       type: object
-      required: [subject_did, issuer_did]
+      required: [subject_did]
       properties:
         schema_id:
           type: string
@@ -1531,9 +1539,6 @@ components:
         subject_did:
           type: string
           description: DID of the credential subject
-        issuer_did:
-          type: string
-          description: DID of the issuer
         claims:
           type: object
           additionalProperties: true
@@ -1546,26 +1551,27 @@ components:
     CredentialIssued:
       type: object
       properties:
+        credential:
+          type: object
+          description: The full signed W3C Verifiable Credential (Ed25519Signature2020 proof attached)
         credential_id:
           type: string
           description: URN:uuid credential identifier
         issuer_did:
           type: string
+          description: Backend issuer did:key
         subject_did:
           type: string
         schema_id:
           oneOf:
             - type: string
             - type: "null"
-        claims:
-          type: object
-        expiration_date:
-          oneOf:
-            - type: string
-            - type: "null"
         issued_at:
           type: string
           format: date-time
+        proof_type:
+          type: string
+          description: e.g. Ed25519Signature2020
         note:
           type: string
 
@@ -1575,16 +1581,24 @@ components:
       properties:
         presentation:
           type: object
-          description: Verifiable Presentation object
+          description: Verifiable Credential object (with proof) to verify cryptographically
         verifier_did:
           type: string
-          description: Optional verifier DID
+          description: Optional verifier DID (reserved)
 
     CredentialVerification:
       type: object
       properties:
         valid:
           type: boolean
+        reason:
+          oneOf:
+            - type: string
+            - type: "null"
+        detail:
+          oneOf:
+            - type: string
+            - type: "null"
         issuer_did:
           oneOf:
             - type: string
@@ -1597,8 +1611,26 @@ components:
           oneOf:
             - type: string
             - type: "null"
-        revoked:
-          type: boolean
+        has_proof:
+          oneOf:
+            - type: boolean
+            - type: "null"
+        expired:
+          oneOf:
+            - type: boolean
+            - type: "null"
+        checked:
+          type: object
+          properties:
+            structure:
+              type: boolean
+            expiration:
+              type: boolean
+            signature:
+              type: boolean
+        timestamp:
+          type: string
+          format: date-time
         verified_at:
           type: string
           format: date-time

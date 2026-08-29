@@ -16,17 +16,21 @@ VC/DID surface in-house inside the existing Python SDK.
 
 Implement the minimal VC/DID primitives in-house in the Python SDK
 (`qtrust.vc.VCIssuer` / `VCVerifier`, DID utilities) using established crypto
-libraries only — no bespoke cryptography. The backend's credential endpoints
-are deliberately conservative: they never claim signature validity the backend
-cannot verify, and direct full verification to the SDK. A JS integration on
-Veramo is deferred until the frontend needs local verification.
+libraries only — no bespoke cryptography. The backend now implements the same
+issuance/verification in TypeScript (`backend/src/services/vc.ts`) using
+`@noble/curves` + `@scure/base` (audited, dependency-free crypto), with a
+canonical payload byte-compatible with the SDK (sorted keys, compact
+separators, ensure_ascii) so both languages verify each other's credentials.
 
 Consequences:
 
 * The Python SDK stays self-contained (no Node sidecar for CI or pilots).
 * We own maintenance of a small, well-scoped VC layer instead of a large
   dependency tree; W3C conformance is tested explicitly.
-* Backend fail-closed behavior (`signature_verification_unavailable_in_backend`)
-  avoids false trust assertions at the cost of duplicated client-side work.
-* If JS-local verification becomes a product requirement, Veramo adoption will
-  be re-evaluated; the data model mirrors standard VCs so migration is cheap.
+* Backend `/v1/credentials/issue` signs real Ed25519Signature2020 credentials
+  and `/v1/credentials/verify` performs fail-closed cryptographic verification
+  (structure + expiry + signature vs the resolved issuer DID key; did:key
+  offline, did:web via HTTPS with an SSRF guard). Cross-language compatibility
+  is covered by tests in both `backend/tests/vc.test.ts` and the SDK.
+* If JS-local verification grows further (e.g. Veramo), the data model mirrors
+  standard VCs so migration is cheap.

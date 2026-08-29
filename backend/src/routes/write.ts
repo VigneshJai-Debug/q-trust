@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { requireApiKey } from "../middleware/auth.js";
 import { registerCBOM, attestProduct, recordMigration, relayerAddress } from "../services/attestation.js";
 import { evaluate } from "../services/evaluate.js";
+import { issueCredential, verifyCredential } from "../services/vc.js";
 import { CredentialVerifySchema } from "../schemas/index.js";
 
 export async function registerWriteRoutes(app: FastifyInstance): Promise<void> {
@@ -68,32 +69,32 @@ export async function registerWriteRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post("/v1/credentials/issue", { preHandler: requireApiKey }, async (request, reply) => {
-    const { schema_id, subject_did, issuer_did, claims, expiration_date } = request.body as { schema_id?: string; subject_did: string; issuer_did: string; claims?: Record<string, Record<string, unknown>>; expiration_date?: string };
-    if (!subject_did || !issuer_did) {
-      return reply.status(400).send({ error: "subject_did and issuer_did are required" });
+    const { schema_id, subject_did, claims, expiration_date } = request.body as { schema_id?: string; subject_did: string; claims?: Record<string, Record<string, unknown>>; expiration_date?: string };
+    if (!subject_did) {
+      return reply.status(400).send({ error: "subject_did is required" });
     }
-    const credentialId = `urn:uuid:${crypto.randomUUID()}`;
-    return { credential_id: credentialId, issuer_did, subject_did, schema_id: schema_id ?? null, claims: claims ?? {}, expiration_date: expiration_date ?? null, issued_at: new Date().toISOString(), note: "Full VC issuance with Ed25519 signing is available via the Python SDK (qtrust.vc.VCIssuer)" };
+    const vc = issueCredential({
+      subject_did,
+      issuer_did: "", // issuer identity is the backend's configured did:key
+      schema_id: schema_id ?? null,
+      claims: claims ?? {},
+      expiration_date: expiration_date ?? null,
+    });
+    return {
+      credential: vc,
+      credential_id: vc.id,
+      issuer_did: vc.issuer,
+      subject_did,
+      schema_id: schema_id ?? null,
+      issued_at: vc.issuanceDate,
+      proof_type: vc.proof?.type ?? null,
+      note: "Signed with Ed25519Signature2020 (Ed25519). Verify via POST /v1/credentials/verify.",
+    };
   });
 
   app.post("/v1/credentials/verify", { schema: { body: CredentialVerifySchema } }, async (request, reply) => {
-    const { presentation, verifier_did } = request.body as { presentation: Record<string, unknown>; verifier_did?: string };
-    if (!presentation.issuer || !presentation.credentialSubject) {
-      return { valid: false, error: "Missing required fields: issuer, credentialSubject", verified_at: new Date().toISOString() };
-    }
-    let expired = false;
-    if (typeof presentation.expirationDate === "string") {
-      try {
-        const expTime = new Date(presentation.expirationDate);
-        expired = expTime < new Date();
-      } catch {
-        return reply.status(400).send({ error: "Invalid expirationDate format" });
-      }
-    }
-    const hasProof = Boolean(presentation.proof && typeof presentation.proof === "object" && "proofValue" in presentation.proof && (presentation.proof as Record<string, unknown>).proofValue);
-    if (!hasProof) {
-      return { valid: false, reason: "unsigned_credential", detail: "Credential has no proof — cryptographic verification required", checked: { structure: true, expiration: !expired, signature: false }, timestamp: new Date().toISOString() };
-    }
-    return { valid: false, reason: "signature_verification_unavailable_in_backend", detail: "Backend cannot verify Ed25519 signatures. Use the Python SDK VCVerifier for full verification, or integrate Veramo.", has_proof: true, checked: { structure: true, expiration: !expired, signature: false }, timestamp: new Date().toISOString() };
+    const { presentation } = request.body as { presentation: Record<string, unknown> };
+    const result = await verifyCredential(presentation);
+    return result;
   });
 }
