@@ -42,7 +42,7 @@ if sim_error:
     print(f"⚠ quantum simulator unavailable: {sim_error}")
     print("  factor() will use the classical fallback with honest method labels.")
 
-from qtrust_planner.quantum_estimator import QuantumThreatEstimator
+from qtrust_planner.quantum_estimator import QuantumThreatEstimator  # noqa: E402 - notebook cell ordering
 
 estimator = QuantumThreatEstimator()
 

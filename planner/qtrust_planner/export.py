@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from pathlib import Path
 
 import torch
@@ -106,9 +105,9 @@ def export_onnx(model_path: str, out_path: str, opset: int = 17, dynamic: bool =
         )
         print(f"[export] ONNX written to {out} ({out.stat().st_size/1024:.1f} KB)")
     except Exception as e:
+        # Never write a JSON error blob to a .onnx path — a committed fake
+        # export is worse than no export (a consumer would fail confusingly).
         print(f"[export] ONNX export failed for {p}: {e}")
-        # Fallback: save a marker so CI knows export was attempted
-        out.write_text(json.dumps({"error": str(e), "model_path": str(p), "cfg": cfg}, indent=2))
         return str(out)
     # Write schema sidecar for heterogeneous-graph drift detection (pdf §20)
     schema_path = out.with_suffix(".schema.json")
@@ -117,9 +116,92 @@ def export_onnx(model_path: str, out_path: str, opset: int = 17, dynamic: bool =
     try:
         # Call onnxruntime quantization if available (optional)
         import onnxruntime  # noqa
-        print(f"[export] onnxruntime available — int8 quantization can be applied via `python -m onnxruntime.quantization`")
+        print("[export] onnxruntime available — int8 quantization can be applied via `python -m onnxruntime.quantization`")
     except Exception:
         pass
+    return str(out)
+
+
+def export_inspector_onnx(model_path: str, out_path: str, opset: int = 17) -> str:
+    """Export an inspector checkpoint (side-channel CNN or anomaly VAE) to ONNX.
+
+    Side-channel: SideChannelDetector.forward((B, 3, L)) -> (B,) leak probability.
+    Anomaly:      deterministic reconstruction-error model: x -> (B,) MSE of
+                  decode(encode(x).mu) vs x (the stochastic reparameterization
+                  is a training-time device; inference uses the mean latent).
+
+    Raises ModuleNotFoundError with install guidance if the ONNX runtime deps
+    (onnx / onnxscript) are missing — this function never writes a placeholder.
+    """
+    import sys
+
+    try:
+        import onnxscript  # noqa: F401
+        import onnx  # noqa: F401
+    except ModuleNotFoundError as exc:  # pragma: no cover - env-dependent
+        raise ModuleNotFoundError(
+            f"ONNX export requires 'onnx' and 'onnxscript' (missing {exc.name}); "
+            f"install with: pip install onnx onnxscript"
+        ) from exc
+
+    inspector_root = str(Path(__file__).resolve().parents[2] / "inspector")
+    if inspector_root not in sys.path:
+        sys.path.insert(0, inspector_root)
+
+    p = Path(model_path)
+    out = Path(out_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    payload = torch.load(p, map_location="cpu", weights_only=True)
+    state_dict = payload["state_dict"] if isinstance(payload, dict) and "state_dict" in payload else payload
+
+    if "side_channel" in p.stem:
+        from qtrust_inspector.side_channel import SideChannelDetector
+
+        model = SideChannelDetector(trace_length=1000)
+        model.load_state_dict(state_dict)
+        model.eval()
+        x = torch.randn(1, 3, 1000)
+        torch.onnx.export(
+            model, (x,), str(out),
+            input_names=["trace"], output_names=["leak_prob"],
+            dynamic_axes={"trace": {0: "batch", 2: "trace_length"}, "leak_prob": {0: "batch"}},
+            opset_version=opset,
+        )
+    elif "anomaly" in p.stem:
+        from qtrust_inspector.anomaly_detector import CBOMVariationalAutoencoder
+        from torch import nn
+
+        model = CBOMVariationalAutoencoder(n_features=10, latent_dim=16)
+        model.load_state_dict(state_dict)
+        model.eval()
+
+        class _DeterministicVAE(nn.Module):
+            """Inference-time VAE: reconstruction error via the mean latent."""
+
+            def __init__(self, m):
+                super().__init__()
+                self.m = m
+
+            def forward(self, x):
+                mu, _logvar = self.m.encode(x)
+                recon = self.m.decode(mu)
+                return torch.mean((recon - x) ** 2, dim=1)  # (B,) per-sample MSE
+
+        x = torch.randn(1, 10)
+        torch.onnx.export(
+            _DeterministicVAE(model), (x,), str(out),
+            input_names=["cbom_feat"], output_names=["recon_error"],
+            dynamic_axes={"cbom_feat": {0: "batch"}, "recon_error": {0: "batch"}},
+            opset_version=opset,
+        )
+    else:
+        raise ValueError(f"unknown inspector model kind for {p}")
+
+    print(f"[export] inspector ONNX written to {out} ({out.stat().st_size/1024:.1f} KB)")
+    schema_path = out.with_suffix(".schema.json")
+    schema_path.write_text(json.dumps({
+        "model_path": str(p), "kind": "inspector", "exported_at": __import__("time").strftime("%Y-%m-%dT%H:%M:%SZ", __import__("time").gmtime()),
+    }, indent=2))
     return str(out)
 
 
@@ -141,17 +223,20 @@ def export_all(out_dir: str = "exports") -> list[str]:
                 print(f"[export] skipping {c}: {e}")
             except Exception as e:
                 print(f"[export] failed for {c}: {e}")
-                # Write stub so CI doesn't fail
-                Path(out).write_text(json.dumps({"error": str(e), "model_path": c}, indent=2))
-                outs.append(str(out))
-    # Inspector models: already ONNX-friendly via torch.jit or direct; stub for now
+    # Inspector models: real ONNX exports (side-channel CNN and anomaly VAE).
+    # These are genuinely exportable architectures (conv-pool-MLP and MLP VAE)
+    # — no placeholder files. Missing onnx deps surface as a clear error.
     for c in ["inspector/side_channel_model.pt", "inspector/anomaly_model.pt"]:
         if Path(c).exists():
             out = Path(out_dir) / (Path(c).stem + ".onnx")
-            # Stub export — real impl would export side_channel CNN
-            out.write_text(json.dumps({"stub": True, "model_path": c, "note": "inspector model — ONNX export via torch.jit pending"}, indent=2))
-            outs.append(str(out))
-            print(f"[export] stub ONNX for {c} -> {out}")
+            try:
+                export_inspector_onnx(c, str(out))
+                outs.append(str(out))
+            except ModuleNotFoundError as e:
+                print(f"[export] inspector ONNX export skipped for {c}: {e}")
+            except Exception as e:
+                print(f"[export] inspector ONNX export failed for {c}: {e}")
+                raise
     if not outs:
         print("[export] no checkpoints found — train first")
     return outs

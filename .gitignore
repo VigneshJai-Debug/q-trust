@@ -140,3 +140,11 @@ profile-repo/
 # reports are local-only. Rebuild via scripts/build_real_datasets.py and
 # scripts/train_qtrust_all.py. Mirrors the .ruff.toml + pytest.ini excludes.
 qtrust_ai/artifacts/
+
+# Generated ONNX exports (regenerate with make/export tool when onnx deps present)
+exports/
+
+# ─── Runtime artifacts produced by the pilot/notebook pipeline ────────────────
+# data/cbom_for_planner.json is written by pilot/run_pilot.py on each run (it
+# embeds a scan timestamp), so it is regenerated and must not be committed.
+data/

@@ -8,7 +8,6 @@ import tarfile
 import zipfile
 from pathlib import Path
 
-import pytest
 
 from qtrust_inspector.binary_scanner import scan_binary, scan_binaries_in_directory
 from qtrust_inspector.pcap_scanner import (
@@ -73,7 +72,6 @@ def build_client_hello(
     ks_list = struct.pack(">H", len(key_share)) + key_share
     extensions += struct.pack(">HH", 0x0033, len(ks_list)) + ks_list
 
-    versions_data = b"\x03\x04"
     sv_list = b"\x02\x03\x04"
     extensions += struct.pack(">HH", 0x002B, len(sv_list)) + sv_list
     assert len(extensions) >= 0 or sv_list

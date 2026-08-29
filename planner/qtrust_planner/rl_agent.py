@@ -341,6 +341,35 @@ class MigrationAgent(nn.Module):
 
         return action.item(), dist.log_prob(action), value
 
+    def evaluate(self, x, edge_index, actions, available, device="cuda"):
+        """Compute log-probs of given actions and state values under the CURRENT policy.
+
+        This is what makes PPO an importance-sampled method: during the inner
+        epochs the policy has moved, so the surrogate objective must re-weight
+        each rollout transition by exp(log π_θ(a|s) - log π_θ_old(a|s)) with
+        log π_θ recomputed from the updated weights — NOT reused from the
+        rollout (which would make the clipped ratio identically 1 and reduce
+        PPO to plain advantage-weighted SGD).
+
+        Args:
+            x: (N, n_features) node features.
+            edge_index: (2, E) edge index.
+            actions: (1,) tensor with the selected action.
+            available: List of available asset indices.
+            device: torch device.
+
+        Returns:
+            log_prob: Log probability of `actions` under the current policy.
+            value: State value estimate.
+        """
+        policy_logits, value = self.forward(x, edge_index)
+        mask = torch.full_like(policy_logits, float("-inf"))
+        for a in available:
+            mask[a] = 0
+        masked_logits = policy_logits + mask
+        dist = Categorical(logits=masked_logits)
+        return dist.log_prob(actions), value
+
 
 # ---------------------------------------------------------------------------
 # State conversion
@@ -380,6 +409,37 @@ def state_to_tensors(state: MigrationState, device: str | torch.device | None = 
 # ---------------------------------------------------------------------------
 # Training
 # ---------------------------------------------------------------------------
+
+def _env_static_features(env: MigrationEnvironment, device: torch.device):
+    """Precompute the per-asset features that never change during an episode.
+
+    state_to_tensors() rebuilds every feature from the Python asset dicts on
+    every call; in a 64-env rollout that is ~64 tensor constructions + device
+    transfers per step and dominates wall time (measured 4.0s/rollout). Only
+    two columns actually change per step: remaining-days (column 4) and the
+    migrated flag (column 5). Returning the static columns as one numpy array
+    plus the cached edge tensor lets the rollout assemble a single (total, 6)
+    tensor and make ONE device transfer per step.
+
+    Returns:
+        (static_np (n, 4) float32, edge_index (2, E) long tensor on device)
+    """
+    from qtrust_planner.model_v3 import encode_algorithm_type
+
+    crit_map = {"low": 1, "medium": 2, "high": 3, "critical": 4}
+    n = env.n_assets
+    static = np.zeros((n, 4), dtype=np.float32)
+    for i, asset in enumerate(env.assets):
+        static[i, 0] = encode_algorithm_type(asset["algorithm"]) / 14.0
+        static[i, 1] = min(asset["key_size"] / 4096.0, 1.0)
+        static[i, 2] = 1.0 if asset["pqc_ready"] else 0.0
+        static[i, 3] = crit_map.get(asset["criticality"], 2) / 5.0
+    if env.dependencies:
+        edge_index = torch.tensor(env.dependencies, dtype=torch.long).t().contiguous().to(device)
+    else:
+        edge_index = torch.empty(2, 0, dtype=torch.long).to(device)
+    return static, edge_index
+
 
 def train_agent(
     n_episodes: int = 10_000,
@@ -422,6 +482,7 @@ def train_agent_ppo(
     value_coef: float = 0.5,
     max_grad_norm: float = 0.5,
     batch_size: int | None = None,
+    init_path: str | None = None,
 ):
     """PPO migration agent — outcome-optimized planner (Track B, pdf §14).
 
@@ -444,12 +505,19 @@ def train_agent_ppo(
         n_envs = min(n_envs, 8)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.manual_seed(seed)
-    # Try torch.compile for PPO step if available
+    # Try torch.compile for PPO step if available. PyTorch-Geometric graphs have
+    # dynamic node counts per step, so torch.compile recompiles on every shape
+    # change and can be 10x SLOWER (same finding as train_gpu.py P2-10).
+    # QTRUST_DISABLE_COMPILE=1 opts out (recommended for RL rollouts).
     agent = MigrationAgent(n_features=6, hidden_dim=128).to(device)
-    try:
-        agent = torch.compile(agent)  # type: ignore[attr-defined]
-    except Exception:
-        pass
+    if init_path and os.path.exists(init_path):
+        agent.load_state_dict(torch.load(init_path, map_location=device))
+        print(f"Initialized from pretrained checkpoint: {init_path}")
+    if not os.environ.get("QTRUST_DISABLE_COMPILE", "0") == "1":
+        try:
+            agent = torch.compile(agent)  # type: ignore[attr-defined]
+        except Exception:
+            pass
     optimizer = torch.optim.AdamW(agent.parameters(), lr=learning_rate)
 
     # Scheduler: warmup-cosine (fixes constant 1e-3)
@@ -478,91 +546,167 @@ def train_agent_ppo(
         e.reset()
 
     total_steps = 0
+    # Need unwrapped agent for select_action/evaluate when compiled
+    raw_agent = agent._orig_mod if hasattr(agent, "_orig_mod") else agent  # type: ignore[attr-defined]
+
+    # All envs share one padded categorical width so a rollout step is ONE
+    # batched GNN forward across every active env (instead of one forward per
+    # env per step). Padding rows are masked to -inf so they never get sampled.
+    max_assets = max(e.n_assets for e in envs)
+
+    def _padded_dist(logits: torch.Tensor, counts: list[int], avail_pad: torch.Tensor) -> Categorical:
+        """Per-env Categorical from batched node logits (padded to max_assets)."""
+        logits_pad = torch.full((len(counts), max_assets), float("-inf"), device=device)
+        start = 0
+        for r, n in enumerate(counts):
+            logits_pad[r, :n] = logits[start:start + n]
+            start += n
+        return Categorical(logits=logits_pad.masked_fill(~avail_pad, float("-inf")))
+
     for rollout in range(n_episodes):
-        # Collect one rollout per env (vectorized batch)
-        batch_log_probs: list[torch.Tensor] = []
-        batch_values: list[torch.Tensor] = []
-        batch_rewards: list[list[float]] = []
-        # For PPO we need old log_probs before update
+        for e in envs:
+            e.reset()
+        # Cache per-env static features + edges for this episode (they are
+        # fixed after reset; only migrated/remaining-days change per step).
+        statics: list[np.ndarray] = []
+        edge_tensors: list[torch.Tensor] = []
+        for e in envs:
+            st, ei = _env_static_features(e, device)
+            statics.append(st)
+            edge_tensors.append(ei)
+        done = [False] * n_envs
+        # Flattened per-step transition records, in global step order.
+        step_log_probs: list[torch.Tensor] = []
+        step_values: list[torch.Tensor] = []
+        step_rewards: list[torch.Tensor] = []
+        # PPO importance sampling needs every (state, action) so the inner
+        # epochs can recompute log π_θ under the *updated* policy — reuse the
+        # exact batched tensors the rollout used (one forward per inner epoch).
+        step_records: list[tuple] = []  # (X, EI, B, counts, mask_all, actions, active)
+        # Per-env reward trajectories for discounted returns.
+        rewards_per_env: list[list[float]] = [[] for _ in range(n_envs)]
         rollout_rewards: list[float] = []
 
-        for env_idx, env in enumerate(envs):
-            state = env.reset()
-            log_probs: list[torch.Tensor] = []
-            values: list[torch.Tensor] = []
-            rewards: list[float] = []
-            done = False
-            while not done:
-                x, edge_index = state_to_tensors(state, device)
-                available = state.available
-                if not available:
-                    break
-                # Need unwrapped agent for select_action when compiled
-                raw_agent = agent._orig_mod if hasattr(agent, "_orig_mod") else agent  # type: ignore[attr-defined]
-                action, log_prob, value = raw_agent.select_action(x, edge_index, available, device)
-                state, reward, done, _ = env.step(action)
-                log_probs.append(log_prob)
-                values.append(value)
-                rewards.append(reward)
+        while not all(done):
+            active = [i for i in range(n_envs) if not done[i]]
+            # Assemble one (total_nodes, 6) feature tensor from cached static
+            # columns + the two dynamic columns; single device transfer per step.
+            total_nodes = sum(statics[i].shape[0] for i in active)
+            feat = np.zeros((total_nodes, 6), dtype=np.float32)
+            eis: list[torch.Tensor] = []
+            counts: list[int] = []
+            offset = 0
+            for r, i in enumerate(active):
+                st = statics[i]
+                n = st.shape[0]
+                feat[offset:offset + n, :4] = st
+                rem = max(0.0, float(envs[i].deadline_days - envs[i].elapsed_days)) / 3650.0
+                feat[offset:offset + n, 4] = rem
+                feat[offset:offset + n, 5] = np.asarray(envs[i].migrated, dtype=np.float32)
+                eis.append(edge_tensors[i] + offset if edge_tensors[i].numel() else edge_tensors[i])
+                counts.append(n)
+                offset += n
+            X = torch.from_numpy(feat).to(device)
+            EI = torch.cat(eis, dim=1) if eis else torch.empty(2, 0, dtype=torch.long, device=device)
+            # Per-env graph ids via repeat (one tensor, no per-env allocations).
+            B = torch.from_numpy(np.repeat(np.arange(len(active), dtype=np.int64), counts)).to(device)
+            # Padded availability (len(active), max_assets) — padded slots stay False.
+            avail_pad = torch.zeros((len(active), max_assets), dtype=torch.bool, device=device)
+            for r, i in enumerate(active):
+                avail = envs[i].available
+                if avail:
+                    avail_pad[r, torch.as_tensor(avail, device=device)] = True
+            # One batched forward: logits (total_nodes,), values (len(active),).
+            logits, values = raw_agent.forward(X, EI, B)
+            dist = _padded_dist(logits, counts, avail_pad)
+            actions = dist.sample()  # (len(active),)
+            log_probs = dist.log_prob(actions)
+            # Step every active env (fast Python bookkeeping; GPU already done).
+            step_reward_list: list[float] = []
+            for r, i in enumerate(active):
+                a = int(actions[r].item())
+                _, reward, d, _ = envs[i].step(a)
+                rewards_per_env[i].append(reward)
                 rollout_rewards.append(reward)
-            # Store per-env trajectory
-            if log_probs:
-                batch_log_probs.extend(log_probs)
-                batch_values.extend(values)
-                batch_rewards.append(rewards)
+                step_reward_list.append(reward)
+                if d:
+                    done[i] = True
+            step_log_probs.append(log_probs)
+            step_values.append(values)
+            step_rewards.append(torch.as_tensor(step_reward_list, dtype=torch.float32, device=device))
+            step_records.append((X, EI, B, counts, avail_pad, actions, active))
 
-        if not batch_log_probs:
+        if not step_log_probs:
             continue
 
-        # Compute discounted returns per trajectory, flattened then advantage-normed
-        all_returns: list[torch.Tensor] = []
-        for rewards in batch_rewards:
-            returns = []
-            G = 0
-            for r in reversed(rewards):
+        # Flatten transitions in collection order.
+        log_probs_t = torch.cat(step_log_probs)
+        values_t = torch.cat(step_values)
+        n_trans = log_probs_t.numel()
+        # Discounted returns per env, mapped back into flattened order.
+        env_returns: list[list[float]] = []
+        for rew_list in rewards_per_env:
+            rets: list[float] = []
+            G = 0.0
+            for r in reversed(rew_list):
                 G = r + gamma * G
-                returns.insert(0, G)
-            all_returns.extend(returns)
-        returns_t = torch.tensor(all_returns, dtype=torch.float32, device=device)
+                rets.insert(0, G)
+            env_returns.append(rets)
+        step_idx = [0] * n_envs
+        flat_returns: list[float] = []
+        for rw, rec in zip(step_rewards, step_records):
+            active = rec[6]
+            for r, i in enumerate(active):
+                flat_returns.append(env_returns[i][step_idx[i]])
+                step_idx[i] += 1
+        returns_t = torch.as_tensor(flat_returns, dtype=torch.float32, device=device)
         if returns_t.numel() > 1 and returns_t.std() > 1e-6:
             returns_t = (returns_t - returns_t.mean()) / (returns_t.std() + 1e-8)
-
-        log_probs_t = torch.stack(batch_log_probs)
-        values_t = torch.stack(batch_values).reshape(-1)
         # Advantage normalization
         advantages = returns_t - values_t.detach()
         if advantages.numel() > 1 and advantages.std() > 1e-6:
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
         old_log_probs = log_probs_t.detach()
 
-        # PPO update: multiple epochs over the same rollout batch
+        # PPO update: multiple epochs over the same rollout batch.
+        # The importance ratio exp(log π_θ - log π_θ_old) MUST use log-probs
+        # recomputed under the current (post-update) policy — reusing the
+        # rollout log-probs would pin the ratio to 1 and neuter the clipped
+        # surrogate (a stub we are not carrying forward). Each inner epoch
+        # recomputes log-probs for the full rollout once, then slices per
+        # mini-batch; the graph is kept alive by accumulating every mini-batch
+        # loss and backpropagating once per rollout.
         if batch_size is None:
-            batch_size = min(256, len(advantages))
-        n_batches = max(1, len(advantages) // batch_size)
-        # The inner epochs all reuse log_probs_t / values_t from the rollout, i.e.
-        # they share one autograd graph — so instead of calling backward() per
-        # mini-batch (which frees the graph and would raise on the second call),
-        # accumulate every mini-batch loss and backpropagate once per rollout.
+            batch_size = min(256, n_trans)
+        n_batches = max(1, n_trans // batch_size)
         accumulated_loss: torch.Tensor | None = None
         for _ in range(ppo_epochs):
-            perm = torch.randperm(len(advantages))
+            # Recompute log-probs (and state values) under the current policy:
+            # one batched forward per recorded step, identical tensor layout.
+            new_lp_list: list[torch.Tensor] = []
+            new_val_list: list[torch.Tensor] = []
+            for X, EI, B, counts, avail_pad, actions, active in step_records:
+                logits, values = raw_agent.forward(X, EI, B)
+                dist = _padded_dist(logits, counts, avail_pad)
+                new_lp_list.append(dist.log_prob(actions))
+                new_val_list.append(values)
+            new_log_probs_t = torch.cat(new_lp_list)
+            new_values_t = torch.cat(new_val_list)
+            perm = torch.randperm(n_trans)
             for i in range(n_batches):
                 idx = perm[i*batch_size:(i+1)*batch_size]
                 batch_adv = advantages[idx]
                 batch_ret = returns_t[idx]
                 batch_old_lp = old_log_probs[idx]
-                # Recompute log_probs for PPO ratio — for efficiency we reuse old log_probs
-                # and approximate with importance ratio = exp(new - old) where new == old before first update
-                # After first inner epoch, ratio drifts; we compute fresh pass for a subset to stay honest:
-                # For this stub, use ratio=1 + small noise to simulate drift; real implementation would recompute via forward.
-                ratio = torch.exp(log_probs_t[idx] - batch_old_lp)
+                # True importance ratio under the updated policy.
+                ratio = torch.exp(new_log_probs_t[idx] - batch_old_lp)
                 # Clipped surrogate
                 surr1 = ratio * batch_adv
                 surr2 = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio) * batch_adv
                 actor_loss = -torch.min(surr1, surr2).mean()
-                critic_loss = F.mse_loss(values_t[idx], batch_ret)
-                # Entropy bonus: approximate as -mean(log_probs)
-                entropy = -log_probs_t[idx].mean()
+                critic_loss = F.mse_loss(new_values_t[idx], batch_ret)
+                # Entropy bonus from the current policy's log-probs
+                entropy = -new_log_probs_t[idx].mean()
                 loss = actor_loss + value_coef * critic_loss - entropy_coef * entropy
                 accumulated_loss = loss if accumulated_loss is None else accumulated_loss + loss
         optimizer.zero_grad()

@@ -181,7 +181,10 @@ jobs:
         env:
           QTRUST_PLANNER_DEVICE: cpu
       # P2-10: training smoke stage — fits a hundred graphs end-to-end on CPU so objective regressions are caught by machines (pdf §20)
+      # The planner package is not pip-installed (no pyproject) — these steps
+      # must run with working-directory: planner so `qtrust_planner` imports.
       - name: Training smoke — 100 graphs to completion (detects loss regressions)
+        working-directory: planner
         run: |
           python -c "
           import torch
@@ -196,8 +199,9 @@ jobs:
           print('smoke training succeeded:', out)
           "
       - name: Eval harness — 3-seed OOD suite ( doctrine )
+        working-directory: planner
         run: |
-          python -m qtrust_planner.eval_harness --model-path planner/model.pt --n-graphs 200 --seeds 42 43 44 --json-out /tmp/eval_harness.json
+          python -m qtrust_planner.eval_harness --model-path model_gpu_v3.pt --n-graphs 200 --seeds 42 43 44 --json-out /tmp/eval_harness.json
           cat /tmp/eval_harness.json | head -n 50
           python -c "
           import json
@@ -208,6 +212,7 @@ jobs:
           print('eval harness passed, suites:', list(data['suites'].keys()))
           "
       - name: Benchmark gate — provenance is recorded (P0-4 fix)
+        working-directory: planner
         run: |
           python -m qtrust_planner.benchmark_v3 --n-graphs 200 --json-out /tmp/bench_v3.json
           cat /tmp/bench_v3.json | head -n 80
@@ -221,16 +226,53 @@ jobs:
               assert 'seeds' in v, f'{name} missing seeds'
           print('benchmark provenance gate passed')
           "
-      # Pending promotion gate (manual): uncomment when LayerNorm v3 beats v2 tau 0.961
-      # - name: Promotion gate — v3 must beat v2 before QTRUST_MODEL_PATH defaults to v3
-      #   run: |
-      #     python -m qtrust_planner.benchmark_v3 --n-graphs 1000 --json-out /tmp/v3_vs_v2.json
-      #     python -c "
-      #     import json
-      #     d=json.load(open('/tmp/v3_vs_v2.json'))
-      #     v2=list(d.values())[0]['kendall']; v3=list(d.values())[1]['kendall']
-      #     assert v3 > v2, f'v3 tau {v3:.4f} must beat v2 tau {v2:.4f} before promotion'
-      #     "
+      # Promotion gate — v3 (LayerNorm) must beat canonical v2 on the seed=999
+      # split. Enabled 2026-08-28: verified v3 τ 0.972-0.973 > v2 τ 0.958-0.961,
+      # and planner/server.py now defaults QTRUST_MODEL_PATH resolution to v3.
+      # The gate compares fresh v3 against the CANONICAL v2 recorded in
+      # results/benchmark_v3.json (planner/model.pt is gitignored, so it is not
+      # present in CI — do not point this at model.pt).
+      - name: Promotion gate — v3 must beat canonical v2 before serving default
+        working-directory: planner
+        run: |
+          python -m qtrust_planner.benchmark_v3 --n-graphs 1000 --json-out /tmp/v3_vs_v2.json
+          python -c "
+          import json
+          fresh = json.load(open('/tmp/v3_vs_v2.json'))
+          v3 = fresh['v3 (GPU-trained, 256-dim)']['kendall']
+          canonical = json.load(open('results/benchmark_v3.json'))
+          v2 = canonical['v2 (1.2K graphs, 64-dim)']['kendall']
+          assert v3 > v2, f'v3 tau {v3:.4f} must beat canonical v2 tau {v2:.4f} before promotion'
+          print(f'promotion gate passed: v3 tau {v3:.4f} > v2 tau {v2:.4f}')
+          "
+
+  lint:
+    name: Python Lint (ruff — pinned rule contract)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.11"
+      # The repo's .ruff.toml pins `select` explicitly to the pre-commit
+      # ruff v0.5.0 default contract (E4/E7/E9/F), so ANY ruff version (old
+      # or new) enforces the same rules. Latest is fine.
+      - run: pip install ruff
+      - run: ruff check .
+
+  qtrust-ai:
+    name: AI Intelligence Layer Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.11"
+      - name: Install qtrust_ai dependencies
+        run: |
+          pip install numpy scipy scikit-learn pytest
+      - name: Run qtrust_ai smoke tests
+        run: pytest qtrust_ai/tests/ -v
 
   playwright:
     name: Frontend E2E (Playwright)
@@ -252,9 +294,8 @@ jobs:
         working-directory: frontend
         env:
           NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: 00000000000000000000000000000000
-        run: npx playwright test --project=desktop-chromium
-        env:
           NEXT_PUBLIC_QTRUST_API_URL: http://localhost:3001
+        run: npx playwright test --project=desktop-chromium
 
   abi-drift:
     name: ABI Bindings Match Forge Artifacts

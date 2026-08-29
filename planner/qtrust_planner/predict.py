@@ -32,7 +32,21 @@ else:
     from .model import MigrationGNN, encode_algorithm_type
 
 
-DEFAULT_MODEL_PATH = str(Path(__file__).resolve().parents[1] / "model.pt")
+def _resolve_default_model_path() -> str:
+    """Prefer the best available checkpoint (v3 LayerNorm > v3 DDP > v2).
+
+    Mirrors planner/server.py's resolution order so the CLI and the served
+    model agree on which artifact is canonical.
+    """
+    base = Path(__file__).resolve().parents[1]
+    for name in ("model_gpu_v3.pt", "model_ddp_v3.pt", "model.pt"):
+        p = base / name
+        if p.exists():
+            return str(p)
+    return str(base / "model.pt")
+
+
+DEFAULT_MODEL_PATH = _resolve_default_model_path()
 
 logger = logging.getLogger("qtrust_planner.predict")
 
@@ -52,17 +66,47 @@ def _warn_heuristic_mode(reason: str) -> None:
 
 
 def _load_trained_model(model_path: str) -> tuple[Any, dict[str, Any]]:
-    """Load the MigrationGNN checkpoint. Either fully succeeds or raises —
+    """Load the MigrationGNN/v3 checkpoint. Either fully succeeds or raises —
     there is no partial/silent-load path.
+
+    v3 checkpoints (hidden_dim 256 / embedding_dim 128 / conv4 layer) are
+    loaded into :class:`MigrationGNNv3`; everything else loads as v2.
     """
     # nosemgrep — torch.load with weights_only=True: safe deserialization
     checkpoint = torch.load(model_path, map_location="cpu", weights_only=True)
-    config = checkpoint.get("model_config", _DEFAULT_GNN_CONFIG)
-    state_dict = checkpoint.get("model_state_dict")
+    config = checkpoint.get("model_config", {}) if isinstance(checkpoint, dict) else {}
+    if not isinstance(config, dict):
+        config = {}
+    state_dict = (
+        (checkpoint.get("model_state_dict") or checkpoint.get("state_dict"))
+        if isinstance(checkpoint, dict)
+        else checkpoint
+    )
     if not isinstance(state_dict, dict) or len(state_dict) == 0:
         raise ValueError("checkpoint contains no usable model_state_dict")
-    model = MigrationGNN(**config)
-    model.load_state_dict(state_dict)
+
+    is_v3 = (
+        config.get("hidden_dim", 64) == 256
+        or config.get("embedding_dim", 32) == 128
+        or any(k.startswith("conv4.") for k in state_dict)
+    )
+    if is_v3:
+        if __package__ in (None, ""):
+            from model_v3 import MigrationGNNv3
+        else:
+            from .model_v3 import MigrationGNNv3
+        allowed = {"input_features", "hidden_dim", "embedding_dim", "heads", "dropout", "use_centrality", "variant", "norm"}
+        cfg = {k: v for k, v in config.items() if k in allowed}
+        cfg.setdefault("input_features", 6)
+        cfg.setdefault("hidden_dim", 256)
+        cfg.setdefault("embedding_dim", 128)
+        cfg.setdefault("heads", 8)
+        model = MigrationGNNv3(**cfg)
+        model.load_state_dict(state_dict, strict=False)
+    else:
+        cfg = config if config else _DEFAULT_GNN_CONFIG
+        model = MigrationGNN(**cfg)
+        model.load_state_dict(state_dict)
     model.eval()
     return model, checkpoint
 

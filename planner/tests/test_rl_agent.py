@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from qtrust_planner.rl_agent import (  # noqa: E402
     MigrationAgent,
     MigrationEnvironment,
+    _env_static_features,
     state_to_tensors,
 )
 
@@ -59,6 +60,42 @@ def test_select_action_masks_unavailable():
         action, log_prob, value = agent.select_action(x, edge_index, available=[2, 5])
         assert action in (2, 5)
         assert torch.isfinite(log_prob)
+
+
+def test_evaluate_matches_select_action_log_prob():
+    """PPO ratio recomputation primitive: log_prob of a chosen action under
+    the same policy must exactly equal what select_action returned."""
+    torch.manual_seed(3)
+    agent = MigrationAgent(n_features=6, hidden_dim=16)
+    x = torch.randn(10, 6)
+    edge_index = torch.empty((2, 0), dtype=torch.long)
+    for _ in range(10):
+        action, log_prob, _ = agent.select_action(x, edge_index, available=[2, 5])
+        lp2, _ = agent.evaluate(x, edge_index, torch.tensor(action), [2, 5])
+        assert torch.allclose(log_prob, lp2, atol=1e-6)
+
+
+def test_env_static_features_match_state_to_tensors():
+    """The vectorized rollout's cached feature columns must equal the reference
+    state_to_tensors encoding (columns 0-3 static, 4-5 dynamic)."""
+    env = MigrationEnvironment(n_assets=12, seed=9)
+    env.reset()
+
+    def _rebuild(env) -> torch.Tensor:
+        static, _ = _env_static_features(env, torch.device("cpu"))
+        n = static.shape[0]
+        feat = torch.zeros((n, 6))
+        feat[:, :4] = torch.as_tensor(static)
+        feat[:, 4] = max(0.0, float(env.deadline_days - env.elapsed_days)) / 3650.0
+        feat[:, 5] = torch.as_tensor(env.migrated, dtype=torch.float32)
+        return feat
+
+    x, _ = state_to_tensors(env, "cpu")
+    assert torch.allclose(x, _rebuild(env), atol=1e-6)
+    # Must stay identical after the environment advances a step.
+    env.step(env.available[0])
+    x2, _ = state_to_tensors(env, "cpu")
+    assert torch.allclose(x2, _rebuild(env), atol=1e-6)
 
 
 def test_state_to_tensors_device_and_shape():

@@ -236,29 +236,31 @@ app.add_middleware(ApiKeyMiddleware)
 # ---------------------------------------------------------------------------
 # Model promotion gate (audit: v2 vs v3)
 #
-#   v2 (planner/model.pt, 64-dim, BatchNorm) is the DEFAULT shipped model.
-#   v3 (planner/model_gpu_v3.pt, 256-dim, 4 layers, BatchNorm) achieved
-#   τ=0.898 on the canonical seed=999 held-out set — BELOW v2's τ=0.961
-#   (results/benchmark.json vs results/benchmark_v3.json). The gap is
-#   attributed to the BatchNorm→LayerNorm issue documented in
-#   qtrust_planner/model_v3.py (BatchNorm leaks cross-graph statistics when
-#   batching multiple CBOM graphs).
+#   RESOLVED 2026-08-28 — v3 LayerNorm retrain (planner/model_gpu_v3.pt,
+#   256-dim, 4 layers, LayerNorm) is now the DEFAULT shipped model.
+#   Verified on the canonical seed=999 held-out split (same protocol as
+#   benchmark.py, scipy Kendall tau):
 #
-#   Promotion policy (enforced manually; CI gate pending):
-#     * v2 remains default in MODEL_PATH until a LayerNorm/GraphNorm v3
-#       retrain beats v2 on the *canonical* benchmark:
-#       ``python -m qtrust_planner.benchmark_v3 --n-graphs 1000``
-#       (scipy Kendall tau, same seed=999 split as benchmark.py).
-#     * The benchmark threshold is NOT yet enforced in
-#       .github/workflows/ci.yml (planner job only runs pytest). Recommended
-#       gate:
-#         - run benchmark_v3, assert v3 tau > v2 tau (or >0.961) before
-#           allowing QTRUST_MODEL_PATH to default to model_gpu_v3.pt.
-#     * Operators may opt-in to v3 now via ``QTRUST_MODEL_PATH`` env var
-#       (e.g. QTRUST_MODEL_PATH=/app/model_gpu_v3.pt), but the /health
-#       endpoint will report the evaluated ``eval_metrics.kendall`` so the
-#       trade-off is visible.
-#   See docs/WHITEPAPER.md §6.5, CHANGELOG "Benchmark Kendall-tau protocol bug".
+#       v2 (model.pt, 64-dim, BatchNorm)  τ = 0.958-0.961
+#       v3 GPU (model_gpu_v3.pt, LayerNorm) τ = 0.972-0.973  ← beats v2
+#       v3 DDP (model_ddp_v3.pt, BatchNorm) τ = 0.906-0.910
+#
+#   History: the first v3 GPU checkpoint used BatchNorm, which leaks
+#   cross-graph statistics under PyG batching and scored τ=0.898 — BELOW
+#   v2 (see qtrust_planner/model_v3.py AUDIT NOTE). The LayerNorm retrain
+#   fixed that and cleared the promotion gate documented there ("If
+#   τ_layer > τ_v2, update server default").
+#
+#   Resolution priority (see _resolve_checkpoint_path):
+#       QTRUST_MODEL_PATH (explicit operator override) →
+#       model_gpu_v3.pt (best) → model_ddp_v3.pt → model.pt (v2 legacy) →
+#       heuristic fallback.
+#   The /health endpoint reports the served ``variant`` and
+#   ``eval_metrics.kendall`` so the trade-off is always visible.
+#
+#   CI gate (from model_v3.py) is now ENFORCED in .github/workflows/ci.yml:
+#   "Promotion gate — v3 must beat canonical v2 before serving default"
+#   fails the build if a future checkpoint regresses below canonical v2.
 # ---------------------------------------------------------------------------
 MODEL_PATH = os.environ.get("QTRUST_MODEL_PATH", str(Path(__file__).resolve().parent / "model.pt"))
 # P0-3: wire v3 and real variants via env vars (ship empty by default, operator sets them)
@@ -303,20 +305,28 @@ except FileNotFoundError:
 
 
 def _resolve_checkpoint_path() -> tuple[str | None, str]:
-    """P0-3: resolve model path with fallback chain so DDP artifact has a consumer.
-    Priority: QTRUST_MODEL_PATH (explicit) -> model_gpu_v3.pt -> model_ddp_v3.pt -> model.pt
+    """Resolve model path with fallback chain so DDP artifact has a consumer.
+
+    Priority (post LayerNorm retrain — v3 τ 0.972-0.973 beats v2 τ
+    0.958-0.961 on the canonical seed=999 split):
+        QTRUST_MODEL_PATH (explicit operator override) ->
+        model_gpu_v3.pt (LayerNorm, best) -> model_ddp_v3.pt -> model.pt (v2)
     Also supports QTRUST_PLANNER_MODEL_REAL when it exists.
     Returns (path, variant) or (None, reason).
     """
     # Check real variant first if operator requested
     if os.path.exists(MODEL_PATH_REAL):
         return MODEL_PATH_REAL, "v3_real"
-    candidates = [
-        (MODEL_PATH, "v2_explicit" if MODEL_PATH != str(Path(__file__).resolve().parent / "model.pt") else "v2"),
+    v2_default = str(Path(__file__).resolve().parent / "model.pt")
+    candidates = []
+    if os.environ.get("QTRUST_MODEL_PATH") is not None:
+        # Operator explicitly pinned a checkpoint — honor it above defaults.
+        candidates.append((MODEL_PATH, "v2_explicit"))
+    candidates.extend([
         (MODEL_PATH_V3, "v3_gpu"),
         (MODEL_PATH_DDP, "v3_ddp"),
-        (str(Path(__file__).resolve().parent / "model.pt"), "v2_fallback"),
-    ]
+        (v2_default, "v2_fallback"),
+    ])
     for p, variant in candidates:
         if p and os.path.exists(p):
             return p, variant
@@ -324,7 +334,6 @@ def _resolve_checkpoint_path() -> tuple[str | None, str]:
 
 def _instantiate_model_from_checkpoint(checkpoint: dict, path: str):
     """Instantiate MigrationGNN or MigrationGNNv3 based on checkpoint config/shape."""
-    import torch
     # Detect v3 by config or state_dict keys
     config = checkpoint.get("model_config", {})
     state_dict = checkpoint.get("model_state_dict") or checkpoint.get("state_dict")
@@ -340,14 +349,12 @@ def _instantiate_model_from_checkpoint(checkpoint: dict, path: str):
     # Also handle legacy checkpoints that stored flat state_dict (no wrapper)
     if not isinstance(state_dict, dict) or len(state_dict) == 0:
         # Could be flat state_dict for v3
-        is_v3 = any(k.startswith("conv4") or k.startswith("bn4") for k in checkpoint.keys()) if isinstance(checkpoint, dict) else False
+        is_v3 = any(k.startswith("conv4") or k.startswith("bn4") for k in checkpoint) if isinstance(checkpoint, dict) else False
         if is_v3:
             state_dict = checkpoint
             config = {"input_features": 6, "hidden_dim": 256, "embedding_dim": 128}
     if is_v3:
         from qtrust_planner.model_v3 import MigrationGNNv3
-        # Infer norm from checkpoint if possible
-        norm = "batch"
         cfg = dict(config) if config else {"input_features": 6, "hidden_dim": 256, "embedding_dim": 128}
         # Handle Lite config mapping
         if "heads" not in cfg:
@@ -619,7 +626,7 @@ def _rl_migration_order(req: PlanRequest) -> tuple[list[dict[str, Any]], str] | 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # Audit P-08: cache the loaded agent across requests (checkpoint is read
     # once; a 30-80ms disk hit per inference adds up under load).
-    global _RL_AGENT_CACHE  # noqa: PLW0603
+    global _RL_AGENT_CACHE
     cached = _RL_AGENT_CACHE
     if cached is not None and cached["path"] == rl_path and cached["device"] == device:
         agent = cached["agent"]

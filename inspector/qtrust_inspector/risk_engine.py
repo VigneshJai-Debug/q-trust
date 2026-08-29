@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 from pydantic import BaseModel, Field
 
@@ -246,9 +246,9 @@ def _calculate_hndl_score(
     }
     v = vuln_weights.get(vulnerability, 0)
     s = max(0, min(5, sensitivity))
-    l = max(0, min(5, lifetime_years))
+    life = max(0, min(5, lifetime_years))
     e = max(0.0, exposure_years)
-    score = v * s * l * (1 + e / 10)
+    score = v * s * life * (1 + e / 10)
     return min(100.0, score * (100 / 125))
 
 

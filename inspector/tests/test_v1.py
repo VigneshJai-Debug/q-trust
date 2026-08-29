@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from qtrust_inspector import AssetFinding, CryptoScanner, ScanResult
+from qtrust_inspector import AssetFinding, ScanResult
 from qtrust_inspector.compliance import ComplianceEngine, ComplianceFramework
 from qtrust_inspector.evidence import EvidenceLedger, compute_cbom_diff
 from qtrust_inspector.risk_engine import RiskScore, QuantumVulnerability, calculate_risk_score
@@ -678,6 +678,25 @@ class TestRemediation:
                 assert "explanation" in remed, f"{lang}/{algo_key} missing 'explanation'"
                 assert "nist" in remed, f"{lang}/{algo_key} missing 'nist'"
 
+    def test_remediation_replacement_is_code_not_label(self):
+        # F601 regression: a duplicated "replacement" dict key used to let the
+        # short label overwrite the PQC code template, so remediated_code was
+        # just e.g. "ML-KEM-768" instead of an actual patch.
+        from qtrust_inspector.remediation import REMEDIATION_DB, generate_remediations
+        for lang, algos in REMEDIATION_DB.items():
+            for algo_key, remed in algos.items():
+                assert "replacement_algorithm" in remed, f"{lang}/{algo_key} missing 'replacement_algorithm'"
+                assert len(remed["replacement"]) > 40, f"{lang}/{algo_key} replacement is not a code template"
+        # End-to-end: python RSA remediation must yield real code + a label.
+        rems = generate_remediations([{
+            "file_path": "svc.py", "algorithm": "RSA",
+            "evidence": "from cryptography.hazmat.primitives.asymmetric import rsa\nkey = rsa.generate_private_key(2048)",
+            "line": 1, "severity": "HIGH",
+        }])
+        assert rems
+        assert "oqs" in rems[0].remediated_code.lower()
+        assert rems[0].replacement_algorithm == "ML-KEM-768 or ML-DSA-65"
+
     def test_remediation_covers_key_algorithms(self):
         from qtrust_inspector.remediation import REMEDIATION_DB
         assert "RSA" in REMEDIATION_DB["python"]
@@ -863,7 +882,6 @@ class TestTLSProbe:
 
     def test_tls_probe_result_structure(self):
         from qtrust_inspector.tls_probe import probe_tls_endpoint
-        import pytest
         # Reserved ranges are rejected by the scan-target guard (audit I-3).
         with pytest.raises(ValueError, match="forbidden"):
             probe_tls_endpoint("192.0.2.1", timeout=1.0)  # TEST-NET-1

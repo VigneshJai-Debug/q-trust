@@ -15,7 +15,6 @@ uses a 3B base (e.g. StarCoder-3B) with peft LoRA.
 from __future__ import annotations
 
 import json
-import random
 from pathlib import Path
 from typing import Any
 
@@ -71,10 +70,10 @@ class QScanCodeModel:
     def fine_tune(self, corpus: list[dict[str, Any]], epochs: int = 3, lr: float = 2e-4) -> dict:
         """LoRA fine-tune stub — real training uses Trainer + peft."""
         # Check for real base availability
-        try:
-            import transformers  # type: ignore
+        import importlib.util
+        if importlib.util.find_spec("transformers") is not None:
             print(f"[qscan] fine-tuning {self.base_model} with LoRA rank {self.lora_rank} on {len(corpus)} samples (stub)")
-        except ImportError:
+        else:
             print(f"[qscan] transformers not installed — heuristic fallback (stub trained on {len(corpus)} samples)")
         self._trained = True
         return {"epochs": epochs, "corpus_size": len(corpus), "lora_rank": self.lora_rank, "f1_gain": 0.12}  # stub +10-12 pts over regex

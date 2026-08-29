@@ -19,8 +19,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "inspector"))
 
-from qtrust_inspector.models import ScanResult
-from qtrust_inspector.scanner import scan_host
+from qtrust_inspector.models import ScanResult  # noqa: E402 - after sys.path bootstrap
+from qtrust_inspector.scanner import scan_host  # noqa: E402 - after sys.path bootstrap
 
 
 def load_hosts(path: Path) -> list[str]:

@@ -15,7 +15,6 @@ rebuilt VAE with non-constant features and held-out calibration threshold.
 """
 from __future__ import annotations
 
-import math
 from typing import Any
 
 try:
@@ -57,7 +56,9 @@ class QRiskEnsemble(nn.Module if HAS_ML and nn is not None else object):  # type
             self.deep_head.train()
             logits = self.deep_head(X_t).squeeze(-1)
             loss = nn.BCEWithLogitsLoss()(logits, y_t)
-            opt.zero_grad(); loss.backward(); opt.step()
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
         self.deep_head.eval()
         # Calibration — temperature scaling on held-out (20%)
         n = len(X)

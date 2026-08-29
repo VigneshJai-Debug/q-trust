@@ -27,6 +27,7 @@ from .source_scanner import scan_source_directory, scan_source_file
 __version__ = "1.1.0"
 __all__ = [
     "AssetFinding",
+    "CBOMDiff",
     "ComplianceEngine",
     "ComplianceFramework",
     "ComplianceReport",

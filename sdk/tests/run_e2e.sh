@@ -21,7 +21,15 @@ trap 'kill "$ANVIL_PID" 2>/dev/null || true' EXIT
 
 echo "==> Deploying contracts"
 DEPLOY_LOG=$(mktemp)
+# Dev/E2E grantees: the deployer + the E2E auditor account receive the
+# operational roles (QTRUST_DEV_GRANTEE) in addition to the timelock, so the
+# SDK E2E can exercise register/attest/migrate/audit against a hardened
+# deployment (all roles otherwise live exclusively on the timelock).
+AUDITOR_KEY="0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
+DEPLOYER_ADDR="$(cast wallet address --private-key "$DEPLOYER_KEY")"
+AUDITOR_ADDR="$(cast wallet address --private-key "$AUDITOR_KEY")"
 (cd "$ROOT/../contracts" && QTRUST_DEPLOYER_PRIVATE_KEY="$DEPLOYER_KEY" \
+  QTRUST_DEV_GRANTEE="$DEPLOYER_ADDR,$AUDITOR_ADDR" \
   forge script script/Deploy.s.sol --rpc-url "http://127.0.0.1:${ANVIL_PORT}" --broadcast 2>&1 | tee "$DEPLOY_LOG")
 
 echo "==> Extracting proxy addresses from deploy output"

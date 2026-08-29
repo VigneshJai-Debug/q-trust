@@ -120,7 +120,7 @@
 <th style="text-align: center;">⛓ <strong>11</strong><br>UUPS registries on Base L2</th>
 <th style="text-align: center;">🔎 <strong>10</strong><br>scanner modules</th>
 <th style="text-align: center;">🧠 <strong>τ 0.961</strong><br>GNN ranking accuracy</th>
-<th style="text-align: center;">🧪 <strong>189</strong><br>contract tests</th>
+<th style="text-align: center;">🧪 <strong>211</strong><br>contract tests</th>
 <th style="text-align: center;">🛡 <strong>7</strong><br>compliance frameworks</th>
 </tr>
 </thead>
@@ -427,7 +427,7 @@ Hash-chained evidence ledger anchored to Base L2 via EIP-712 gasless relays — 
 </tr>
 <tr>
 <td>Contract tests</td>
-<td><strong>189</strong> — unit + invariant (1000 runs) + fuzz + attack</td>
+<td><strong>211</strong> — unit + invariant (1000 runs) + fuzz + attack</td>
 <td><a href="CHANGELOG.md"><code>CHANGELOG.md</code></a></td>
 </tr>
 <tr>
@@ -471,7 +471,7 @@ docker compose up -d --build
 <br/>
 
 
-<pre><code class="language-bash"># Contracts (Foundry — 189 tests incl. invariant + fuzz + attack)
+<pre><code class="language-bash"># Contracts (Foundry — 211 tests incl. invariant + fuzz + attack)
 cd contracts &amp;&amp; forge test
 
 # Planner (PyTorch Geometric)
@@ -661,7 +661,7 @@ asset_id, cid = client.register_cbom(cbom)   # → on-chain attestation + IPFS C
     axisFormat %b %Y
 
     section Landed
-    11 registries + 189 tests        :done, 2025-11, 2026-02
+    11 registries + 211 tests        :done, 2025-11, 2026-02
     v2.0 scanner (10 modules)        :done, 2026-02, 2026-05
     GNN planner (τ 0.961)            :done, 2026-03, 2026-06
     7 CI pipelines + docs site       :done, 2026-05, 2026-07

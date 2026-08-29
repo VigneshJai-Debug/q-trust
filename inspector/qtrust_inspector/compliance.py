@@ -484,7 +484,6 @@ def _eu_nis2_rules(finding: AssetFinding) -> list[ComplianceRule]:
 def _fisma_rules(finding: AssetFinding) -> list[ComplianceRule]:
     rules: list[ComplianceRule] = []
     alg = _normalise_alg(finding.algorithm)
-    ksize = _extract_key_size(finding)
 
     # FIPS 140-3 validated modules
     rules.append(ComplianceRule(
@@ -758,7 +757,6 @@ def _bsi_tr_02102_rules(finding: AssetFinding) -> list[ComplianceRule]:
     if _is_symmetric(finding):
         is_aes_ok = "aes_128" in alg or "aes_192" in alg or "aes_256" in alg
         is_chacha = "chacha20" in alg or "chacha" in alg
-        is_forbidden = any(f in alg for f in ("des", "3des", "rc4"))
         ok = is_aes_ok or is_chacha
         rules.append(ComplianceRule(
             framework=ComplianceFramework.BSI_TR_02102,
@@ -885,7 +883,6 @@ def _ncsc_uk_rules(finding: AssetFinding) -> list[ComplianceRule]:
 def _asd_ism_rules(finding: AssetFinding) -> list[ComplianceRule]:
     rules: list[ComplianceRule] = []
     alg = _normalise_alg(finding.algorithm)
-    ksize = _extract_key_size(finding)
 
     # ML-KEM-1024 + ML-DSA-87 only (strictest)
     if _is_key_exchange(finding) or _is_asymmetric(finding):

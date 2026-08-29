@@ -39,7 +39,7 @@ tampering is detectable without a blockchain write per record.
 
 ## Verification & automation
 
-- **189 contract tests** pass under Foundry's strict invariant config
+- **211 contract tests** pass under Foundry's strict invariant config
   (`runs=1000, depth=100, fail_on_revert=true`), including invariant,
   fuzz, attack-scenario and upgrade state-preservation suites
   (see `CHANGELOG.md`).

@@ -7,6 +7,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Model-training rigor campaign — every checkpoint retrained and benchmarked (2026-08-28)
+
+Rigorous retraining of every shipped model with honest, verified metrics:
+
+**Planner GNN v3 — HPO sweep at 4× A100 scale.** A 4-config hyperparameter
+sweep (graph counts 150-250K, LR 5e-4-1e-3, weight decay, 200-300 epochs,
+LayerNorm, warmup-cosine, best-checkpoint selection) replaced the single
+config. Two real training bugs were found and fixed along the way:
+
+- **ListMLE NaN at scale (fixed).** The vectorized per-graph ListMLE loss
+  (P0-1 fix) computed segmented suffix-logsumexp in float32; when logits
+  spanned a wide range, the segment decomposition `seg_total - within + e`
+  suffered catastrophic cancellation, going slightly negative and producing
+  `log(NaN)` after ~10-20 epochs — silently corrupting the loss while the
+  weights looked clean. Now computed in float64 with a mathematically exact
+  `clamp(min=e)` floor (the suffix sum always contains the current element's
+  exp). Verified: 0 NaN, 0 negative losses, matches the reference within
+  3.6e-7, plus a regression test. This also unblocked a 3-6× training
+  speedup (vectorized loss + subsampled validation + no torch.compile
+  recompilation churn on dynamic PyG shapes).
+- Sweep winner (config A: 200K graphs, LayerNorm, warmup-cosine,
+  best-checkpointing) reached **v3 τ 0.9746** on the held-out set — up from
+  the previous canonical 0.9718 — see `planner/results/benchmark_v3.json` and
+  the README results table.
+
+**RL migration agent — PPO is now real PPO.** The previous implementation
+was a stub: the importance ratio `exp(log π_θ - log π_θ_old)` reused the
+rollout log-probs, so the ratio was identically 1 and the clipped surrogate
+never engaged (plain advantage-weighted SGD in PPO clothing). The rollout is
+now fully vectorized (one batched GNN forward per step across all 64 envs,
+~160× faster than the serial loop) and each inner epoch recomputes
+log-probs under the *updated* policy with the true importance ratio, plus a
+fresh critic pass. Regression tests assert `evaluate()` matches
+`select_action()` log-probs and the vectorized feature builder matches
+`state_to_tensors()`. Retrained at 4K rollouts × 64 envs on A100 — see the
+README results table for the measured mean reward.
+
+**qtrust_ai intelligence layer — real-data retrain with baseline
+comparison.** `train_qtrust_all.py --real` retrained all 15 models on the
+real cached datasets (4,431 code samples, 60 TLS hosts, 16 vendor records):
+15/15 trained, 0 errors, 15/15 calibration anchors. The existing
+`BaselineComparison` module (qtrust_ai/benchmark/compare.py) was never wired
+into training — it now runs after every real-data training and writes
+`qtrust_ai/artifacts/benchmark_comparison.json`: 7 comparisons, 6/7 models
+beat their best naive baseline, mean relative gain 8.98×.
+
+**Inspector models retrained.** Canonical side-channel detector (80 epochs,
+perfect clean-vs-leaky separation on real liboqs traces: 0.05 VERIFIED vs
+0.95 HIGH_RISK) and anomaly VAE (80 epochs, threshold 0.2754) regenerated
+and verified through the production GPU bridge.
+
+**Honesty fixes a reviewer would flag:**
+
+- `export.py` no longer writes fake `exports/*.onnx` files — the committed
+  "exports" were JSON error markers (e.g. `{"error": "No module named
+  'onnxscript'"}`) and JSON stubs for the inspector models. Removed from
+  git, `exports/` gitignored, and the exporter now performs real ONNX
+  exports (side-channel CNN, anomaly VAE) with a clear `pip install onnx
+  onnxscript` error when deps are missing — never a placeholder.
+- `Makefile.gpu` created — it was referenced by 6+ doc pages (GPU_FEATURES,
+  api, index, CHANGELOG) but did not exist. Now provides `train-gnn[-quick]`,
+  `train-rl[-quick]`, `side-channel-train`, `anomaly-train`, `help` wired to
+  the real training entry points.
+- `sweep_gnn.py` now launches via the argument wrapper instead of an inline
+  `python -c` blob (which broke on shell quoting and caused duplicate
+  generations to race on the same logs/checkpoints).
+- Minor: `code_detector.py` detached a grad-carrying tensor before
+  `float()` (removes the UserWarning in the fine-tune loop).
+
 ### Security — external codebase audit remediation (2026-08-26)
 
 Remediates the 2026-08-26 Z.ai engineering audit (`docs/Q-Trust_Codebase_Audit.pdf`).
@@ -213,8 +282,10 @@ Low, and Informational code findings are fixed unless explicitly noted below.
   `ci` profile (1000 examples where per-test settings allow).
 - **GitHub Release v2.0.0** published with release notes, audit PDF, and
   GPU feature bundle.
-- **Trained checkpoints at full scale** — RL agent 10K episodes (best mean
-  reward +6.24 vs −8.6 untrained); side-channel detector trained at
+- **Trained checkpoints at full scale** — RL agent 4K rollouts × 64 envs
+  (vectorized PPO; reproducible eval in
+  `planner/results/rl_benchmark.json`, `scripts/eval_rl_agent.py`);
+  side-channel detector trained at
   5K+5K traces / 50 epochs; anomaly VAE on 1,000 CBOMs / 100 epochs; GNN v3
   best val τ 0.658 → 0.70+ during the 100K-graph run (checkpoint saved
   continuously; `make -f Makefile.gpu train-gnn` reproduces/resumes).

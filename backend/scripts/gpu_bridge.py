@@ -257,7 +257,6 @@ def cmd_daemon(_payload: dict) -> None:
                     def _capture(payload: dict, code: int = 0):
                         raise StopIteration((payload, code))
                     # Monkey-patch _emit locally
-                    import types
                     saved_emit = globals()["_emit"]
                     def _capturing_emit(payload: dict, code: int = 0):
                         raise StopIteration((payload, code))

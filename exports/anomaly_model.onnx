@@ -1,5 +1,0 @@
-{
-  "stub": true,
-  "model_path": "inspector/anomaly_model.pt",
-  "note": "inspector model \u2014 ONNX export via torch.jit pending"
-}

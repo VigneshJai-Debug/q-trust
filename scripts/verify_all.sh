@@ -33,7 +33,10 @@ echo "==> [6/9] Backend build (tsc)"
 (cd "$ROOT/backend" && npm run build > /dev/null 2>&1) && pass "backend build" || fail "backend build"
 
 echo "==> [7/9] Frontend build (next)"
-(cd "$ROOT/frontend" && npm run build > /dev/null 2>&1) && pass "frontend build" || fail "frontend build"
+# A non-'demo' project ID makes wagmi happy even in production builds; CI
+# uses the same all-zeros placeholder (0000...0000).
+(cd "$ROOT/frontend" && NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID="00000000000000000000000000000000" \
+  npm run build > /dev/null 2>&1) && pass "frontend build" || fail "frontend build"
 
 echo "==> [8/9] Notebooks execute"
 # Notebook location moved to research/notebooks per Blueprint §5.1 — handle both old and new paths
@@ -47,14 +50,23 @@ setsid anvil --host 127.0.0.1 --port 8545 --chain-id 84532 > /tmp/qtrust-anvil-p
 ANVIL_PID=$!
 sleep 3
 DEPLOY_LOG=$(mktemp)
-(cd "$ROOT/contracts" && QTRUST_DEPLOYER_PRIVATE_KEY="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" \
+# QTRUST_DEV_GRANTEE grants the deployer (account 0, the pilot's default
+# signing account) the REGISTRAR/operational roles, exactly as the SDK E2E
+# does — otherwise the pilot cannot register the scanned CBOM on-chain.
+(cd "$ROOT/contracts" && \
+  QTRUST_DEPLOYER_PRIVATE_KEY="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" \
+  QTRUST_DEV_GRANTEE="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" \
   forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 --broadcast 2>&1 | tee "$DEPLOY_LOG")
 export QTRUST_ASSET_REGISTRY_ADDRESS="$(grep 'AssetRegistry proxy:' "$DEPLOY_LOG" | awk '{print $NF}')"
 export QTRUST_VENDOR_REGISTRY_ADDRESS="$(grep 'VendorRegistry proxy:' "$DEPLOY_LOG" | awk '{print $NF}')"
 export QTRUST_MIGRATION_REGISTRY_ADDRESS="$(grep 'MigrationRegistry proxy:' "$DEPLOY_LOG" | awk '{print $NF}')"
 export QTRUST_AUDIT_REGISTRY_ADDRESS="$(grep 'AuditRegistry proxy:' "$DEPLOY_LOG" | awk '{print $NF}')"
+# The pilot refuses to run without an explicit deployer key against local
+# anvil; export it (plus the RPC) so the pilot subshell sees them.
+export QTRUST_DEPLOYER_PRIVATE_KEY="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 rm -f "$DEPLOY_LOG"
-(cd "$ROOT/pilot" && python run_pilot.py 2>&1 | grep -q "PILOT COMPLETE") \
+(cd "$ROOT/pilot" && python run_pilot.py > /tmp/qtrust-pilot-debug.log 2>&1; \
+  s=$?; tail -30 /tmp/qtrust-pilot-debug.log | grep -q "PILOT COMPLETE" && s=0; exit $s) \
   && pass "pilot" || fail "pilot"
 jupyter nbconvert --to notebook --execute "$NB_DIR/08_bank_pilot.ipynb" --output /tmp/qtrust_nb8.ipynb > /dev/null 2>&1 \
   && pass "notebooks (08 bank pilot)" || fail "notebooks (08)"

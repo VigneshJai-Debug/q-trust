@@ -11,7 +11,6 @@ Unit-tested once; drift between the three is now a test failure, not silent dive
 """
 from __future__ import annotations
 
-import math
 
 CRITICALITY_W = {
     "Critical": 5,

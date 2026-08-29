@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 __all__ = [
     "CycloneDXComponent",
@@ -32,8 +32,7 @@ class CycloneDXComponent(BaseModel):
     description: str = ""
     crypto_properties: dict[str, Any] = Field(default_factory=dict)
 
-    class Config:
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
 
 class CycloneDXBOM(BaseModel):

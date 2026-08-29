@@ -427,9 +427,15 @@ class PQCRecommender:
                 labels = [Purpose.coerce(ex["purpose"]).value for ex in corpus]
                 self._vectorizer = TfidfVectorizer(max_features=1024, ngram_range=(1, 2))  # type: ignore
                 X = self._vectorizer.fit_transform(texts)  # type: ignore
-                self._model = LogisticRegression(max_iter=300, multi_class="auto", random_state=self.config.seed)  # type: ignore
+                self._model = LogisticRegression(max_iter=300, random_state=self.config.seed)  # type: ignore
                 self._model.fit(X, labels)  # type: ignore
-            except Exception:
+            except Exception as exc:  # noqa: BLE001 - graceful degradation to deterministic fallback
+                # sklearn >= 1.9 removed the `multi_class` kwarg; the default
+                # lbfgs solver already trains a multinomial model.
+                import logging
+                logging.getLogger(__name__).warning(
+                    "PQCRecommender: sklearn path failed (%s) — using deterministic fallback", exc
+                )
                 self._vectorizer = None
                 self._model = None
         self.is_trained = True

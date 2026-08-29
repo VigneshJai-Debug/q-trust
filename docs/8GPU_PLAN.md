@@ -33,6 +33,12 @@ Committed benchmarks (seed=999, same protocol):
 - v3 1×A100 237,070 params, 100K graphs, bf16: **τ 0.8982**, top-5 0.520 (benchmark_v3.json:14)
 - v3 2×A100 DDP 237,070 params, 400K graphs: **τ 0.8312**, top-5 0.140 (benchmark_ddp.json:24) ← corrected from 0.9027
 
+> **Updated (2026-08-28):** after the per-graph ListMLE loss fix the HPO sweep
+> winner (200K graphs, LayerNorm, warmup-cosine, best-checkpointing) reaches
+> held-out **τ 0.9746** / top-5 0.700 on the same seed=999 suite
+> (`planner/results/benchmark_v3.json` v3 entry) — exceeding the previous
+> canonical τ 0.9718 and the pre-fix 0.8982.
+
 Root causes (P0-1, P1-7, pdf §5): cross-graph ListMLE (train_gpu.py:32-46,176; train_ddp.py:146) mixed Plackett-Luce normalizer across 256 unrelated estates per batch; per-rank double-sharding. Fixed by `per_graph_listMLE_loss` with `batch_idx` masking (train_gpu.py, train_ddp.py) and single global dataset sharded once via `DistributedSampler` (pdf Appendix B P0 fix list).
 
 Heuristic ceiling (P0-2): the label rule itself scores τ 0.9999, so imitation cannot beat it; Track B replaces imitation with outcome simulation (cost/downtime/risk under NIST IR 8547 / CNSA 2.0).

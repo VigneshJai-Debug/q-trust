@@ -151,7 +151,7 @@ Ledger is persisted as append-only JSONL at `/var/lib/qtrust` (Docker volume `qt
 | `POST` | `/v1/plans` | Create AI migration plan (proxied to planner) | `X-Api-Key` (planner) |
 | `GET` | `/v1/plans/{did}` | Get migration plan for an org (planner proxied) | — |
 
-Planner proxy requires `QTRUST_PLANNER_API_KEY` (audit HIGH-1); returns `503` when planner is down. See `GPU_FEATURES.md` for GNN/RL details and `PERFORMANCE.md` for benchmark τ 0.961.
+Planner proxy requires `QTRUST_PLANNER_API_KEY` (audit HIGH-1); returns `503` when planner is down. See `GPU_FEATURES.md` for GNN/RL details and `PERFORMANCE.md` for benchmark τ 0.975.
 
 ### Assets
 

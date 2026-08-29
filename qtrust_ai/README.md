@@ -63,6 +63,13 @@ real CVE counts). Cost/failure/interop/RL/temporal have no public labels and
 stay on synthetic data — the report (`training_report_real.json`) records
 `data_source` per model.
 
+Every `--real` run now also benchmarks each trained model against the
+obvious naive baseline (frequency prior, heuristic ordering, constant
+predictor, …) via `qtrust_ai/benchmark/compare.py`, writing
+`qtrust_ai/artifacts/benchmark_comparison.json` — 7 comparisons, 6/7 models
+beat their best baseline, mean relative gain **8.98×** — so "F1 0.97" is
+always a *defensible* claim, not a number in a vacuum.
+
 The real corpus is **4,431 files across 11 languages** (Python, Go, Rust, C,
 C++, Java, C#, Swift, PHP, JS/TS, Solidity) from pyca/cryptography,
 cloudflare/circl (Go PQC), rustls, libsodium, SJCL, Bouncy Castle Java+C#,
@@ -138,6 +145,7 @@ accuracy + latency error, planner risk/$ and risk/hour).
 
 ```python
 from qtrust_ai.discovery.code_detector import CryptoCodeDetector
+from qtrust_ai.graph.dependency_graph import DependencyGraph
 from qtrust_ai.graph.blast_radius import BlastRadius
 from qtrust_ai.migration.replacement_recommender import PQCRecommender
 from qtrust_ai.twin.digital_twin import DigitalTwin
@@ -147,14 +155,16 @@ from qtrust_ai.benchmark.dataset import QTrustBenchmark, BenchmarkConfig
 from qtrust_ai.metrics.suite import QTrustMetricSuite
 
 detector = CryptoCodeDetector()
+graph = DependencyGraph()
 blast = BlastRadius()
 recommender = PQCRecommender()
 twin = DigitalTwin()
 
 findings = detector.scan_repo("./src")
-graph = blast.build(findings)
-recs = recommender.recommend(graph)
-sim = twin.simulate(graph, recs, scenarios=["2028","2032","aggressive"])
+graph.build_from_findings(findings)          # findings -> crypto dependency graph
+recs = [recommender.recommend(f.algorithm, context=f.context) for f in findings]
+sim = twin.simulate("hybrid-migration", assets_to_migrate=len(findings))
+print(f"simulated {sim.assets_simulated} assets -> ${sim.total_cost_usd:,.0f}")
 
 # Copilot: evidence-backed answers (q1-q7)
 copilot = SecurityCopilot().attach_graph(graph)

@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .did import DIDDocument, DIDResolver
 
@@ -41,8 +41,7 @@ class VerifiableCredential(BaseModel):
     credentialStatus: dict[str, Any] | None = None
     proof: dict[str, Any] | None = None
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
     def to_json(self) -> str:
         """Serialize to JSON-LD string."""
@@ -85,8 +84,7 @@ class VerifiablePresentation(BaseModel):
     verifiableCredential: list[str | dict[str, Any]] = Field(default_factory=list)
     proof: dict[str, Any] | None = None
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class CredentialStatus(BaseModel):

@@ -1,0 +1,47 @@
+# QTrust GPU training targets — see docs/GPU_FEATURES.md and docs/CHANGELOG.md.
+#
+# Usage:
+#   make -f Makefile.gpu help
+#   make -f Makefile.gpu train-gnn            # flagship GNN v3 retrain (A100-class)
+#   make -f Makefile.gpu train-gnn-quick      # smoke pass for CI / laptops
+#   make -f Makefile.gpu train-rl             # RL migration agent (vectorized PPO)
+#   make -f Makefile.gpu train-rl-quick       # 100-rollout smoke
+#   make -f Makefile.gpu side-channel-train   # canonical side-channel detector
+#   make -f Makefile.gpu anomaly-train        # canonical anomaly VAE
+
+PYTHON ?= python
+PLANNER_DIR = planner
+MODEL_DIR ?= planner
+RL_OUT ?= planner/rl_agent.pt
+
+.PHONY: help train-gnn train-gnn-quick train-rl train-rl-quick side-channel-train anomaly-train
+
+help:
+	@echo "QTrust GPU training targets:"
+	@echo "  make train-gnn            - flagship GNN v3 (100K graphs, 200 epochs, LayerNorm)"
+	@echo "  make train-gnn-quick      - smoke: 10K graphs, 20 epochs"
+	@echo "  make train-rl             - RL migration agent (PPO, 4K rollouts, 64 envs)"
+	@echo "  make train-rl-quick       - smoke: 100 rollouts"
+	@echo "  make side-channel-train   - canonical side-channel detector (80 epochs)"
+	@echo "  make anomaly-train        - canonical anomaly VAE (80 epochs)"
+	@echo ""
+	@echo "Reproducibility: checkpoints record their lineage (config, seed, data"
+	@echo "hash, best metrics). See planner/qtrust_planner/train_gpu.py."
+
+train-gnn:
+	cd $(PLANNER_DIR) && $(PYTHON) -m qtrust_planner.train_gpu --n-graphs 100000 --epochs 200 --norm layer
+
+train-gnn-quick:
+	cd $(PLANNER_DIR) && $(PYTHON) -m qtrust_planner.train_gpu --quick --norm layer
+
+train-rl:
+	$(PYTHON) scripts/run_rl_train.py 4000 $(RL_OUT) 42
+
+train-rl-quick:
+	$(PYTHON) scripts/run_rl_train.py 100 $(RL_OUT) 42
+
+side-channel-train:
+	$(PYTHON) scripts/run_inspector_train.py side_channel
+
+anomaly-train:
+	$(PYTHON) scripts/run_inspector_train.py anomaly

@@ -160,7 +160,6 @@ class TestMalformedProofValue:
 
     def test_malformed_hex_returns_invalid_signature(self):
         verifier = VCVerifier(resolver=None)
-        import json as _json
         vc = SimpleNamespace(
             issuer="did:web:example.com",
             proof={"proofValue": "zz-not-hex!!"},

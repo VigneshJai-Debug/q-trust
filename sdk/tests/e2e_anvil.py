@@ -160,7 +160,9 @@ def main() -> None:
         audit_registry_address=ADDRESSES["audit"],
         chain_id=84532,
     )
-    # Grant AUDITOR_ROLE to the auditor (no-op if already granted via Deploy timelock).
+    # Grant AUDITOR_ROLE to the auditor (no-op if already granted via Deploy
+    # timelock or QTRUST_DEV_GRANTEE). run_e2e.sh deploys with the auditor
+    # address in QTRUST_DEV_GRANTEE, so this branch is normally skipped.
     role = auditor.audit_registry.functions.AUDITOR_ROLE().call()
     has_role = auditor.audit_registry.functions.hasRole(role, auditor.account.address).call()
     if not has_role:
@@ -168,8 +170,9 @@ def main() -> None:
         try:
             client._send_transaction(auditor_tx, gas_limit=150_000)
         except RuntimeError:
-            # Admin was handed to timelock — deployer still has AUDITOR_ROLE
-            # from Deploy.s.sol, so fall back to using the deployer as auditor.
+            # Admin was handed to timelock — a dev-granted account holds
+            # AUDITOR_ROLE (QTRUST_DEV_GRANTEE), so fall back to the deployer
+            # as auditor when it was granted the role.
             has_role = client.audit_registry.functions.hasRole(role, client.account.address).call()
             if has_role:
                 auditor = client

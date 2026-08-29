@@ -7,7 +7,7 @@ Run: crypto-inspector k8s-policy --format kyverno --output pqc-policies.yaml
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 

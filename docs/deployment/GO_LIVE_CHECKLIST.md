@@ -53,7 +53,7 @@ Workflows are merged (`.github/workflows/publish-pypi.yml`,
 ## 7. Strategic tier — Gaps 20–22 (ZK CBOM proofs, TEE attestation,
    vendor verification bot)
 
-Multi-week builds tracked in
-[`QTrust_Implementation_Gap_Report.md`](../assessments/QTrust_Implementation_Gap_Report.md)
+Multi-week builds tracked in the internal gap report (archived privately —
+`docs/assessments/` is excluded from the public tree, see .gitignore)
 (Tier 4). The side-channel analyzer + bridge (Gap 22's core) already exist;
 the bot reduces to an OQS-download loop around it.

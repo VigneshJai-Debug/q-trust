@@ -38,7 +38,7 @@ contract Deploy is Script {
         TimelockController timelock = _deployTimelock(deployer);
 
         _handAdminToTimelock(
-            assets, vendors, migrations, audits, compliance, evidence, timelock, deployer
+            assets, vendors, migrations, audits, compliance, evidence, timelock, deployer, _devGrantees()
         );
 
         QTrustGovernance governance = new QTrustGovernance(
@@ -259,7 +259,8 @@ contract Deploy is Script {
         ComplianceAttestation compliance,
         EvidenceRegistry evidence,
         TimelockController timelock,
-        address deployer
+        address deployer,
+        address[] memory devGrantees
     ) internal {
         bytes32 adminRole = 0x00;
 
@@ -273,6 +274,25 @@ contract Deploy is Script {
         audits.grantRole(audits.AUDITOR_ROLE(), address(timelock));
         compliance.grantRole(compliance.ATTESTER_ROLE(), address(timelock));
         evidence.grantRole(evidence.REGISTRAR_ROLE(), address(timelock));
+
+        // Dev/E2E grantees (QTRUST_DEV_GRANTEE): mirror the same operational
+        // roles to local test accounts so SDK E2E can run against a hardened
+        // deployment. Grants must happen before the deployer renounces admin.
+        for (uint256 i = 0; i < devGrantees.length; i++) {
+            assets.grantRole(assets.REGISTRAR_ROLE(), devGrantees[i]);
+            vendors.grantRole(vendors.VENDOR_ADMIN_ROLE(), devGrantees[i]);
+            migrations.grantRole(migrations.MIGRATOR_ROLE(), devGrantees[i]);
+            migrations.grantRole(migrations.AUDITOR_ROLE(), devGrantees[i]);
+            audits.grantRole(audits.AUDITOR_ROLE(), devGrantees[i]);
+            compliance.grantRole(compliance.ATTESTER_ROLE(), devGrantees[i]);
+            evidence.grantRole(evidence.REGISTRAR_ROLE(), devGrantees[i]);
+        }
+        if (devGrantees.length > 0) {
+            console2.log("Dev/E2E operational roles granted to QTRUST_DEV_GRANTEE:");
+            for (uint256 i = 0; i < devGrantees.length; i++) {
+                console2.log("  ->", devGrantees[i]);
+            }
+        }
 
         console2.log("Operational roles transferred to timelock:");
         console2.log("  AssetRegistry.REGISTRAR_ROLE           ->", address(timelock));
@@ -293,19 +313,32 @@ contract Deploy is Script {
         // Renounce ALL deployer roles (admin AND operational): retaining the
         // operational roles would let the deployer bypass the timelock for
         // every registration, migration, attestation, and evidence record.
-        _renounceDeployerRoles(assets, deployer, [assets.REGISTRAR_ROLE(), bytes32(0)]);
-        _renounceDeployerRoles(vendors, deployer, [vendors.VENDOR_ADMIN_ROLE(), bytes32(0)]);
+        // Exception: when the deployer is itself an explicit dev/E2E grantee
+        // (QTRUST_DEV_GRANTEE), keep its operational roles so the SDK E2E can
+        // run against a hardened deployment — only the admin role is renounced.
+        bool keepOperational = _isDevGrantee(deployer, devGrantees);
+        _renounceDeployerRoles(
+            assets, deployer, [assets.REGISTRAR_ROLE(), bytes32(0)], keepOperational
+        );
+        _renounceDeployerRoles(
+            vendors, deployer, [vendors.VENDOR_ADMIN_ROLE(), bytes32(0)], keepOperational
+        );
         _renounceDeployerRoles(
             migrations,
             deployer,
             [
                 migrations.MIGRATOR_ROLE(),
                 migrations.AUDITOR_ROLE()
-            ]
+            ],
+            keepOperational
         );
-        _renounceDeployerRoles(audits, deployer, [bytes32(0), bytes32(0)]);
-        _renounceDeployerRoles(compliance, deployer, [compliance.ATTESTER_ROLE(), bytes32(0)]);
-        _renounceDeployerRoles(evidence, deployer, [evidence.REGISTRAR_ROLE(), bytes32(0)]);
+        _renounceDeployerRoles(audits, deployer, [bytes32(0), bytes32(0)], keepOperational);
+        _renounceDeployerRoles(
+            compliance, deployer, [compliance.ATTESTER_ROLE(), bytes32(0)], keepOperational
+        );
+        _renounceDeployerRoles(
+            evidence, deployer, [evidence.REGISTRAR_ROLE(), bytes32(0)], keepOperational
+        );
 
         console2.log("DEFAULT_ADMIN_ROLE granted to timelock; all deployer roles renounced:");
         console2.log("  AssetRegistry     ", address(assets));
@@ -316,22 +349,68 @@ contract Deploy is Script {
         console2.log("  EvidenceRegistry     ", address(evidence));
     }
 
+    /// @dev Dev/E2E-only: comma-separated addresses that receive the
+    ///      operational roles IN ADDITION to the timelock, before the deployer
+    ///      renounces. NEVER set in production — the timelock must remain the
+    ///      sole authority. Used by sdk/tests/run_e2e.sh for local E2E tests.
+    function _devGrantees() internal view returns (address[] memory) {
+        string memory raw = vm.envOr("QTRUST_DEV_GRANTEE", string(""));
+        if (bytes(raw).length == 0) return new address[](0);
+        return _parseAddressList(raw);
+    }
+
+    /// @dev Parse a comma-separated list of addresses ("0x..,0x..") into an array.
+    function _parseAddressList(string memory raw) internal pure returns (address[] memory out) {
+        bytes memory b = bytes(raw);
+        uint256 count = 1;
+        for (uint256 i = 0; i < b.length; i++) {
+            if (b[i] == ",") count++;
+        }
+        out = new address[](count);
+        uint256 idx = 0;
+        bytes memory current = new bytes(0);
+        for (uint256 i = 0; i <= b.length; i++) {
+            if (i == b.length || b[i] == ",") {
+                out[idx++] = vm.parseAddress(string(current));
+                current = new bytes(0);
+            } else {
+                current = abi.encodePacked(current, b[i]);
+            }
+        }
+    }
+
     /// @dev Renounce DEFAULT_ADMIN_ROLE plus each supplied operational role
-    ///      when the deployer still holds it.
+    ///      when the deployer still holds it. When keepOperational is set
+    ///      (deployer listed in QTRUST_DEV_GRANTEE for local E2E), only the
+    ///      admin role is renounced — operational roles stay with the deployer.
     function _renounceDeployerRoles(
         IAccessControl accessControl,
         address account,
-        bytes32[2] memory extraRoles
+        bytes32[2] memory extraRoles,
+        bool keepOperational
     ) internal {
         bytes32 adminRole = 0x00;
         if (accessControl.hasRole(adminRole, account)) {
             accessControl.renounceRole(adminRole, account);
         }
+        if (keepOperational) return;
         for (uint256 i = 0; i < extraRoles.length; i++) {
             if (extraRoles[i] == bytes32(0)) continue;
             if (accessControl.hasRole(extraRoles[i], account)) {
                 accessControl.renounceRole(extraRoles[i], account);
             }
         }
+    }
+
+    /// @dev True when `account` appears in the QTRUST_DEV_GRANTEE list.
+    function _isDevGrantee(address account, address[] memory devGrantees)
+        internal
+        pure
+        returns (bool)
+    {
+        for (uint256 i = 0; i < devGrantees.length; i++) {
+            if (devGrantees[i] == account) return true;
+        }
+        return false;
     }
 }

@@ -12,7 +12,7 @@ hide:
 
     ---
 
-    Scan → Risk → Compliance → Plan → Attest → Verify on **Base L2**. CBOM 1.7, SARIF 2.1, GNN/RL planning, EIP-712 gasless relay, W3C Verifiable Credentials — audited, 211 Foundry tests, τ 0.961.
+    Scan → Risk → Compliance → Plan → Attest → Verify on **Base L2**. CBOM 1.7, SARIF 2.1, GNN/RL planning, EIP-712 gasless relay, W3C Verifiable Credentials — audited, 211 Foundry tests, τ 0.975.
 
     :material-rocket-launch: [Quickstart](#quickstart){ .md-button .md-button--primary }
     :material-api: [API Reference](api.md){ .md-button }
@@ -35,7 +35,7 @@ hide:
 | Use the SDK in CI | [Guides: Integrate the SDK](guides/integrate-sdk.md) | hash_cbom → IPFS → EIP-712 gasless relay |
 | Run the full stack locally | [Guides: Operate the stack](guides/operate-stack.md) | Docker compose + Prometheus/Grafana + runbooks |
 | Understand the protocol | [Whitepaper](WHITEPAPER.md) | Threat model, GNN planner, on-chain design |
-| See measured performance | [Performance](PERFORMANCE.md) + [_data/metrics.json](_data/metrics.json) | k6 147.8 rps, τ 0.961, GPU latencies |
+| See measured performance | [Performance](PERFORMANCE.md) + [_data/metrics.json](_data/metrics.json) | k6 147.8 rps, τ 0.975, GPU latencies |
 | Evaluate for production | [Architecture](ARCHITECTURE.md) + [Reality check in README](../README.md#reality-check) | Honest limits: no audit, no public deploy, relayer trust |
 | Verify an attestation | `GET /v/{assetId}` or `GET /v1/assets/{id}/verify` | On-chain existence, active, org_did |
 
@@ -201,7 +201,7 @@ Full detail: [Architecture](ARCHITECTURE.md) · [Whitepaper §2–§7](WHITEPAPE
 ```
 contracts/   Foundry workspace — 11 Solidity contracts (UUPS, EIP-712, timelock)
 inspector/   Python scanner producing CBOMs / SARIF / compliance reports
-planner/     FastAPI microservice — GNN + RL migration planning (τ 0.961)
+planner/     FastAPI microservice — GNN + RL migration planning (τ 0.975)
 backend/     Fastify API — verification, attestation, relay, GPU bridge (32 OpenAPI paths)
 sdk/         qtrust Python SDK for on-chain registration (web3.py 7.x)
 frontend/    Next.js 16 dApp — wallet (wagmi+RainbowKit), dashboard, scanner, GPU panels

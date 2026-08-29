@@ -1,5 +1,0 @@
-{
-  "stub": true,
-  "model_path": "inspector/side_channel_model.pt",
-  "note": "inspector model \u2014 ONNX export via torch.jit pending"
-}

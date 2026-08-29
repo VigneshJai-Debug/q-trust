@@ -866,7 +866,7 @@ class CryptoCodeDetector:
                 opt.zero_grad()
                 loss.backward()
                 opt.step()
-                total_loss += float(loss) * len(b_t)
+                total_loss += float(loss.detach()) * len(b_t)
                 correct += int((out.logits.argmax(-1) == b_t).sum())
                 seen += len(b_t)
             train_acc = round(correct / seen, 4)

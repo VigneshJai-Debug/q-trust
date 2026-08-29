@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Iterator
 
 from .models import AssetFinding
 
@@ -11,7 +10,8 @@ CRYPTO_LIBRARIES: dict[str, dict[str, list[str]]] = {
     # Rust
     "ring": {"algorithms": ["AES", "ChaCha20", "ECDSA", "RSA", "SHA256", "SHA384", "SHA512"], "category": "rust"},
     "rustls": {"algorithms": ["TLS"], "category": "rust"},
-    "openssl": {"algorithms": ["RSA", "AES", "ECDSA", "HMAC", "SHA256", "SHA512", "PBKDF2"], "category": "rust"},
+    # Merged rust + ruby "openssl" entries (identical keys previously overwrote each other)
+    "openssl": {"algorithms": ["RSA", "AES", "ECDSA", "HMAC", "SHA256", "SHA512", "PBKDF2", "DES", "3DES", "Ed25519", "PKCS5", "PKCS7", "X.509"], "category": "rust"},
     "openssl-sys": {"algorithms": ["RSA", "AES", "ECDSA", "HMAC", "SHA256", "SHA512", "PBKDF2"], "category": "rust"},
     "ed25519-dalek": {"algorithms": ["Ed25519", "EdDSA"], "category": "rust"},
     "x25519-dalek": {"algorithms": ["X25519", "ECDH"], "category": "rust"},
@@ -63,8 +63,6 @@ CRYPTO_LIBRARIES: dict[str, dict[str, list[str]]] = {
     "argon2-cffi": {"algorithms": ["Argon2", "Argon2id", "Argon2i", "Argon2d"], "category": "python"},
     "passlib": {"algorithms": ["bcrypt", "scrypt", "PBKDF2", "Argon2", "SHA256", "SHA512", "MD5"], "category": "python"},
     "hashlib": {"algorithms": ["SHA256", "SHA512", "MD5", "SHA1", "SHA3"], "category": "python"},
-    "hmac": {"algorithms": ["HMAC"], "category": "python"},
-    "rsa": {"algorithms": ["RSA", "RSA-PSS", "RSA-OAEP"], "category": "python"},
     "ecdsa": {"algorithms": ["ECDSA", "ECDH"], "category": "python"},
     "cose": {"algorithms": ["COSE", "AES", "HMAC", "ECDSA", "EdDSA"], "category": "python"},
     "jwt": {"algorithms": ["JWT", "HMAC", "RSA", "ECDSA", "EdDSA"], "category": "python"},
@@ -91,14 +89,13 @@ CRYPTO_LIBRARIES: dict[str, dict[str, list[str]]] = {
     "tweetnacl": {"algorithms": ["Ed25519", "X25519", "AES256-GCM", "Poly1305", "SHA-512"], "category": "javascript"},
     "nacl": {"algorithms": ["Ed25519", "X25519", "SecretBox", "Poly1305"], "category": "javascript"},
     "libsodium-wrappers": {"algorithms": ["libsodium", "Ed25519", "X25519", "ChaCha20", "Poly1305", "AES-GCM"], "category": "javascript"},
-    "bcrypt": {"algorithms": ["bcrypt"], "category": "javascript"},
     "scrypt": {"algorithms": ["scrypt"], "category": "javascript"},
-    "argon2": {"algorithms": ["Argon2", "Argon2id", "Argon2i", "Argon2d"], "category": "javascript"},
     "jsonwebtoken": {"algorithms": ["JWT", "HMAC", "RSA", "ECDSA", "EdDSA"], "category": "javascript"},
     "jose": {"algorithms": ["JWT", "JWE", "JWS", "HMAC", "RSA", "ECDSA", "EdDSA", "AES"], "category": "javascript"},
     "webcrypto": {"algorithms": ["WebCrypto", "AES", "RSA", "ECDSA", "Ed25519", "HMAC", "SHA256", "PBKDF2", "HKDF"], "category": "javascript"},
     "openpgp": {"algorithms": ["OpenPGP", "RSA", "ECDSA", "EdDSA", "AES", "3DES", "SHA256", "SHA512"], "category": "javascript"},
-    "crypto": {"algorithms": ["AES", "RSA", "ECDSA", "HMAC", "SHA256", "SHA512", "PBKDF2", "HKDF", "ECDH"], "category": "javascript"},
+    # Merged javascript + go "crypto" entries (identical keys previously overwrote each other)
+    "crypto": {"algorithms": ["AES", "RSA", "ECDSA", "HMAC", "SHA256", "SHA512", "PBKDF2", "HKDF", "ECDH", "Ed25519", "ChaCha20", "Poly1305", "X25519"], "category": "javascript"},
     "electron-keytar": {"algorithms": ["SecretStorage", "AES"], "category": "javascript"},
     "keytar": {"algorithms": ["SecretStorage", "AES"], "category": "javascript"},
     "ursa-optional": {"algorithms": ["RSA", "RSA-PKCS1", "RSA-OAEP"], "category": "javascript"},
@@ -118,7 +115,6 @@ CRYPTO_LIBRARIES: dict[str, dict[str, list[str]]] = {
     "speakeasy": {"algorithms": ["HOTP", "TOTP", "HMAC-SHA1"], "category": "javascript"},
     "paseto": {"algorithms": ["PASETO", "Ed25519", "X25519", "AES-256-CTR", "HMAC-SHA256"], "category": "javascript"},
     # Go
-    "crypto": {"algorithms": ["AES", "RSA", "ECDSA", "Ed25519", "HMAC", "SHA256", "SHA512", "ChaCha20", "Poly1305", "X25519", "PBKDF2", "HKDF"], "category": "go"},
     "golang.org/x/crypto": {"algorithms": ["AES", "RSA", "ECDSA", "Ed25519", "HMAC", "SHA256", "SHA512", "ChaCha20", "Poly1305", "X25519", "PBKDF2", "HKDF", "bcrypt", "scrypt", "argon2", "nacl", "curve25519", "ssh"], "category": "go"},
     "filippo.io/edwards25519": {"algorithms": ["Ed25519", "EdDSA", "Curve25519"], "category": "go"},
     "github.com/bwesterb/go-ristretto": {"algorithms": ["Ristretto", "Curve25519", "Ed25519"], "category": "go"},
@@ -192,23 +188,16 @@ CRYPTO_LIBRARIES: dict[str, dict[str, list[str]]] = {
     "arcface": {"algorithms": ["AES", "RSA", "ECDSA"], "category": "dotnet"},
     "dotnetcore.nacl": {"algorithms": ["NaCl", "Ed25519", "X25519", "SecretBox"], "category": "dotnet"},
     # Ruby
-    "openssl": {"algorithms": ["RSA", "AES", "DES", "3DES", "ECDSA", "Ed25519", "HMAC", "SHA256", "SHA512", "PBKDF2", "PKCS5", "PKCS7", "X.509"], "category": "ruby"},
     "ruby-openssl": {"algorithms": ["RSA", "AES", "DES", "3DES", "ECDSA", "Ed25519", "HMAC", "SHA256", "SHA512", "PBKDF2"], "category": "ruby"},
     "rbnacl": {"algorithms": ["libsodium", "Ed25519", "X25519", "ChaCha20", "Poly1305", "AES-GCM", "SecretBox", "HMAC-SHA512"], "category": "ruby"},
     "rbnacl-libsodium": {"algorithms": ["libsodium", "Ed25519", "X25519", "ChaCha20", "Poly1305"], "category": "ruby"},
-    "bcrypt": {"algorithms": ["bcrypt"], "category": "ruby"},
-    "bcrypt-pbkdf": {"algorithms": ["bcrypt", "PBKDF2"], "category": "ruby"},
-    "argon2": {"algorithms": ["Argon2", "Argon2id", "Argon2i", "Argon2d"], "category": "ruby"},
-    "scrypt": {"algorithms": ["scrypt"], "category": "ruby"},
     "rack_csrf": {"algorithms": ["HMAC", "SHA256"], "category": "ruby"},
-    "jwt": {"algorithms": ["JWT", "HMAC", "RSA", "ECDSA", "EdDSA"], "category": "ruby"},
     "ruby-jwt": {"algorithms": ["JWT", "HMAC", "RSA", "ECDSA", "EdDSA", "AES"], "category": "ruby"},
     "devise": {"algorithms": ["HMAC", "SHA256", "bcrypt"], "category": "ruby"},
     "doorkeeper": {"algorithms": ["OAuth", "RSA", "ECDSA", "HMAC", "JWT"], "category": "ruby"},
     "rack-oauth2": {"algorithms": ["OAuth2", "RSA", "ECDSA", "HMAC", "JWT", "AES"], "category": "ruby"},
     "rotp": {"algorithms": ["HOTP", "TOTP", "HMAC-SHA1", "HMAC-SHA256"], "category": "ruby"},
     "virtus": {"algorithms": ["AES", "RSA"], "category": "ruby"},
-    "fido2": {"algorithms": ["FIDO2", "WebAuthn", "ECDSA", "EdDSA", "RSA"], "category": "ruby"},
     "webauthn": {"algorithms": ["WebAuthn", "ECDSA", "EdDSA", "RSA"], "category": "ruby"},
     "gpg": {"algorithms": ["OpenPGP", "GPG", "RSA", "DSA", "AES", "3DES"], "category": "ruby"},
     "ruby-gpg": {"algorithms": ["OpenPGP", "GPG"], "category": "ruby"},
@@ -605,7 +594,7 @@ def scan_manifest(
             language = _detect_language(filename)
             manifest_str = str(manifest_path.relative_to(base))
 
-            findings.extend(_process_deps(deps, manifest_str, manifest_str))
+            findings.extend(_process_deps(deps, manifest_str, manifest_str, language))
 
     return findings
 
@@ -614,6 +603,7 @@ def _process_deps(
     deps: list[tuple[str, str]],
     manifest_str: str,
     host: str,
+    language: str = "",
 ) -> list[AssetFinding]:
     findings: list[AssetFinding] = []
     for dep_name, version in deps:
@@ -640,6 +630,7 @@ def _process_deps(
                 "version": version,
                 "algorithms": algorithms,
                 "manifest": manifest_str,
+                "language": language,
             },
         ))
     return findings

@@ -24,7 +24,7 @@ import json
 import os
 import subprocess
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -314,10 +314,10 @@ class SideChannelAnalyzer:
         if not self._calibration:
             return float(min(max(raw, 0.0), 1.0))
         c = self._calibration["clean"]
-        l = self._calibration["leak"]
-        if l <= c + 1e-9:
+        leak = self._calibration["leak"]
+        if leak <= c + 1e-9:
             return float(min(max(raw, 0.0), 1.0))
-        t = (raw - c) / (l - c)
+        t = (raw - c) / (leak - c)
         return float(min(max(t * 0.9 + 0.05, 0.0), 1.0))
 
     def analyze_implementation(

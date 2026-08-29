@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import sys
-from pathlib import Path
 from typing import Any
 
 # MCP protocol constants
@@ -408,7 +407,7 @@ def _handle_tool_call(name: str, args: dict[str, Any]) -> dict[str, Any]:
         return {"findings": [f.model_dump() for f in findings_list], "count": len(findings_list)}
 
     elif name == "risk_score":
-        from .risk_engine import calculate_risk_score, _lookup_vulnerability, _determine_risk_level
+        from .risk_engine import calculate_risk_score
         from .models import AssetFinding
         finding = AssetFinding(
             asset_type="tls_certificate",

@@ -24,7 +24,7 @@ convention.
 **Measured outcome (v2.1):** trained at 100K-graph scale with continuous
 best-val checkpointing; own-split val τ reached **0.703** (plateaued from
 epoch ~130 of 200). Under the corrected per-node-rank canonical protocol
-(`benchmark_v3.py`), v2 scores τ 0.961 and the LayerNorm-retrained v3 τ 0.972 — see
+(`benchmark_v3.py`), v2 scores τ 0.961 and the LayerNorm-retrained v3 τ 0.975 — see
 `planner/results/benchmark_v3.json`. The earlier "τ 0.387" figure was an artifact
 of a sequence-correlation bug in `benchmark.score_order`, fixed in v2.1.
 
@@ -158,15 +158,19 @@ considering dependencies, deadlines, and risk.
 **Why it matters:** No competitor has a learned agent. This is patentable
 and creates a durable moat.
 
-**Usage:**
+**Usage:** (vectorized PPO — one batched GNN forward per step across all
+64 envs, with honest importance ratios recomputed under the updated policy)
 ```bash
 cd planner
 
-# Train the agent (takes ~2 hours on A100)
-python -m qtrust_planner.rl_agent
+# Full retrain (4K rollouts x 64 envs, ~5-7h on A100; best-checkpointed)
+make -f Makefile.gpu train-rl
 
-# Quick test (100 episodes)
+# Quick smoke (100 rollouts)
 python -m qtrust_planner.rl_agent --episodes 100
+
+# Reproducible evaluation of the trained policy (greedy rollouts)
+python scripts/eval_rl_agent.py
 ```
 
 ---

@@ -847,6 +847,29 @@ def main() -> None:
     report_path.write_text(json.dumps(payload, indent=2, default=str))
     print(f"\nReport written to {report_path}")
 
+    # Baseline comparison: models vs naive baselines on the SAME real data
+    # and splits (see qtrust_ai/benchmark/compare.py). This is what turns
+    # "F1 0.97" into a defensible claim — the model must beat the obvious
+    # weekend implementations. Only runs on real data where baselines exist.
+    if real:
+        try:
+            from qtrust_ai.benchmark.compare import BaselineComparison
+
+            print("\n=== Baseline comparison (models vs naive baselines) ===\n")
+            comp = BaselineComparison(seed=42)
+            comparison = comp.run_all(real, epochs=args.epochs)
+            comp_path = REPO_ROOT / "qtrust_ai" / "artifacts" / "benchmark_comparison.json"
+            comp.to_json(str(comp_path), comparison)
+            s = comparison.get("summary", {})
+            print(
+                f"Baseline comparison: {s.get('comparisons_run')} comparisons, "
+                f"{s.get('models_beat_best_baseline')} models beat their best baseline, "
+                f"mean relative gain {s.get('mean_relative_gain')}"
+            )
+            print(f"Written to {comp_path}")
+        except Exception as exc:  # pragma: no cover - defensive: never fail the run
+            print(f"\n! Baseline comparison skipped ({exc})")
+
     sys.exit(0 if not errors and not anchor_fail else 1)
 
 

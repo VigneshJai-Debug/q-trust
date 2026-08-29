@@ -16,10 +16,8 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from dataclasses import dataclass, asdict
-from typing import Optional
 
 try:
     import numpy as np
@@ -404,7 +402,7 @@ if __name__ == "__main__":
     result = asyncio.run(scanner.scan_enterprise(hosts))
 
     stats = result["stats"]
-    print(f"\nScan complete:")
+    print("\nScan complete:")
     print(f"  Hosts scanned: {stats['hosts_scanned']}/{stats['total_hosts']}")
     print(f"  Assets found: {stats['total_assets']}")
     print(f"  Scan time: {stats['scan_duration_seconds']:.1f}s")

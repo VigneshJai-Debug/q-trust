@@ -293,11 +293,17 @@ class AlgorithmPurposeClassifier:
             self._vectorizer = TfidfVectorizer(max_features=2048, ngram_range=(1, 2))  # type: ignore
             X = self._vectorizer.fit_transform(texts)  # type: ignore
             self._model = LogisticRegression(  # type: ignore
-                max_iter=500, multi_class="multinomial", random_state=self.config.seed,
+                max_iter=500, random_state=self.config.seed,
                 class_weight="balanced",  # rare purposes (encryption/KEM) get fair gradients
             )
             self._model.fit(X, labels)  # type: ignore
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - graceful degradation to deterministic fallback
+            # sklearn >= 1.9 removed the `multi_class` kwarg entirely; the
+            # default lbfgs solver already trains a multinomial model.
+            import logging
+            logging.getLogger(__name__).warning(
+                "AlgorithmPurposeClassifier: sklearn path failed (%s) — using deterministic fallback", exc
+            )
             self._vectorizer = None
             self._model = None
 

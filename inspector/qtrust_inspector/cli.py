@@ -325,7 +325,7 @@ def register_cbom(
             raise typer.Exit(1)
         client = _get_client()
         asset_id = client.register_cbom_hash(client.hash_cbom(cbom), metadata_uri)
-        console.print(f"\n[bold green]CBOM registered[/bold green]")
+        console.print("\n[bold green]CBOM registered[/bold green]")
         console.print(f"  asset_id : {asset_id}")
         return asset_id
     client = _get_client()
@@ -420,9 +420,9 @@ def auto_remediate(
         console.print(f"  NIST: {r.nist_standard}")
         console.print(f"  Explanation: {r.explanation}")
         if r.original_code:
-            console.print(f"\n[bold yellow]Before:[/bold yellow]")
+            console.print("\n[bold yellow]Before:[/bold yellow]")
             console.print(r.original_code)
-            console.print(f"\n[bold green]After:[/bold green]")
+            console.print("\n[bold green]After:[/bold green]")
             console.print(r.remediated_code)
     if not results:
         console.print(f"  No remediation patterns found for '{algorithm}'")

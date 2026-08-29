@@ -1,7 +1,16 @@
-# Ruff config — matches the repo's pinned ruff (v0.5.0) default rule set.
-# Only the excludes differ: qtrust_ai/artifacts/ holds downloaded third-party
-# source trees (cached datasets), fine-tuned model weights and generated
-# reports — none of which should be linted.
+# Ruff config.
+#
+# `select` is pinned EXPLICITLY to the ruff v0.5.0 default rule set (E4, E7,
+# E9, F) that .pre-commit-config.yaml pins. Never rely on `ruff`'s own
+# defaults here: newer ruff releases (>= 0.9) expand their default select and
+# would silently change what CI/pre-commit enforce. With this explicit select
+# every ruff version applies the same contract.
+#
+# Excludes: qtrust_ai/artifacts/ holds downloaded third-party source trees
+# (cached datasets), fine-tuned model weights and generated reports — none of
+# which should be linted.
+select = ["E4", "E7", "E9", "F"]
+
 exclude = [
     "qtrust_ai/artifacts",
     ".git",
@@ -10,3 +19,4 @@ exclude = [
     "build",
     "dist",
 ]
+

@@ -28,7 +28,7 @@ import torch
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "inspector"))
 
-from qtrust_inspector.side_channel import (
+from qtrust_inspector.side_channel import (  # noqa: E402 - after sys.path bootstrap
     SideChannelAnalyzer,
     simulate_timing_traces,
     traces_to_model_input,

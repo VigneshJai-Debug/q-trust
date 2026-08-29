@@ -82,6 +82,61 @@ def test_build_node_features_v3_shape():
     assert feats.max() <= 1.0
 
 
+def test_per_graph_listMLE_vectorized_matches_reference():
+    """The vectorized per-graph ListMLE must match the per-graph loop exactly.
+
+    Regression test for the P0-1 vectorization: the segmented suffix-logsumexp
+    trick is only trustworthy if it reproduces the reference loop to fp noise,
+    including size-1 graphs and mixed batch shapes.
+    """
+    from qtrust_planner.train_gpu import per_graph_listMLE_loss
+
+    torch.manual_seed(7)
+    max_err = 0.0
+    for _ in range(50):
+        n_graphs = int(torch.randint(1, 10, (1,)).item())
+        sizes = torch.randint(1, 15, (n_graphs,))
+        n = int(sizes.sum().item())
+        batch_idx = torch.repeat_interleave(torch.arange(n_graphs), sizes)
+        order_logits = torch.randn(n)
+        y_order = torch.cat([torch.randperm(int(s)) for s in sizes])
+
+        # Reference: per-graph loop (the pre-vectorization implementation).
+        total = torch.zeros(())
+        for gid in range(n_graphs):
+            mask = batch_idx == gid
+            total = total + listMLE_loss(order_logits[mask], y_order[mask])
+        reference = total / n_graphs
+
+        vec = per_graph_listMLE_loss(order_logits.clone(), y_order.clone(), batch_idx.clone())
+        max_err = max(max_err, (reference - vec).abs().item())
+        assert torch.isfinite(vec), "vectorized loss must be finite"
+        assert vec.item() >= -1e-6, "ListMLE loss must be non-negative"
+
+    assert max_err < 1e-4, f"vectorized loss drifted from reference: {max_err:.2e}"
+
+
+def test_per_graph_listMLE_no_nan_on_edge_shapes():
+    """Regression: catastrophic cancellation in the fp32 segmented suffix sums
+    produced log(negative) => NaN for some batches (fixed by fp64 cumsum +
+    positive clamp). Reproduce the shape regime that used to fail and assert
+    finite, non-negative losses for many random batches.
+    """
+    from qtrust_planner.train_gpu import per_graph_listMLE_loss
+
+    torch.manual_seed(11)
+    for trial in range(80):
+        n_graphs = int(torch.randint(4, 20, (1,)).item())
+        sizes = torch.randint(2, 25, (n_graphs,))
+        n = int(sizes.sum().item())
+        batch_idx = torch.repeat_interleave(torch.arange(n_graphs), sizes)
+        order_logits = torch.randn(n)
+        y_order = torch.cat([torch.randperm(int(s)) for s in sizes])
+        loss = per_graph_listMLE_loss(order_logits, y_order, batch_idx)
+        assert torch.isfinite(loss), f"trial {trial}: loss not finite: {loss.item()}"
+        assert loss.item() >= -1e-6, f"trial {trial}: negative loss {loss.item()}"
+
+
 def test_train_gpu_cpu_fallback_tiny():
     from qtrust_planner.train_gpu import train_gpu
 

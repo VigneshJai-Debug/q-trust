@@ -1,9 +1,0 @@
-{
-  "error": "No module named 'onnxscript'",
-  "model_path": "planner/model_ddp_v3.pt",
-  "cfg": {
-    "input_features": 6,
-    "hidden_dim": 256,
-    "embedding_dim": 128
-  }
-}

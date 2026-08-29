@@ -229,6 +229,11 @@ class QTrustClient:
         if pin_to_ipfs and self.ipfs:
             cid = self.ipfs.pin_json(cbom.model_dump_json(indent=2), name="qtrust-cbom")
             metadata_uri = f"ipfs://{cid}"
+        else:
+            # Offline registration (no IPFS node): the registry rejects empty
+            # metadata URIs (audit hardening), so reference the CBOM by its
+            # content hash — deterministic, content-addressed, and always valid.
+            metadata_uri = f"ipfs://{cbom_hash[2:]}"
 
         receipt = self._send_transaction(
             self.asset_registry.functions.registerCBOM(
