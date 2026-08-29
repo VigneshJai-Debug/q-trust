@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 860" width="1200" height="860" font-family="sans-serif">
+<defs>
+  <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/></marker>
+  <marker id="ard" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#0a675f"/></marker>
+</defs>
+<rect x="0" y="0" width="1200" height="860" rx="18" fill="#f8fafc" stroke="#e2e8f0"/>
+
+<!-- ============ Layer 1: Discovery ============ -->
+<rect x="30" y="24" width="1140" height="150" rx="14" fill="#ffffff" stroke="#e2e8f0"/>
+<text x="46" y="48" font-size="13" font-weight="700" fill="#0f172a">1 · Continuous Crypto Discovery</text>
+<text x="46" y="66" font-size="10" fill="#64748b">Deterministic scanners (trusted layer) + ML code model (learned layer) · every CI commit, every TLS endpoint, every artifact</text>
+<g font-size="10">
+  <rect x="46" y="80" width="170" height="52" rx="8" fill="#f0fdfa" stroke="#99f6e4"/><text x="131" y="100" text-anchor="middle" font-weight="600" fill="#134e4a">Source / IaC</text><text x="131" y="116" text-anchor="middle" fill="#475569">GitHub · GitLab · K8s</text>
+  <rect x="230" y="80" width="170" height="52" rx="8" fill="#f0fdfa" stroke="#99f6e4"/><text x="315" y="100" text-anchor="middle" font-weight="600" fill="#134e4a">Network / TLS</text><text x="315" y="116" text-anchor="middle" fill="#475569">certs · SSH · protocols</text>
+  <rect x="414" y="80" width="170" height="52" rx="8" fill="#f0fdfa" stroke="#99f6e4"/><text x="499" y="100" text-anchor="middle" font-weight="600" fill="#134e4a">Artifacts</text><text x="499" y="116" text-anchor="middle" fill="#475569">binaries · containers · manifests</text>
+  <rect x="598" y="80" width="170" height="52" rx="8" fill="#f0fdfa" stroke="#99f6e4"/><text x="683" y="100" text-anchor="middle" font-weight="600" fill="#134e4a">Traffic / PCAP</text><text x="683" y="116" text-anchor="middle" fill="#475569">netlog · packet capture</text>
+  <rect x="782" y="80" width="180" height="52" rx="8" fill="#ecfeff" stroke="#a5f3fc" stroke-dasharray="4 3"/><text x="872" y="100" text-anchor="middle" font-weight="600" fill="#155e75">Continuous agents</text><text x="872" y="116" text-anchor="middle" fill="#475569">cron + webhook + drift scan</text>
+  <rect x="976" y="80" width="178" height="52" rx="8" fill="#fffbeb" stroke="#fde68a" stroke-dasharray="4 3"/><text x="1065" y="100" text-anchor="middle" font-weight="600" fill="#92400e">Cloud connectors</text><text x="1065" y="116" text-anchor="middle" fill="#475569">AWS · Azure · GCP (P2)</text>
+</g>
+
+<line x1="600" y1="174" x2="600" y2="200" stroke="#64748b" stroke-width="2" marker-end="url(#ar)"/>
+
+<!-- ============ Layer 2: Graph & Intelligence ============ -->
+<rect x="30" y="204" width="1140" height="180" rx="14" fill="#ffffff" stroke="#e2e8f0"/>
+<text x="46" y="228" font-size="13" font-weight="700" fill="#0f172a">2 · Cryptographic Trust Graph + Migration Intelligence</text>
+<text x="46" y="246" font-size="10" fill="#64748b">The moat: real dependency graphs (app → service → cert → algorithm → key) · GNN ranking · RL sequencing · explainable recommendations</text>
+<g font-size="10">
+  <rect x="46" y="260" width="210" height="92" rx="8" fill="#ffffff" stroke="#cbd5e1"/><text x="151" y="280" text-anchor="middle" font-weight="600" fill="#0f172a">CBOM (CycloneDX 1.7)</text><text x="151" y="296" text-anchor="middle" fill="#475569">standardized crypto inventory</text><text x="151" y="312" text-anchor="middle" fill="#475569">algorithm · key · protocol · cert</text><text x="151" y="328" text-anchor="middle" fill="#0a675f" font-weight="600">ECMA-424 aligned</text>
+  <rect x="270" y="260" width="210" height="92" rx="8" fill="#ffffff" stroke="#cbd5e1"/><text x="375" y="280" text-anchor="middle" font-weight="600" fill="#0f172a">Dependency Graph</text><text x="375" y="296" text-anchor="middle" fill="#475569">business → app → service</text><text x="375" y="312" text-anchor="middle" fill="#475569">→ protocol → cert → algorithm</text><text x="375" y="328" text-anchor="middle" fill="#0a675f" font-weight="600">causal, not flat</text>
+  <rect x="494" y="260" width="210" height="92" rx="8" fill="#f0fdfa" stroke="#5eead4"/><text x="599" y="280" text-anchor="middle" font-weight="600" fill="#134e4a">GNN Planner (τ 0.976)</text><text x="599" y="296" text-anchor="middle" fill="#475569">MigrationGNNv3 256-dim</text><text x="599" y="312" text-anchor="middle" fill="#475569">trained on real + synthetic</text><text x="599" y="328" text-anchor="middle" fill="#0a675f" font-weight="600">real-CBOM τ-b 0.796</text>
+  <rect x="718" y="260" width="210" height="92" rx="8" fill="#f0fdfa" stroke="#5eead4"/><text x="823" y="280" text-anchor="middle" font-weight="600" fill="#134e4a">RL Migration Agent</text><text x="823" y="296" text-anchor="middle" fill="#475569">PPO · 100% completion</text><text x="823" y="312" text-anchor="middle" fill="#475569">beats random, near-optimal</text><text x="823" y="328" text-anchor="middle" fill="#0a675f" font-weight="600">sequencing + waves</text>
+  <rect x="942" y="260" width="212" height="92" rx="8" fill="#fffbeb" stroke="#fcd34d" stroke-dasharray="4 3"/><text x="1048" y="280" text-anchor="middle" font-weight="600" fill="#92400e">Explainable AI (P1)</text><text x="1048" y="296" text-anchor="middle" fill="#475569">why migrate X first?</text><text x="1048" y="312" text-anchor="middle" fill="#475569">evidence · impact · rollback</text><text x="1048" y="328" text-anchor="middle" fill="#b45309" font-weight="600">recommendation cards</text>
+</g>
+
+<line x1="600" y1="384" x2="600" y2="410" stroke="#64748b" stroke-width="2" marker-end="url(#ar)"/>
+
+<!-- ============ Layer 3: Evidence & Compliance ============ -->
+<rect x="30" y="414" width="1140" height="180" rx="14" fill="#ffffff" stroke="#e2e8f0"/>
+<text x="46" y="438" font-size="13" font-weight="700" fill="#0f172a">3 · Verifiable Evidence + Compliance</text>
+<text x="46" y="456" font-size="10" fill="#64748b">Blockchain as neutral evidence layer · real Ed25519 VCs · tamper-evident, independently verifiable</text>
+<g font-size="10">
+  <rect x="46" y="470" width="210" height="92" rx="8" fill="#ffffff" stroke="#cbd5e1"/><text x="151" y="490" text-anchor="middle" font-weight="600" fill="#0f172a">Evidence Anchoring</text><text x="151" y="506" text-anchor="middle" fill="#475569">CBOM hash · Merkle root</text><text x="151" y="522" text-anchor="middle" fill="#475569">→ Base L2 registries</text><text x="151" y="538" text-anchor="middle" fill="#0a675f" font-weight="600">immutable timestamps</text>
+  <rect x="270" y="470" width="210" height="92" rx="8" fill="#ffffff" stroke="#cbd5e1"/><text x="375" y="490" text-anchor="middle" font-weight="600" fill="#0f172a">Verifiable Credentials</text><text x="375" y="506" text-anchor="middle" fill="#475569">Ed25519Signature2020</text><text x="375" y="522" text-anchor="middle" fill="#475569">W3C VC 2.0 · did:key/web</text><text x="375" y="538" text-anchor="middle" fill="#0a675f" font-weight="600">cross-language verified</text>
+  <rect x="494" y="470" width="210" height="92" rx="8" fill="#f0fdfa" stroke="#5eead4"/><text x="599" y="490" text-anchor="middle" font-weight="600" fill="#134e4a">PQC Passport (P1)</text><text x="599" y="506" text-anchor="middle" fill="#475569">quantum readiness score</text><text x="599" y="522" text-anchor="middle" fill="#475569">history · evidence · proofs</text><text x="599" y="538" text-anchor="middle" fill="#0a675f" font-weight="600">the killer demo</text>
+  <rect x="718" y="470" width="210" height="92" rx="8" fill="#f0fdfa" stroke="#5eead4"/><text x="823" y="490" text-anchor="middle" font-weight="600" fill="#134e4a">Compliance Engine</text><text x="823" y="506" text-anchor="middle" fill="#475569">NIST IR 8547 · CNSA 2.0</text><text x="823" y="522" text-anchor="middle" fill="#475569">policy · deadlines · status</text><text x="823" y="538" text-anchor="middle" fill="#0a675f" font-weight="600">FIPS 140-3 aware</text>
+  <rect x="942" y="470" width="212" height="92" rx="8" fill="#fffbeb" stroke="#fcd34d" stroke-dasharray="4 3"/><text x="1048" y="490" text-anchor="middle" font-weight="600" fill="#92400e">ZK Compliance (P2)</text><text x="1048" y="506" text-anchor="middle" fill="#475569">prove PQC-ready without</text><text x="1048" y="522" text-anchor="middle" fill="#475569">revealing the inventory</text><text x="1048" y="538" text-anchor="middle" fill="#b45309" font-weight="600">privacy-preserving audit</text>
+</g>
+
+<line x1="600" y1="594" x2="600" y2="620" stroke="#64748b" stroke-width="2" marker-end="url(#ar)"/>
+
+<!-- ============ Layer 4: Interfaces ============ -->
+<rect x="30" y="624" width="1140" height="110" rx="14" fill="#ffffff" stroke="#e2e8f0"/>
+<text x="46" y="648" font-size="13" font-weight="700" fill="#0f172a">4 · Interfaces</text>
+<g font-size="10">
+  <rect x="46" y="662" width="250" height="52" rx="8" fill="#f8fafc" stroke="#cbd5e1"/><text x="171" y="682" text-anchor="middle" font-weight="600" fill="#0f172a">Quantum Security Control Center</text><text x="171" y="698" text-anchor="middle" fill="#64748b">exec dashboard · readiness % · top fixes · evidence</text>
+  <rect x="310" y="662" width="250" height="52" rx="8" fill="#f8fafc" stroke="#cbd5e1"/><text x="435" y="682" text-anchor="middle" font-weight="600" fill="#0f172a">Public Verification Portal</text><text x="435" y="698" text-anchor="middle" fill="#64748b">/verify — anyone checks evidence + credentials</text>
+  <rect x="574" y="662" width="250" height="52" rx="8" fill="#f8fafc" stroke="#cbd5e1"/><text x="699" y="682" text-anchor="middle" font-weight="600" fill="#0f172a">SDK + CLI + CI</text><text x="699" y="698" text-anchor="middle" fill="#64748b">pip install qtrust · GitHub Action · REST API</text>
+  <rect x="838" y="662" width="316" height="52" rx="8" fill="#f8fafc" stroke="#cbd5e1"/><text x="996" y="682" text-anchor="middle" font-weight="600" fill="#0f172a">Integrations (P1)</text><text x="996" y="698" text-anchor="middle" fill="#64748b">Jira · ServiceNow · SIEM · GitHub App · CMDB</text>
+</g>
+
+<!-- ============ Governance strip ============ -->
+<rect x="30" y="750" width="1140" height="86" rx="14" fill="#0a675f"/>
+<text x="46" y="776" font-size="13" font-weight="700" fill="#ffffff">Cross-cutting: Trust &amp; Operations</text>
+<g font-size="10" fill="#ccfbf1">
+  <rect x="46" y="790" width="210" height="34" rx="7" fill="#0d7a70"/><text x="151" y="811" text-anchor="middle" font-weight="600">Multisig → Timelock → Upgrade</text>
+  <rect x="270" y="790" width="210" height="34" rx="7" fill="#0d7a70"/><text x="375" y="811" text-anchor="middle" font-weight="600">Relayer HSM + rotation + limits</text>
+  <rect x="494" y="790" width="210" height="34" rx="7" fill="#0d7a70"/><text x="599" y="811" text-anchor="middle" font-weight="600">External contract audit (P0)</text>
+  <rect x="718" y="790" width="210" height="34" rx="7" fill="#0d7a70"/><text x="823" y="811" text-anchor="middle" font-weight="600">Public Base Sepolia deploy (P0)</text>
+  <rect x="942" y="790" width="212" height="34" rx="7" fill="#0d7a70"/><text x="1048" y="811" text-anchor="middle" font-weight="600">Monitoring + model drift</text>
+</g>
+</svg>

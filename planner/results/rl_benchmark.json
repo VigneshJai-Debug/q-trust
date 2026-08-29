@@ -1,18 +1,18 @@
 {
   "model_path": "/home/nvidia/Project/planner/rl_agent.pt",
-  "n_envs": 30,
+  "n_envs": 40,
   "asset_range": [
     20,
     50
   ],
   "seed": 7,
   "device": "cuda",
-  "agent_mean_reward": 107.698,
+  "agent_mean_reward": 106.824,
   "agent_completion_rate": 1.0,
-  "heuristic_mean_reward": 112.05,
-  "heuristic_completion_rate": 1.0,
-  "random_baseline_mean_reward": 107.143,
+  "heuristic_mean_reward": 107.946,
+  "heuristic_completion_rate": 0.9985,
+  "random_baseline_mean_reward": 106.056,
   "random_completion_rate": 1.0,
-  "agent_vs_random": 0.555,
-  "agent_vs_heuristic": -4.352
+  "agent_vs_random": 0.768,
+  "agent_vs_heuristic": -1.122
 }

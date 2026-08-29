@@ -1,0 +1,776 @@
+{
+  "generated_at": "2026-08-28T16:45:06.123772+00:00",
+  "epochs": 12,
+  "rl_episodes": 40,
+  "real_datasets": false,
+  "datasets_used": {
+    "code_corpus": 0,
+    "tls_hosts": 0,
+    "vendor_records": 0
+  },
+  "results": [
+    {
+      "model": "discovery/CryptoCodeDetector",
+      "status": "trained",
+      "seconds": 0.02,
+      "train": {
+        "epochs": 12,
+        "examples": 500,
+        "label_distribution": {
+          "AES-256": 55,
+          "RSA": 63,
+          "SHA-256": 54,
+          "OBFUSCATED": 27,
+          "WRAPPER": 29,
+          "SHA3-256": 20
+        },
+        "per_language_bias": {
+          "python": 0.07748691099476437,
+          "java": 0.05373134328358207,
+          "rust": -0.10526315789473686,
+          "go": -0.12413793103448274,
+          "javascript": -0.16296296296296298,
+          "shell": -0.11320754716981135,
+          "solidity": 0.4
+        },
+        "has_torch": true,
+        "has_transformers": true,
+        "note": "real fine-tuning would run CryptoCodeBERT here; stub populates priors deterministically",
+        "torch_available": true,
+        "simulated_loss": -0.028,
+        "_eval": {
+          "precision": 1.0,
+          "recall": 0.8571,
+          "f1": 0.9231,
+          "accuracy": 0.915,
+          "false_negatives": 17,
+          "fn_rate": 0.1429,
+          "coverage": 1.0,
+          "n": 200,
+          "per_language": {
+            "python": {
+              "tp": 38,
+              "fp": 0,
+              "fn": 17,
+              "tn": 21
+            },
+            "rust": {
+              "tp": 8,
+              "fp": 0,
+              "fn": 0,
+              "tn": 9
+            },
+            "go": {
+              "tp": 11,
+              "fp": 0,
+              "fn": 0,
+              "tn": 13
+            },
+            "java": {
+              "tp": 21,
+              "fp": 0,
+              "fn": 0,
+              "tn": 14
+            },
+            "shell": {
+              "tp": 4,
+              "fp": 0,
+              "fn": 0,
+              "tn": 13
+            },
+            "javascript": {
+              "tp": 12,
+              "fp": 0,
+              "fn": 0,
+              "tn": 11
+            },
+            "solidity": {
+              "tp": 8,
+              "fp": 0,
+              "fn": 0,
+              "tn": 0
+            }
+          }
+        }
+      },
+      "evaluate": null,
+      "anchors": [
+        {
+          "check": "RSA snippet \u2192 crypto",
+          "passed": true
+        }
+      ],
+      "data_source": "synthetic"
+    },
+    {
+      "model": "discovery/AlgorithmPurposeClassifier",
+      "status": "trained",
+      "seconds": 0.14,
+      "train": {
+        "examples": 600,
+        "distribution": {
+          "hashing": 68,
+          "key-establishment": 139,
+          "randomness": 39,
+          "encryption": 133,
+          "signature": 175,
+          "certificate_handling": 46
+        },
+        "has_sklearn": true,
+        "classes": [
+          "key-establishment",
+          "signature",
+          "encryption",
+          "hashing",
+          "randomness",
+          "certificate_handling"
+        ],
+        "epochs": 12,
+        "note": "sklearn TF-IDF+LogReg if available; else deterministic fallback",
+        "_eval": {
+          "accuracy": 1.0,
+          "macro_f1": 1.0,
+          "sklearn_macro_f1": 1.0,
+          "per_purpose": {
+            "key-establishment": {
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "support": 48
+            },
+            "signature": {
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "support": 57
+            },
+            "encryption": {
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "support": 39
+            },
+            "hashing": {
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "support": 29
+            },
+            "randomness": {
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "support": 14
+            },
+            "certificate_handling": {
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "support": 13
+            }
+          },
+          "n": 200,
+          "has_sklearn": true
+        }
+      },
+      "evaluate": null,
+      "anchors": [
+        {
+          "check": "RSA(sign ctx)\u2192signature, ECDH\u2192key-establishment",
+          "passed": true
+        }
+      ],
+      "data_source": "synthetic"
+    },
+    {
+      "model": "graph/BlastRadius (calibrate)",
+      "status": "trained",
+      "seconds": 0.0,
+      "train": {
+        "temperature": 0.5,
+        "mae_before": 27.5,
+        "mae_after": 3.24,
+        "n": 1,
+        "_rsa": 0.09,
+        "_mlkem": 0.01
+      },
+      "evaluate": null,
+      "anchors": [
+        {
+          "check": "RSA blast (0) > ML-KEM (0)",
+          "passed": true
+        }
+      ],
+      "data_source": "synthetic"
+    },
+    {
+      "model": "graph/TemporalGNN",
+      "status": "trained",
+      "seconds": 30.84,
+      "train": {
+        "examples": 301,
+        "mae": 3.943,
+        "conformal_margin": 7.46,
+        "has_torch": true,
+        "hidden_dim": 64,
+        "_eval": {
+          "mae": 4.064,
+          "rmse": 4.811,
+          "mae_per_horizon": {
+            "30": 4.394,
+            "90": 2.443,
+            "180": 5.355
+          },
+          "n": 201,
+          "has_torch": true,
+          "conformal_margin": 7.46
+        }
+      },
+      "evaluate": null,
+      "anchors": [
+        {
+          "check": "73 \u2192 61 \u2192 50 \u2192 42 (30/90/180d)",
+          "passed": true
+        }
+      ],
+      "data_source": "synthetic"
+    },
+    {
+      "model": "risk/QuantumExposureModel",
+      "status": "trained",
+      "seconds": 1.07,
+      "train": {
+        "examples": 400,
+        "factor_weights": {
+          "vuln": 0.991,
+          "sensitivity": 1.117,
+          "lifetime": 1.026,
+          "exposure": 1.044,
+          "attractiveness": 1.006,
+          "lead_time": 0.843
+        },
+        "temperature": 1.0,
+        "mae": 2.554,
+        "conformal_margin": 6.0,
+        "conformal_alpha": 0.1,
+        "has_sklearn": true,
+        "note": "stub does random-search weight fitting + temp scaling + conformal; real training would use MLP/GBM",
+        "_eval": {
+          "mae": 2.968,
+          "rmse": 3.817,
+          "brier": 0.0015,
+          "ece": 0.0109,
+          "auroc": 0.9973,
+          "auprc": 0.9914,
+          "n": 200,
+          "by_level_mae": {
+            "CRITICAL": 4.22,
+            "HIGH": 3.52,
+            "MEDIUM": 3.58,
+            "LOW": 3.25,
+            "NONE": 0.0
+          },
+          "has_sklearn": true,
+          "temperature": 1.0,
+          "conformal_margin": 6.0
+        }
+      },
+      "evaluate": null,
+      "anchors": [
+        {
+          "check": "RSA-2048 97[CRITICAL] vs ML-KEM 0[NONE]",
+          "passed": true
+        }
+      ],
+      "data_source": "synthetic"
+    },
+    {
+      "model": "migration/PQCRecommender",
+      "status": "trained",
+      "seconds": 0.03,
+      "train": {
+        "examples": 600,
+        "classes": [
+          "key-establishment",
+          "signature",
+          "encryption",
+          "hashing",
+          "randomness",
+          "certificate_handling"
+        ],
+        "has_sklearn": true,
+        "epochs": 12,
+        "note": "recommend() is rule-based; train() fits auxiliary purpose classifier",
+        "_eval": {
+          "accuracy": 1.0,
+          "correct": 200,
+          "n": 200,
+          "per_purpose": {
+            "key-establishment": {
+              "accuracy": 1.0,
+              "correct": 56,
+              "total": 56
+            },
+            "hashing": {
+              "accuracy": 1.0,
+              "correct": 25,
+              "total": 25
+            },
+            "signature": {
+              "accuracy": 1.0,
+              "correct": 87,
+              "total": 87
+            },
+            "encryption": {
+              "accuracy": 1.0,
+              "correct": 32,
+              "total": 32
+            }
+          },
+          "has_sklearn": true
+        }
+      },
+      "evaluate": null,
+      "anchors": [
+        {
+          "check": "RSA-sig\u2192ML-DSA-65, RSA-KEM\u2192ML-KEM-768, AES-128\u2192AES-256",
+          "passed": true
+        }
+      ],
+      "data_source": "synthetic"
+    },
+    {
+      "model": "migration/MigrationCostPredictor",
+      "status": "trained",
+      "seconds": 2.54,
+      "train": {
+        "examples": 401,
+        "weights": {
+          "eng": 0.992,
+          "test": 0.949,
+          "downtime": 1.031
+        },
+        "mae": 16.094,
+        "conformal_margin_hours": 38.2,
+        "has_sklearn": true,
+        "_eval": {
+          "mae_eng": 16.726,
+          "rmse_eng": 23.741,
+          "mae_test": 6.167,
+          "mae_downtime": 0.551,
+          "mae_duration": 0.945,
+          "n": 201,
+          "has_sklearn": true
+        }
+      },
+      "evaluate": null,
+      "anchors": [
+        {
+          "check": "banking-api \u2192 86h eng / 32h test / 12d (spec \u224884/31/12)",
+          "passed": true
+        }
+      ],
+      "data_source": "synthetic"
+    },
+    {
+      "model": "migration/MigrationFailurePredictor",
+      "status": "trained",
+      "seconds": 1.15,
+      "train": {
+        "examples": 600,
+        "weights": {
+          "legacy incompatibility": 1.033,
+          "library outdated / unsupported PQC": 0.886,
+          "cert chain incompatibility": 0.946,
+          "hardware unsupported (HSM/TPM/MCU)": 0.934,
+          "packet size / MTU overflow": 1.057,
+          "latency / timeout exceeded": 1.042,
+          "high dependency ripple": 1.094,
+          "protocol mismatch / downgrade": 0.901,
+          "traffic surge amplifies failure": 0.981,
+          "app type fragile (firmware / HSM / banking)": 0.887
+        },
+        "bias": -1.284,
+        "train_accuracy": 0.8217,
+        "train_auroc": 0.6432,
+        "has_sklearn": true,
+        "_eval": {
+          "accuracy": 0.79,
+          "auroc": 0.5604,
+          "auprc": 0.8126,
+          "brier": 0.1678,
+          "ece": 0.0455,
+          "n": 300,
+          "has_sklearn": true,
+          "threshold": 0.5
+        }
+      },
+      "evaluate": null,
+      "anchors": [
+        {
+          "check": "modern 36% < legacy 93%",
+          "passed": true
+        }
+      ],
+      "data_source": "synthetic"
+    },
+    {
+      "model": "migration/InteroperabilityPredictor",
+      "status": "trained",
+      "seconds": 7.36,
+      "train": {
+        "examples": 505,
+        "bias_compat": 0.262,
+        "bias_latency": -0.046,
+        "accuracy": 0.9505,
+        "latency_mae": 0.934,
+        "failure_priors": {
+          "none": -1.805,
+          "library unsupported PQC": -0.615,
+          "protocol does not negotiate PQC": -3.513,
+          "version too old for PQ extension": -1.168,
+          "packet / MTU overflow": -4.425,
+          "HSM/TPM unsupported operation": -4.425,
+          "handshake timeout (latency)": -4.425,
+          "cert chain validation failure": -4.425,
+          "hybrid negotiation mismatch": -4.272,
+          "memory exhausted on constrained device": -4.425
+        },
+        "_eval": {
+          "compat_accuracy": 0.9574,
+          "latency_mae": 1.095,
+          "latency_rmse": 1.377,
+          "handshake_brier": 0.0471,
+          "auroc": 0.8981,
+          "n": 305,
+          "has_sklearn": true
+        }
+      },
+      "evaluate": null,
+      "anchors": [
+        {
+          "check": "OpenSSL3+ML-KEM-768 99.2% lat+4.6% (spec 99.1%/+4.8%); legacy 1.1.1 \u2192 incompatible",
+          "passed": true
+        }
+      ],
+      "data_source": "synthetic"
+    },
+    {
+      "model": "migration/MultiObjectiveRLAgent",
+      "status": "trained",
+      "seconds": 8.14,
+      "train": {
+        "episodes": 40,
+        "mean_reward": 0.9312,
+        "weights": {
+          "w_security": 0.28,
+          "w_compliance": 0.18,
+          "w_cost": 0.18,
+          "w_downtime": 0.14,
+          "w_failure": 0.12,
+          "w_perf": 0.1,
+          "normalize": false
+        },
+        "has_torch": true,
+        "presets_trained": [
+          "bank",
+          "startup",
+          "balanced"
+        ],
+        "_eval": {
+          "mean_reward": 0.995,
+          "mean_per_objective": {
+            "security": 0.85,
+            "compliance": 0.3895,
+            "cost": 0.312,
+            "downtime": 0.272,
+            "failure": 0.1581,
+            "perf": 0.3725
+          },
+          "n": 100,
+          "has_torch": true
+        },
+        "_bank_seq": [
+          "payment-api",
+          "auth-service",
+          "vendor-hsm",
+          "web-frontend",
+          "cheap-cache"
+        ],
+        "_startup_seq": [
+          "auth-service",
+          "payment-api",
+          "cheap-cache",
+          "web-frontend",
+          "vendor-hsm"
+        ],
+        "_divergence": 0.0
+      },
+      "evaluate": null,
+      "anchors": [
+        {
+          "check": "bank ['payment-api', 'auth-service', 'vendor-hsm', 'web-frontend', 'cheap-cache'] vs startup ['auth-service', 'payment-api', 'cheap-cache', 'web-frontend', 'vendor-hsm'] (cheap-cache 4\u21922)",
+          "passed": true
+        }
+      ],
+      "data_source": "synthetic"
+    },
+    {
+      "model": "monitoring/CryptoAnomalyDetector",
+      "status": "trained",
+      "seconds": 0.46,
+      "train": {
+        "n": 30,
+        "algos": 6,
+        "pqc_mean": 0.0,
+        "vae": "trained 12 epochs",
+        "mode": "synthetic",
+        "_eval": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "n": 100,
+          "per_type": {
+            "quantum_regression": {
+              "tp": 18,
+              "fp": 0,
+              "fn": 0,
+              "tn": 0
+            },
+            "new_algorithm": {
+              "tp": 16,
+              "fp": 0,
+              "fn": 0,
+              "tn": 0
+            },
+            "rsa_spike": {
+              "tp": 16,
+              "fp": 0,
+              "fn": 0,
+              "tn": 0
+            },
+            "normal": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 0,
+              "tn": 50
+            }
+          },
+          "baseline_n": 30
+        }
+      },
+      "evaluate": null,
+      "anchors": [
+        {
+          "check": "4 alert(s): new_algorithm; unexpected_crypto; rsa_spike",
+          "passed": true
+        }
+      ],
+      "data_source": "synthetic"
+    },
+    {
+      "model": "monitoring/CryptoRegressionDetector",
+      "status": "trained",
+      "seconds": 0.02,
+      "train": {
+        "examples": 200,
+        "accuracy": 1.0,
+        "correct": 200,
+        "n": 200,
+        "note": "rule-based detector; train() validates thresholds on synthetic history",
+        "_eval": {
+          "accuracy": 1.0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "n": 200,
+          "per_type": {
+            "quantum_regression": {
+              "tp": 61,
+              "fp": 0,
+              "fn": 0,
+              "tn": 0
+            },
+            "downgrade": {
+              "tp": 42,
+              "fp": 0,
+              "fn": 0,
+              "tn": 0
+            },
+            "upgrade": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 0,
+              "tn": 64
+            },
+            "benign": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 0,
+              "tn": 33
+            }
+          }
+        }
+      },
+      "evaluate": null,
+      "anchors": [
+        {
+          "check": "ML-KEM\u2192RSA blocked (CRITICAL)",
+          "passed": true
+        }
+      ],
+      "data_source": "synthetic"
+    },
+    {
+      "model": "vendor/SupplyChainRiskModel + VendorReadinessModel",
+      "status": "trained",
+      "seconds": 4.2,
+      "train": {
+        "_scm": {
+          "vendor_a": 91.0,
+          "vendor_c": 34.0
+        },
+        "_readiness": {
+          "vendor_a": 88.0,
+          "level": "READY"
+        },
+        "_scm_train": {
+          "examples": 400,
+          "weights": {
+            "crypto": 0.45,
+            "pqc": 0.35,
+            "hygiene": 0.2
+          },
+          "mae": 3.023,
+          "conformal_margin": 6.7,
+          "has_sklearn": true
+        },
+        "_readiness_train": {
+          "examples": 400,
+          "weights": {
+            "library": 0.299,
+            "vuln": 0.147,
+            "cert": 0.175,
+            "lifecycle": 0.19,
+            "future": 0.189
+          },
+          "mae": 3.774,
+          "conformal_margin": 7.82,
+          "has_sklearn": true,
+          "train_accuracy": 0.9
+        }
+      },
+      "evaluate": null,
+      "anchors": [
+        {
+          "check": "supply-chain A=91 vs C=34; readiness A=88",
+          "passed": true
+        }
+      ],
+      "data_source": "synthetic"
+    },
+    {
+      "model": "copilot/SecurityCopilot",
+      "status": "trained",
+      "seconds": 0.01,
+      "train": {
+        "mode": "deterministic",
+        "assets_scanned": 1,
+        "models_resolved": {
+          "dependency_graph": true,
+          "blast_radius": true,
+          "quantum_exposure": true,
+          "recommender": true,
+          "cost": true,
+          "failure": true,
+          "interop": true,
+          "temporal": true
+        },
+        "llm_provider": "deterministic",
+        "llm_configured": true,
+        "_answer": "Question: Why is our payment API critical?\n\nEvidence-backed answer to rephrase:\npayment-api is high (risk 64) because:\n  \u2022 RSA-2048 is quantum-vulnerable (purpose: signature)\n  \u2022 blast radius 16/100 \u2014 2 direct + 3 indirect dependents, 2 critical services, 2 sensitive datasets\n  \u2022 top contributing factors: +32 quantum vulnerability +24 business criticality +18 HNDL exposure +6 compliance urgency +3.0 dependency blast radius\n  \u2022 recommended replacement: ML-DSA-65 (hybrid=True)",
+        "_intent": "why",
+        "_sources": [
+          "dependency-graph",
+          "blast-radius",
+          "quantum-exposure",
+          "pqc-recommender",
+          "cost-predictor",
+          "failure-predictor",
+          "interop-predictor"
+        ],
+        "_eval": {
+          "passed": 3,
+          "total": 3,
+          "accuracy": 1.0,
+          "intent_map": {
+            "why": 1,
+            "danger": 1,
+            "general": 1
+          }
+        }
+      },
+      "evaluate": null,
+      "anchors": [
+        {
+          "check": "canonical answer cites RSA-2048 (sources: ['dependency-graph', 'blast-radius', 'quantum-exposure', 'pqc-recommender', 'cost-predictor', 'failure-predictor', 'interop-predictor'])",
+          "passed": true
+        }
+      ],
+      "data_source": "synthetic"
+    },
+    {
+      "model": "policy/PolicyEngine",
+      "status": "trained",
+      "seconds": 0.0,
+      "train": {
+        "mode": "deterministic-rules",
+        "rules": 9,
+        "constraint_types": [
+          "blocklist_algorithm",
+          "downtime_limit",
+          "fips_only",
+          "maintenance_window",
+          "mandatory_by",
+          "max_concurrent",
+          "ordering",
+          "require_approval",
+          "vendor_restriction"
+        ],
+        "optimizer_backend": true,
+        "_eval": {
+          "passed": 9,
+          "total": 9,
+          "accuracy": 1.0,
+          "expected_types": [
+            "blocklist_algorithm",
+            "downtime_limit",
+            "fips_only",
+            "maintenance_window",
+            "mandatory_by",
+            "max_concurrent",
+            "ordering",
+            "require_approval",
+            "vendor_restriction"
+          ]
+        }
+      },
+      "evaluate": null,
+      "anchors": [
+        {
+          "check": "all 9 \u00a722 policy patterns parsed",
+          "passed": true
+        }
+      ],
+      "data_source": "synthetic"
+    }
+  ],
+  "summary": {
+    "trained": 15,
+    "anchor_fail": 0,
+    "errors": 0,
+    "anchors_ok": 15,
+    "anchors_total": 15,
+    "wall_seconds": 62.16
+  }
+}

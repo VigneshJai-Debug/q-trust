@@ -37,9 +37,11 @@ hide:
 | Understand the protocol | [Whitepaper](WHITEPAPER.md) | Threat model, GNN planner, on-chain design |
 | See measured performance | [Performance](PERFORMANCE.md) + [_data/metrics.json](_data/metrics.json) | k6 147.8 rps, τ 0.975, GPU latencies |
 | Evaluate for production | [Architecture](ARCHITECTURE.md) + [Reality check in README](../README.md#reality-check) | Honest limits: no audit, no public deploy, relayer trust |
+| Developer's roadmap + critical analysis | [Strategic Analysis](STRATEGIC_ANALYSIS.md) | How to take Q-Trust further: audit-first, trust decentralization, real-data moat |
+| Design vision (images) | [docs/design/](design/) | Target architecture, Quantum Security Control Center, verification portal, roadmap |
 | Verify an attestation | `GET /v/{assetId}` or `GET /v1/assets/{id}/verify` | On-chain existence, active, org_did |
 
-*Last verified: 2026-08-27 · against commit f02d106 · verifier: ./scripts/verify_all.sh*
+*Last verified: 2026-08-29 · verifier: ./scripts/verify_all.sh*
 
 ---
 

@@ -39,7 +39,9 @@ def _resolve_default_model_path() -> str:
     model agree on which artifact is canonical.
     """
     base = Path(__file__).resolve().parents[1]
-    for name in ("model_gpu_v3.pt", "model_ddp_v3.pt", "model.pt"):
+    # Canonical order: real-data fine-tune (best on all suites incl. real CBOMs)
+    # > synthetic flagship > DDP > v2.
+    for name in ("model_real_v3.pt", "model_gpu_v3.pt", "model_ddp_v3.pt", "model.pt"):
         p = base / name
         if p.exists():
             return str(p)

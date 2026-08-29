@@ -350,12 +350,31 @@ flowchart LR
 | Capability | Result | Source |
 |---|---|---|
 | Migration ranking | Kendall **τ 0.961** vs heuristic optimum (held-out) | [`planner/results/benchmark.json`](planner/results/benchmark.json) |
-| GNN v3 @ scale | 100K graphs · BF16 · per-graph ListMLE — held-out **τ 0.975** | [`planner/results/benchmark_v3.json`](planner/results/benchmark_v3.json) |
-| RL migration agent | **100%** migration completion on feasible CBOMs · mean reward **+107.7** vs random **+107.1** (reproducibility in [`planner/results/rl_benchmark.json`](planner/results/) · [`scripts/eval_rl_agent.py`](scripts/eval_rl_agent.py)) | [`planner/rl_agent.pt`](planner/) |
+| GNN v3 @ scale (synthetic) | 100K graphs · BF16 · per-graph ListMLE — held-out **τ 0.975** | [`planner/results/benchmark_v3.json`](planner/results/benchmark_v3.json) |
+| **GNN v3 + real data** | **τ 0.9710** in-dist · **τ-b 0.807 on real TLS CBOMs** (39 real enterprise CBOMs; heuristic ceiling 0.855) · best model on every suite | [`planner/results/benchmark_real_v3.json`](planner/results/benchmark_real_v3.json) · [`planner/model_real_v3.pt`](planner/) |
+| RL migration agent | **100%** migration completion on feasible CBOMs · mean reward **+106.8** vs random **+106.1** (reproducibility in [`planner/results/rl_benchmark.json`](planner/results/) · [`scripts/eval_rl_agent.py`](scripts/eval_rl_agent.py)) | [`planner/rl_agent.pt`](planner/) |
+| Code discovery model | CodeBERTa fine-tuned on **10,294 real code files** (GPU) — train acc **0.953** · eval precision **0.978** | [`qtrust_ai/artifacts/training_report_real.json`](qtrust_ai/artifacts/training_report_real.json) |
+| Real-data corpus | **13,058** real code files · **131** live TLS hosts · **401** NVD CVEs | [`scripts/build_real_datasets.py`](scripts/build_real_datasets.py) |
 | API throughput | **147.8 req/s** @ 100 VUs · p95 **11.3 ms** (anvil, 24-core / A100) | [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) |
 | Contract tests | **211** — unit + invariant (1000 runs) + fuzz + attack | [`CHANGELOG.md`](CHANGELOG.md) |
 | Scanner coverage | **12+** source languages · **10+** manifest formats | [`inspector/`](inspector/) |
 | Side-channel detector | clean → **0.05** VERIFIED · leaky → **0.95** HIGH_RISK (calibrated) | [`docs/GPU_FEATURES.md`](docs/GPU_FEATURES.md) |
+
+> **Validation status (honest scope):** the **flagship planner is now trained and
+> evaluated on real data**: a **real code corpus of 13,058 files** from production
+> crypto libraries (openssl, boringssl, aws-lc, mbedtls, wolfssl, nodejs,
+> golang, pyca, liboqs, …), **131 live TLS-scanned hosts** converted into **39
+> real enterprise CBOMs**, and **401 real NVD CVEs**. The planner's headline
+> real-CBOM score is **tie-aware Kendall τ-b 0.807** (identical assets — e.g.
+> eight RSA-2048 certs — are genuinely indistinguishable, so τ-b only rewards
+> ranking the distinguishable groups; dense-rank τ would be meaningless here).
+> A serious encoder bug was fixed along the way: X.509 signature names like
+> `sha256WithRSAEncryption` were being encoded as `SHA` instead of `RSA`,
+> silently poisoning real-CBOM features (and `EdDSA` itself never matched its
+> own map entry — both fixed in `model.py` / `model_v3.py`). Models whose labels are inherently
+> proprietary (migration cost, RL trajectories) remain synthetic and say so.
+> See [`docs/STRATEGIC_ANALYSIS.md`](docs/STRATEGIC_ANALYSIS.md) for the full
+> developer roadmap and [`docs/design/`](docs/design/) for target design mockups.
 
 > **Validation status (honest scope):** planner τ and RL rewards are measured on
 > **synthetic** migration graphs whose ranking labels are produced by the same

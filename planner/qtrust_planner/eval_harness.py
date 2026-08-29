@@ -122,13 +122,17 @@ def generate_suites(n_graphs: int = 1000, seed: int = 999, n_real_cbom: int | No
 
     # Real CBOMs if available
     real_graphs: list = []
-    # Try planner/data and inspector fixtures
-    for cbom_path in [
-        Path(__file__).resolve().parents[1] / "data" / "algorithms.json",
+    # Try planner/data/real_cboms (real TLS-derived enterprise CBOMs), then
+    # planner/data and inspector fixtures
+    for cbom_dir in [
+        Path(__file__).resolve().parents[1] / "data" / "real_cboms",
+        Path(__file__).resolve().parents[1] / "data",
         Path(__file__).resolve().parents[2] / "inspector" / "data",
     ]:
-        if cbom_path.is_dir():
-            for p in list(cbom_path.glob("*.json"))[:20]:
+        if cbom_dir.is_dir():
+            for p in list(cbom_dir.glob("*.json"))[:50]:
+                if p.name == "algorithms.json":
+                    continue
                 try:
                     import json as _j
                     cbom = _j.loads(p.read_text())
@@ -137,8 +141,6 @@ def generate_suites(n_graphs: int = 1000, seed: int = 999, n_real_cbom: int | No
                         real_graphs.append(g)
                 except Exception:
                     continue
-        elif cbom_path.is_file() and cbom_path.suffix == ".json":
-            pass
     # Also synthetic "real-like" if no real CBOMs found (so suite never empty in CI)
     if not real_graphs:
         # Create synthetic but with host-affinity structure mimicking real CBOM

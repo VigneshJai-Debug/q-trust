@@ -182,6 +182,7 @@ def train_gpu(
     device_name: str | None = None,
     extra_graphs: list | None = None,
     norm: str = "batch",
+    init_path: str | None = None,
 ) -> str:
     """Train MigrationGNNv3 with BF16 mixed precision.
 
@@ -239,6 +240,24 @@ def train_gpu(
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, **loader_kwargs)
 
     model = MigrationGNNv3(input_features=6, norm=norm).to(device)
+
+    # P2-11: continue from a prior checkpoint (e.g. flagship retrain) — used
+    # to fine-tune on corrected/real data without paying full-training cost.
+    if init_path and Path(init_path).exists():
+        payload = torch.load(init_path, map_location=device, weights_only=True)
+        if isinstance(payload, dict) and "state_dict" in payload:
+            sd = payload["state_dict"]
+        else:
+            sd = payload
+        # Map legacy bn* keys -> norm* when the checkpoint uses a different
+        # normalization than this run's config.
+        load_result = model.load_state_dict(sd, strict=False)
+        missing = set(load_result.missing_keys)
+        unexpected = set(load_result.unexpected_keys)
+        if missing or unexpected:
+            print(f"  init: missing={sorted(missing)[:5]} unexpected={sorted(unexpected)[:5]} "
+                  f"(continuing with {len(sd) - len(unexpected)}/{len(sd)} layers)")
+        print(f"Initialized from checkpoint: {init_path}")
 
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Model parameters: {n_params:,} (norm={norm})")
@@ -426,11 +445,34 @@ if __name__ == "__main__":
                         help="hidden normalization; 'layer' recommended for the v3 retrain "
                              "(see model_v3 AUDIT NOTE)")
     parser.add_argument("--quick", action="store_true", help="Quick test: 10K graphs, 20 epochs")
+    parser.add_argument("--init", type=str, default=None,
+                        help="Checkpoint to continue from (fine-tune on real data)")
+    parser.add_argument("--real-cboms", type=str, default=None,
+                        help="Directory of real CBOM JSONs to mix into training "
+                             "(default planner/data/real_cboms)")
+    parser.add_argument("--model-out", type=str, default=None,
+                        help="Output checkpoint path (default model_gpu_v3.pt)")
     args = parser.parse_args()
 
     if args.quick:
         args.n_graphs = 10_000
         args.epochs = 20
+
+    extra_graphs = None
+    real_dir = Path(args.real_cboms or (Path(__file__).resolve().parent.parent / "data" / "real_cboms"))
+    if real_dir.is_dir():
+        import json
+        extra_graphs = []
+        for p in sorted(real_dir.glob("*.json")):
+            try:
+                cbom = json.loads(p.read_text())
+                extra_graphs.append(cbom_to_dependency_graph(cbom, seed=args.seed))
+            except Exception as exc:
+                print(f"  ! skip {p.name}: {exc}")
+        if extra_graphs:
+            print(f"Loaded {len(extra_graphs)} real CBOM graphs from {real_dir}")
+        else:
+            extra_graphs = None
 
     train_gpu(
         n_graphs=args.n_graphs,
@@ -439,4 +481,7 @@ if __name__ == "__main__":
         learning_rate=args.lr,
         seed=args.seed,
         norm=args.norm,
+        extra_graphs=extra_graphs,
+        init_path=args.init,
+        model_path=args.model_out,
     )

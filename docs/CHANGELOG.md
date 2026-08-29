@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Real-data training campaign + X.509 encoder fix + tie-aware metrics + strategic analysis (2026-08-29)
+
+**Real-data corpus expanded (web-collected, all public):**
+
+- **Code corpus 4,431 → 13,058 real files.** Added production crypto libraries
+  (`openssl/openssl`, `google/boringssl`, `aws/aws-lc`, `mbedtls/mbedtls`,
+  `wolfSSL/wolfssl`, `gpg/libgcrypt`, `randombit/botan`, `PyCryptoDome/pycryptodome`,
+  `paramiko/paramiko`, `nodejs/node`, `golang/go`) and pure non-crypto control
+  repos (`numpy`, `pandas`, `react`, `svelte`, `commons-lang`).
+- **Live TLS inventory 60 → 131 real hosts** (banks, cloud, gov/edu, security
+  vendors) with real cert algorithms/key sizes/expiry — converted to **39 real
+  enterprise CBOMs** in `planner/data/real_cboms/`.
+- **NVD CVE data 138 → 401 real CVEs** across all 16 crypto libraries (incl.
+  previously rate-limited botan, libgcrypt, gnupg, gnutls, nss, nettle...).
+
+**X.509 encoder bug — fixed (silent real-data poison).**
+`encode_algorithm_type` prefix-matched `sha256WithRSAEncryption` to `SHA` (7)
+instead of `RSA` (0), so real TLS certs were featurized as hash algorithms and
+real-CBOM rankings were anti-correlated (τ ≈ −0.6). Now maps X.509 signature
+OID names to the underlying key type in both `model.py` and `model_v3.py`.
+
+**Real-CBOM eval suite — actually real now.** `eval_harness.py` scanned a file
+path (`planner/data/algorithms.json`) as a directory and silently fell back to
+synthetic; it now loads `planner/data/real_cboms/` (39 real enterprise CBOMs
+from live TLS scans).
+
+**Tie-aware ranking metric.** `score_order` now reports Kendall **τ-b against
+priority scores** — identical assets (e.g. eight RSA-2048 certs) are genuinely
+indistinguishable, so arbitrary dense-rank labels no longer punish every model
+(τ was meaningless/negative before). τ-b ≡ τ-a on synthetic graphs, so
+historical numbers remain comparable.
+
+**GNN trained on real CBOM graphs — best model on every suite.**
+`train_gpu.py` gained `--init` (checkpoint continuation) and `--real-cboms`
+mixing. The fine-tuned `model_real_v3.pt` is now the canonical default
+(`predict.py` resolution order):
+
+| Suite | model_gpu_v3 (synth) | **model_real_v3 (real-data)** |
+| --- | --- | --- |
+| in-dist τ | 0.9683 | **0.9710** |
+| OOD-size τ | 0.8844 | **0.8850** |
+| enterprise τ | 0.9680 | **0.9690** |
+| **real-CBOM τ-b** | 0.7077 | **0.8074** (heuristic ceiling 0.855) |
+
+**All 15 qtrust_ai models trained on real data** (`train_qtrust_all.py --real`):
+CryptoCodeDetector fine-tuned CodeBERTa on **10,294 real examples on GPU**
+(train accuracy 0.953, eval precision 0.978), plus purpose classifier, risk,
+recommender, anomaly, vendor, and regression models; RL agent re-benchmarked
+(106.82 vs random 106.06, 100% completion).
+
+**Strategic analysis + design assets.** `docs/STRATEGIC_ANALYSIS.md` (how the
+developer would take the project further — audit-first, trust decentralization,
+real-data moat, technology adoption). New rendered design images in
+`docs/design/`: `architecture_target.svg`, `dashboard_mockup.svg` (Quantum
+Security Control Center), `verify_page_mockup.svg`, `roadmap.svg`.
+
 ### HPO real objectives + QTrace-FM real loss (2026-08-29)
 
 - **HPO no longer scores dummy/random objectives.** `planner/qtrust_planner/hpo.py`

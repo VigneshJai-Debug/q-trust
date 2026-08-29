@@ -117,6 +117,8 @@ def main() -> None:
     parser.add_argument("--ood", action="store_true", help="Also evaluate on OOD-size suite (200-500 nodes)")
     parser.add_argument("--enterprise", action="store_true", help="Also evaluate on enterprise-topology suite")
     parser.add_argument("--real-cbom", action="store_true", help="Also evaluate on real-CBOM suite if available")
+    parser.add_argument("--model", type=str, default=None,
+                        help="Path to an additional checkpoint to benchmark (relative to planner/)")
     parser.add_argument(
         "--json-out", type=str, default=None, help="Write results to this JSON file"
     )
@@ -137,6 +139,15 @@ def main() -> None:
         ("v3 (GPU-trained, 256-dim)", _load_v3(here / "model_gpu_v3.pt")),
         ("v3 DDP (400K graphs, 256-dim)", _load_v3(here / "model_ddp_v3.pt")),
     ]
+    if args.model:
+        extra_path = Path(args.model)
+        if not extra_path.is_absolute():
+            extra_path = here / extra_path
+        extra = _load_v3(extra_path)
+        if extra is not None:
+            candidates.append((f"v3 real-data ({extra_path.name})", extra))
+        else:
+            print(f"--model {args.model}: checkpoint not loadable — skipped")
     present = [(n, m) for n, m in candidates if m is not None]
     missing = [n for n, m in candidates if m is None]
     for name in missing:

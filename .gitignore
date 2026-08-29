@@ -136,10 +136,15 @@ profile-repo/
 # ─── qtrust_ai local artifacts ────────────────────────────────────────────────
 # Downloaded third-party dataset caches (real_datasets/ — hundreds of MB of
 # cloned repos), fine-tuned transformer weights (crypto_codebert/model.safetensors
-# — 300+ MB, exceeds the GitHub 100 MB file limit) and generated training
-# reports are local-only. Rebuild via scripts/build_real_datasets.py and
-# scripts/train_qtrust_all.py. Mirrors the .ruff.toml + pytest.ini excludes.
+# — 300+ MB, exceeds the GitHub 100 MB file limit) are local-only. Rebuild via
+# scripts/build_real_datasets.py and scripts/train_qtrust_all.py. The small
+# JSON training reports are force-tracked (they are benchmark fixtures like
+# planner/results/*.json and back README claims). Mirrors the .ruff.toml +
+# pytest.ini excludes.
 qtrust_ai/artifacts/
+!qtrust_ai/artifacts/training_report.json
+!qtrust_ai/artifacts/training_report_real.json
+!qtrust_ai/artifacts/benchmark_comparison.json
 
 # Generated ONNX exports (regenerate with make/export tool when onnx deps present)
 exports/

@@ -42,9 +42,29 @@ ALGORITHM_TYPE_MAP = {
 def encode_algorithm_type(algorithm: str) -> int:
     """Map an algorithm name to an integer type code."""
     algorithm = algorithm.upper()
-    if algorithm in ALGORITHM_TYPE_MAP:
-        return ALGORITHM_TYPE_MAP[algorithm]
-    for prefix, code in ALGORITHM_TYPE_MAP.items():
+    _MAP_UPPER = {k.upper(): v for k, v in ALGORITHM_TYPE_MAP.items()}
+    if algorithm in _MAP_UPPER:
+        return _MAP_UPPER[algorithm]
+    # X.509 signature OID names ("sha256WithRSAEncryption") start with the
+    # hash — match the underlying key type before prefix matching so real
+    # TLS certs map to RSA/ECDSA/EdDSA instead of "SHA".
+    if "WITHRSA" in algorithm or algorithm.startswith("RSA"):
+        return ALGORITHM_TYPE_MAP["RSA"]
+    if "ECDSA" in algorithm:
+        return ALGORITHM_TYPE_MAP["ECDSA"]
+    if "ED25519" in algorithm or "ED448" in algorithm:
+        return ALGORITHM_TYPE_MAP["EdDSA"]
+    if "ID-ECPUBLICKEY" in algorithm or algorithm == "EC":
+        return ALGORITHM_TYPE_MAP["ECC"]
+    if "ML-KEM" in algorithm or "MLKEM" in algorithm or algorithm == "KYBER":
+        return ALGORITHM_TYPE_MAP["ML-KEM"]
+    if "ML-DSA" in algorithm or "MLDSA" in algorithm or algorithm == "DILITHIUM":
+        return ALGORITHM_TYPE_MAP["ML-DSA"]
+    if "SLH-DSA" in algorithm or "SLHDSA" in algorithm or "SPHINCS" in algorithm:
+        return ALGORITHM_TYPE_MAP["SLH-DSA"]
+    if "X25519" in algorithm or "X448" in algorithm:
+        return ALGORITHM_TYPE_MAP["ECDH"]
+    for prefix, code in _MAP_UPPER.items():
         if algorithm.startswith(prefix):
             return code
     return ALGORITHM_TYPE_MAP["Unknown"]

@@ -13,6 +13,8 @@ from qtrust_planner.data_generator import (  # noqa: E402
     cbom_to_dependency_graph,
     generate_migration_graph,
 )
+from qtrust_planner.model import encode_algorithm_type as encode_v2  # noqa: E402
+from qtrust_planner.model_v3 import encode_algorithm_type as encode_v3  # noqa: E402
 
 
 REAL_CBOM = {
@@ -30,6 +32,37 @@ REAL_CBOM = {
          "criticality": "low"},
     ],
 }
+
+
+def test_x509_signature_names_encode_to_underlying_key_type():
+    """X.509 OID display names ('sha256WithRSAEncryption') must map to the
+    underlying key type (RSA), not the leading hash prefix (SHA).
+
+    Regression: prefix-matching 'sha256WithRSAEncryption' hit 'SHA' (type 7),
+    silently poisoning real-CBOM features and driving real-CBOM Kendall tau
+    negative. See CHANGELOG real-data campaign.
+    """
+    cases = {
+        "sha256WithRSAEncryption": "RSA",
+        "sha384WithRSAEncryption": "RSA",
+        "sha512WithRSAEncryption": "RSA",
+        "rsaEncryption": "RSA",
+        "ecdsa-with-SHA256": "ECDSA",
+        "ecdsa-with-SHA384": "ECDSA",
+        "Ed25519": "EdDSA",
+        "ed25519": "EdDSA",
+        "id-ecPublicKey": "ECC",
+        "ML-KEM-768": "ML-KEM",
+        "ML-DSA-65": "ML-DSA",
+        "SLH-DSA-128s": "SLH-DSA",
+    }
+    for name, family in cases.items():
+        assert encode_v2(name) == encode_v2(family), f"v2: {name} -> {encode_v2(name)}"
+        assert encode_v3(name) == encode_v3(family), f"v3: {name} -> {encode_v3(name)}"
+    # sanity: RSA and ECDSA must not be confused with each other or with SHA
+    assert encode_v3("sha256WithRSAEncryption") == encode_v3("RSA")
+    assert encode_v3("sha256WithRSAEncryption") != encode_v3("SHA")
+    assert encode_v3("ecdsa-with-SHA384") == encode_v3("ECDSA")
 
 
 def test_cbom_to_dependency_graph_schema_matches_synthetic():

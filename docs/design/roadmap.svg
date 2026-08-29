@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 620" width="1200" height="620" font-family="sans-serif">
+<rect x="0" y="0" width="1200" height="620" rx="18" fill="#f8fafc"/>
+
+<text x="40" y="46" font-size="20" font-weight="800" fill="#0f172a">Q-Trust Execution Roadmap</text>
+<text x="40" y="68" font-size="11" fill="#64748b">Phase 1 · Security &amp; trust foundation → Phase 2 · Productization → Phase 3 · Differentiation &amp; moat</text>
+
+<!-- Phase 1 -->
+<rect x="40" y="96" width="360" height="480" rx="14" fill="#ffffff" stroke="#e2e8f0"/>
+<rect x="40" y="96" width="360" height="46" rx="14" fill="#dc2626"/><text x="60" y="125" font-size="13" font-weight="800" fill="#ffffff">Days 1–30 · Security &amp; Correctness</text>
+<g font-size="11">
+  <rect x="60" y="158" width="320" height="34" rx="8" fill="#fef2f2" stroke="#fecaca"/><text x="76" y="180" fill="#7f1d1d">✓ Real-data training &amp; honest benchmarks</text>
+  <rect x="60" y="200" width="320" height="34" rx="8" fill="#fef2f2" stroke="#fecaca"/><text x="76" y="222" fill="#7f1d1d">✓ HPO real objectives · VC crypto verification</text>
+  <rect x="60" y="242" width="320" height="34" rx="8" fill="#fef2f2" stroke="#fecaca"/><text x="76" y="264" fill="#7f1d1d">✓ X.509 encoder fix · tie-aware τ-b metrics</text>
+  <rect x="60" y="284" width="320" height="40" rx="8" fill="#fff7ed" stroke="#fdba74"/><text x="76" y="300" fill="#9a3412">▸ External smart-contract audit (engage firm)</text><text x="76" y="316" fill="#9a3412">▸ multisig → timelock governance deployment</text>
+  <rect x="60" y="332" width="320" height="40" rx="8" fill="#fff7ed" stroke="#fdba74"/><text x="76" y="348" fill="#9a3412">▸ Relayer hardening: HSM/KMS + rotation + limits</text><text x="76" y="364" fill="#9a3412">▸ RPC failover + multi-provider redundancy</text>
+  <rect x="60" y="380" width="320" height="40" rx="8" fill="#fff7ed" stroke="#fdba74"/><text x="76" y="396" fill="#9a3412">▸ Public Base Sepolia deployment + verification</text><text x="76" y="412" fill="#9a3412">▸ Formal threat model + incident response drills</text>
+  <rect x="60" y="428" width="320" height="40" rx="8" fill="#fff7ed" stroke="#fdba74"/><text x="76" y="444" fill="#9a3412">▸ Fork tests · upgrade tests · storage-layout checks</text><text x="76" y="460" fill="#9a3412">▸ Disaster-recovery validation of read model</text>
+  <rect x="60" y="476" width="320" height="34" rx="8" fill="#f8fafc" stroke="#cbd5e1"/><text x="76" y="498" fill="#475569">Exit: audited, multisig-governed, deployed on Sepolia</text>
+</g>
+
+<!-- Phase 2 -->
+<rect x="420" y="96" width="360" height="480" rx="14" fill="#ffffff" stroke="#e2e8f0"/>
+<rect x="420" y="96" width="360" height="46" rx="14" fill="#f59e0b"/><text x="440" y="125" font-size="13" font-weight="800" fill="#ffffff">Days 31–90 · Productization</text>
+<g font-size="11">
+  <rect x="440" y="158" width="320" height="34" rx="8" fill="#fffbeb" stroke="#fde68a"/><text x="456" y="180" fill="#78350f">▸ GitHub App + GitLab integration (continuous scan)</text>
+  <rect x="440" y="200" width="320" height="34" rx="8" fill="#fffbeb" stroke="#fde68a"/><text x="456" y="222" fill="#78350f">▸ Enterprise SSO (OIDC/SAML) + RBAC + audit logs</text>
+  <rect x="440" y="242" width="320" height="34" rx="8" fill="#fffbeb" stroke="#fde68a"/><text x="456" y="264" fill="#78350f">▸ Quantum Security Control Center (v1 of mockup)</text>
+  <rect x="440" y="284" width="320" height="40" rx="8" fill="#fffbeb" stroke="#fde68a"/><text x="456" y="300" fill="#78350f">▸ Migration task generation → Jira / ServiceNow</text><text x="456" y="316" fill="#78350f">▸ Drift detection: scan → diff → alert → re-attest</text>
+  <rect x="440" y="332" width="320" height="40" rx="8" fill="#fffbeb" stroke="#fde68a"/><text x="456" y="348" fill="#78350f">▸ Model monitoring + explainability cards (why #1?)</text><text x="456" y="364" fill="#78350f">▸ PQC Passport: readiness score + evidence history</text>
+  <rect x="440" y="380" width="320" height="40" rx="8" fill="#fffbeb" stroke="#fde68a"/><text x="456" y="396" fill="#78350f">▸ AWS / Azure / GCP discovery connectors</text><text x="456" y="412" fill="#78350f">▸ SIEM integration (Splunk, Sentinel) for alerts</text>
+  <rect x="440" y="428" width="320" height="40" rx="8" fill="#fffbeb" stroke="#fde68a"/><text x="456" y="444" fill="#78350f">▸ Multi-tenancy with tenant isolation + quotas</text><text x="456" y="460" fill="#78350f">▸ Load test at 10K assets + queue-worker scaling</text>
+  <rect x="440" y="476" width="320" height="34" rx="8" fill="#f8fafc" stroke="#cbd5e1"/><text x="456" y="498" fill="#475569">Exit: enterprise-grade product, continuous posture</text>
+</g>
+
+<!-- Phase 3 -->
+<rect x="800" y="96" width="360" height="480" rx="14" fill="#ffffff" stroke="#e2e8f0"/>
+<rect x="800" y="96" width="360" height="46" rx="14" fill="#0a675f"/><text x="820" y="125" font-size="13" font-weight="800" fill="#ffffff">12 Months · Differentiation &amp; Moat</text>
+<g font-size="11">
+  <rect x="820" y="158" width="320" height="34" rx="8" fill="#f0fdfa" stroke="#99f6e4"/><text x="836" y="180" fill="#134e4a">▸ Migration Intelligence Network — learn from outcomes</text>
+  <rect x="820" y="200" width="320" height="34" rx="8" fill="#f0fdfa" stroke="#99f6e4"/><text x="836" y="222" fill="#134e4a">▸ ZK compliance: prove PQC-ready, hide inventory</text>
+  <rect x="820" y="242" width="320" height="34" rx="8" fill="#f0fdfa" stroke="#99f6e4"/><text x="836" y="264" fill="#134e4a">▸ Multi-chain anchoring (Base + Ethereum + L2s)</text>
+  <rect x="820" y="284" width="320" height="40" rx="8" fill="#f0fdfa" stroke="#99f6e4"/><text x="836" y="300" fill="#134e4a">▸ Vendor trust network — verified PQC claims</text><text x="836" y="316" fill="#134e4a">▸ Passkeys + account abstraction (no wallet friction)</text>
+  <rect x="820" y="332" width="320" height="40" rx="8" fill="#f0fdfa" stroke="#99f6e4"/><text x="836" y="348" fill="#134e4a">▸ Migration playbook marketplace</text><text x="836" y="364" fill="#134e4a">▸ Cross-enterprise anonymized benchmark</text>
+  <rect x="820" y="380" width="320" height="40" rx="8" fill="#f0fdfa" stroke="#99f6e4"/><text x="836" y="396" fill="#134e4a">▸ Continuous crypto-agility automation</text><text x="836" y="412" fill="#134e4a">▸ Verifiable PQC compliance credentials (W3C)</text>
+  <rect x="820" y="428" width="320" height="40" rx="8" fill="#f0fdfa" stroke="#99f6e4"/><text x="836" y="444" fill="#134e4a">▸ AI migration agents: inspect → propose → execute</text><text x="836" y="460" fill="#134e4a">▸ Mainnet launch after audit remediation</text>
+  <rect x="820" y="476" width="320" height="34" rx="8" fill="#f8fafc" stroke="#cbd5e1"/><text x="836" y="498" fill="#475569">Exit: the verifiable PQC trust layer for enterprises</text>
+</g>
+
+<!-- Bottom band -->
+<rect x="40" y="588" width="1120" height="0" fill="none"/>
+</svg>

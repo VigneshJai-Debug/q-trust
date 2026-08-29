@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 720" width="1000" height="720" font-family="sans-serif">
+<rect x="0" y="0" width="1000" height="720" rx="18" fill="#f8fafc"/>
+
+<!-- Header -->
+<rect x="0" y="0" width="1000" height="70" fill="#ffffff"/>
+<text x="40" y="44" font-size="16" font-weight="800" fill="#0f172a">Q-TRUST <tspan fill="#0a675f">Verify</tspan></text>
+<text x="640" y="44" font-size="11" fill="#64748b">Public verification · no account required</text>
+<circle cx="930" cy="35" r="5" fill="#22c55e"/><text x="942" y="39" font-size="10" fill="#16a34a">Base L2 connected</text>
+
+<!-- Input -->
+<rect x="40" y="96" width="920" height="60" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="60" y="133" font-size="12" fill="#94a3b8">Paste evidence ID, credential, or CBOM hash…</text>
+<rect x="800" y="108" width="140" height="36" rx="8" fill="#0a675f"/><text x="870" y="132" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">Verify</text>
+
+<!-- Result card: verified -->
+<rect x="40" y="180" width="920" height="150" rx="14" fill="#f0fdfa" stroke="#5eead4"/>
+<circle cx="86" cy="230" r="24" fill="#0a675f"/>
+<text x="86" y="237" text-anchor="middle" font-size="16" fill="#ffffff">✓</text>
+<text x="130" y="224" font-size="18" font-weight="800" fill="#065f46">Evidence verified — cryptographically valid</text>
+<text x="130" y="248" font-size="12" fill="#047857">Signature · issuer DID · schema · expiry · revocation — all checks passed</text>
+<rect x="130" y="266" width="250" height="34" rx="8" fill="#ffffff" stroke="#99f6e4"/><text x="146" y="288" font-size="11" fill="#134e4a">Anchor: <tspan font-weight="700">Base 0x8f3…9ac</tspan></text>
+<rect x="400" y="266" width="250" height="34" rx="8" fill="#ffffff" stroke="#99f6e4"/><text x="416" y="288" font-size="11" fill="#134e4a">Timestamp: <tspan font-weight="700">2026-08-29 06:12 UTC</tspan></text>
+<rect x="670" y="266" width="270" height="34" rx="8" fill="#ffffff" stroke="#99f6e4"/><text x="686" y="288" font-size="11" fill="#134e4a">Credential: <tspan font-weight="700">Ed25519 · did:key</tspan></text>
+
+<!-- CBOM verification panel -->
+<rect x="40" y="354" width="920" height="180" rx="14" fill="#ffffff" stroke="#e2e8f0"/>
+<text x="60" y="382" font-size="14" font-weight="800" fill="#0f172a">Linked evidence chain</text>
+<g font-size="10" text-anchor="middle">
+  <rect x="60" y="400" width="170" height="80" rx="10" fill="#f8fafc" stroke="#cbd5e1"/><text x="145" y="424" font-weight="700" fill="#0f172a">CBOM</text><text x="145" y="440" fill="#64748b">sha256:9f2e…c41d</text><text x="145" y="456" fill="#0a675f" font-weight="700">hash matches ✓</text>
+  <line x1="230" y1="440" x2="268" y2="440" stroke="#94a3b8" stroke-width="2" marker-end="url(#a)"/>
+  <rect x="270" y="400" width="170" height="80" rx="10" fill="#f8fafc" stroke="#cbd5e1"/><text x="355" y="424" font-weight="700" fill="#0f172a">Migration State</text><text x="355" y="440" fill="#64748b">12/12 assets migrated</text><text x="355" y="456" fill="#0a675f" font-weight="700">attested ✓</text>
+  <line x1="440" y1="440" x2="478" y2="440" stroke="#94a3b8" stroke-width="2" marker-end="url(#a)"/>
+  <rect x="480" y="400" width="170" height="80" rx="10" fill="#f8fafc" stroke="#cbd5e1"/><text x="565" y="424" font-weight="700" fill="#0f172a">Audit Trail</text><text x="565" y="440" fill="#64748b">14 events</text><text x="565" y="456" fill="#0a675f" font-weight="700">immutable ✓</text>
+  <line x1="650" y1="440" x2="688" y2="440" stroke="#94a3b8" stroke-width="2" marker-end="url(#a)"/>
+  <rect x="690" y="400" width="250" height="80" rx="10" fill="#0a675f"/><text x="815" y="424" font-weight="700" fill="#ffffff">Base L2 Registry</text><text x="815" y="440" fill="#ccfbf1">0x8f3…9ac · block 21,048,331</text><text x="815" y="456" fill="#ccfbf1" font-weight="700">on-chain root ✓</text>
+</g>
+<text x="60" y="510" font-size="10" fill="#64748b">Blockchain is the neutral, independently verifiable evidence layer — anyone can check, no Q-Trust account needed.</text>
+
+<defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/></marker></defs>
+
+<!-- Checks detail -->
+<rect x="40" y="556" width="920" height="140" rx="14" fill="#ffffff" stroke="#e2e8f0"/>
+<text x="60" y="584" font-size="14" font-weight="800" fill="#0f172a">Verification checks</text>
+<g font-size="11">
+  <text x="60" y="612" fill="#16a34a">✓  Structure &amp; schema</text>
+  <text x="300" y="612" fill="#16a34a">✓  Issuer DID resolved</text>
+  <text x="560" y="612" fill="#16a34a">✓  Signature valid (Ed25519)</text>
+  <text x="60" y="636" fill="#16a34a">✓  Proof purpose: assertionMethod</text>
+  <text x="300" y="636" fill="#16a34a">✓  Not expired</text>
+  <text x="560" y="636" fill="#16a34a">✓  Not revoked</text>
+  <text x="60" y="660" fill="#16a34a">✓  CBOM hash matches on-chain root</text>
+  <text x="300" y="660" fill="#16a34a">✓  Chain ID + contract binding</text>
+  <text x="560" y="660" fill="#16a34a">✓  Nonce / replay protected</text>
+</g>
+</svg>

@@ -1,0 +1,163 @@
+{
+  "seed": 42,
+  "comparisons": [
+    {
+      "model": "discovery/CryptoCodeDetector",
+      "metric": "F1 (held-out real code)",
+      "n": 2764,
+      "qtrust": {
+        "baseline": "qtrust (rules+AST+ML ensemble)",
+        "precision": 0.9777,
+        "recall": 0.5141,
+        "f1": 0.6739,
+        "accuracy": 0.6936
+      },
+      "baselines": [
+        {
+          "baseline": "rules-only (static layer)",
+          "precision": 0.9794,
+          "recall": 0.5035,
+          "f1": 0.6651,
+          "accuracy": 0.6878
+        },
+        {
+          "baseline": "majority (always crypto)",
+          "precision": 1.0,
+          "recall": 0.6158,
+          "f1": 0.7622,
+          "accuracy": 0.6158
+        },
+        {
+          "baseline": "random coin-flip",
+          "precision": 0.6108,
+          "recall": 0.4859,
+          "f1": 0.5412,
+          "accuracy": 0.4928
+        }
+      ],
+      "best_baseline": "majority (always crypto)",
+      "relative_gain": -0.1158
+    },
+    {
+      "model": "discovery/CryptoCodeDetector",
+      "metric": "F1 on adversarial holdout (132 \u00a729 cases)",
+      "n": 132,
+      "qtrust": {
+        "baseline": "qtrust (rules+AST+ML ensemble)",
+        "precision": 0.7966,
+        "recall": 0.3917,
+        "f1": 0.5251
+      },
+      "baselines": [
+        {
+          "baseline": "rules-only (static layer)",
+          "precision": 0.7778,
+          "recall": 0.35,
+          "f1": 0.4828
+        }
+      ],
+      "best_baseline": "rules-only (static layer)",
+      "relative_gain": 0.0876
+    },
+    {
+      "model": "discovery/AlgorithmPurposeClassifier",
+      "metric": "accuracy (held-out real triples)",
+      "n": 404,
+      "qtrust": {
+        "baseline": "qtrust (context-aware)",
+        "accuracy": 1.0
+      },
+      "baselines": [
+        {
+          "baseline": "family-prior-only (no context)",
+          "accuracy": 1.0
+        },
+        {
+          "baseline": "majority purpose",
+          "accuracy": 0.5347
+        }
+      ],
+      "best_baseline": "family-prior-only (no context)",
+      "relative_gain": 0.0
+    },
+    {
+      "model": "migration/PQCRecommender",
+      "metric": "family-correct rate (real triples)",
+      "n": 404,
+      "qtrust": {
+        "baseline": "qtrust (purpose-aware catalog)",
+        "accuracy": 0.7104
+      },
+      "baselines": [
+        {
+          "baseline": "always-ML-KEM-768",
+          "accuracy": 0.0668
+        }
+      ],
+      "best_baseline": "always-ML-KEM-768",
+      "relative_gain": 9.6296
+    },
+    {
+      "model": "risk/QuantumExposureModel",
+      "metric": "MAE (held-out real TLS hosts)",
+      "n_train_hosts": 104,
+      "n_eval": 27,
+      "qtrust": {
+        "baseline": "qtrust (calibrated, host-held-out)",
+        "mae": 0.0
+      },
+      "baselines": [
+        {
+          "baseline": "constant-mean predictor",
+          "mae": 7.1497
+        }
+      ],
+      "best_baseline": "constant-mean predictor",
+      "relative_gain": 1.0
+    },
+    {
+      "model": "monitoring/CryptoAnomalyDetector",
+      "metric": "false-positive rate (held-out real hosts)",
+      "n": 27,
+      "qtrust": {
+        "baseline": "qtrust (baseline+zscore)",
+        "fp_rate": 0.0
+      },
+      "baselines": [
+        {
+          "baseline": "always-alert",
+          "fp_rate": 1.0
+        }
+      ],
+      "best_baseline": "always-alert",
+      "relative_gain": 1.0
+    },
+    {
+      "model": "vendor/SupplyChainRiskModel",
+      "metric": "ranking agreement (real NVD vendors)",
+      "n": 16,
+      "qtrust": {
+        "baseline": "qtrust (5-layer propagation)",
+        "kendall_tau": 0.7701,
+        "ndcg@5": 0.974
+      },
+      "baselines": [
+        {
+          "baseline": "random ordering",
+          "kendall_tau": -0.0449
+        },
+        {
+          "baseline": "uniform scores",
+          "kendall_tau": 0.0
+        }
+      ],
+      "best_baseline": "uniform scores",
+      "relative_gain": 0.7701
+    }
+  ],
+  "summary": {
+    "comparisons_run": 7,
+    "models_beat_best_baseline": 5,
+    "mean_relative_gain": 1.7674
+  }
+}

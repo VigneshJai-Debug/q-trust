@@ -75,6 +75,18 @@ CRYPTO_REPOS: List[Dict[str, str]] = [
     {"repo": "krzyzanowskim/CryptoSwift", "ref": "HEAD"},  # Swift crypto
     {"repo": "phpseclib/phpseclib", "ref": "HEAD"},        # PHP crypto
     {"repo": "open-quantum-safe/liboqs", "ref": "HEAD"},   # C PQC implementations
+    # --- production-grade crypto libraries (real-world TLS/SSH/PKI) --------
+    {"repo": "openssl/openssl", "ref": "HEAD"},             # C — de-facto TLS standard
+    {"repo": "google/boringssl", "ref": "HEAD"},           # C — Chrome's TLS stack
+    {"repo": "aws/aws-lc", "ref": "HEAD"},                 # C — AWS libcrypto
+    {"repo": "mbedtls/mbedtls", "ref": "HEAD"},            # C — embedded TLS
+    {"repo": "wolfSSL/wolfssl", "ref": "HEAD"},            # C — embedded TLS/DTLS
+    {"repo": "gpg/libgcrypt", "ref": "HEAD"},              # C — GnuPG crypto engine
+    {"repo": "randombit/botan", "ref": "HEAD"},            # C++ — crypto toolkit
+    {"repo": "PyCryptoDome/pycryptodome", "ref": "HEAD"},  # Python crypto
+    {"repo": "paramiko/paramiko", "ref": "HEAD"},           # Python SSH
+    {"repo": "nodejs/node", "ref": "HEAD"},                # Node.js (crypto/tls core)
+    {"repo": "golang/go", "ref": "HEAD"},                   # Go stdlib (crypto/x509, tls)
 ]
 NON_CRYPTO_REPOS: List[Dict[str, str]] = [
     {"repo": "pallets/click", "ref": "HEAD"},             # Python CLI — no crypto
@@ -85,6 +97,12 @@ NON_CRYPTO_REPOS: List[Dict[str, str]] = [
     {"repo": "google/gson", "ref": "HEAD"},               # Java JSON — no crypto
     {"repo": "expressjs/express", "ref": "HEAD"},         # JS web framework
     {"repo": "tokio-rs/tokio", "ref": "HEAD"},            # Rust async runtime
+    # --- large pure non-crypto codebases for balance -----------------------
+    {"repo": "numpy/numpy", "ref": "HEAD"},                 # Python numerics
+    {"repo": "pandas-dev/pandas", "ref": "HEAD"},           # Python data
+    {"repo": "facebook/react", "ref": "HEAD"},             # JS UI — no crypto
+    {"repo": "sveltejs/svelte", "ref": "HEAD"},            # JS UI — no crypto
+    {"repo": "apache/commons-lang", "ref": "HEAD"},        # Java utils
 ]
 
 # Additional real crypto sources already in this repo (no download needed)

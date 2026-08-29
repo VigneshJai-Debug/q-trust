@@ -76,10 +76,19 @@ def random_order(graph) -> list[int]:
 
 
 def score_order(pred_order: list[int], graph) -> dict[str, float]:
-    """Kendall tau between the predicted and true rankings, compared
-    per node.
+    """Ranking agreement between the predicted order and the true labels.
 
-    NOTE: both orders must be reduced to *ranks* before pairing — calling
+    The headline ``kendall`` metric is **tie-aware** Kendall τ-b computed
+    against the *priority scores* (``graph.y_priority``) rather than dense
+    ranks. Real inventories routinely contain genuinely identical assets
+    (e.g. eight RSA-2048 certificates with the same key size and expiry);
+    dense ranks force an arbitrary order among such assets that no model
+    can learn, which makes τ-a collapse to noise on real CBOMs. τ-b against
+    tied priorities only rewards getting the *distinguishable* groups right.
+    For synthetic graphs (distinct priorities) τ-b ≡ τ-a, so historical
+    numbers are directly comparable.
+
+    NOTE: predicted order must be reduced to *ranks* before pairing — calling
     ``kendalltau(pred_sequence, true_sequence)`` directly would correlate
     node IDs at each list position instead of measuring ranking agreement,
     which silently understates tau for any imperfect model (this bug shaped
@@ -94,7 +103,14 @@ def score_order(pred_order: list[int], graph) -> dict[str, float]:
     for pos, node in enumerate(true_order):
         true_rank[node] = pos
 
-    kt = kendalltau(pred_rank, true_rank).statistic if n > 1 else 1.0
+    # Tie-aware τ-b against priority scores (tied assets are not penalized).
+    # pred_rank is 0 = migrate first; y_priority is higher = migrate first,
+    # so negate the priority to make both scales "lower = first" before pairing.
+    if n > 1 and hasattr(graph, "y_priority") and graph.y_priority.numel() == n:
+        true_priority = [-float(v) for v in graph.y_priority.tolist()]
+        kt = kendalltau(pred_rank, true_priority, variant="b").statistic
+    else:
+        kt = kendalltau(pred_rank, true_rank).statistic if n > 1 else 1.0
     return {
         "exact_rank": float(pred_order == true_order),
         "top5": float(set(pred_order[:5]) == set(true_order[:5])),
