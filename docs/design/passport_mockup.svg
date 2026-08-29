@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 760" width="1000" height="760" font-family="sans-serif">
+<rect x="0" y="0" width="1000" height="760" rx="18" fill="#f8fafc"/>
+
+<!-- Header -->
+<rect x="0" y="0" width="1000" height="70" fill="#0a675f"/>
+<text x="40" y="44" font-size="16" font-weight="800" fill="#ffffff">Q-TRUST <tspan fill="#ccfbf1">Passport</tspan></text>
+<text x="680" y="44" font-size="11" fill="#ccfbf1">Acme Bank N.A. · verified evidence · updated 2 min ago</text>
+
+<!-- Score hero -->
+<rect x="40" y="96" width="560" height="230" rx="16" fill="#ffffff" stroke="#e2e8f0"/>
+<circle cx="190" cy="210" r="72" fill="none" stroke="#e2e8f0" stroke-width="16"/>
+<circle cx="190" cy="210" r="72" fill="none" stroke="#0a675f" stroke-width="16" stroke-dasharray="340 112" stroke-linecap="round" transform="rotate(-90 190 210)"/>
+<text x="190" y="202" text-anchor="middle" font-size="36" font-weight="800" fill="#0f172a">41</text>
+<text x="190" y="228" text-anchor="middle" font-size="12" fill="#64748b">/ 100</text>
+<text x="190" y="258" text-anchor="middle" font-size="13" font-weight="700" fill="#dc2626">HIGH RISK</text>
+<text x="190" y="278" text-anchor="middle" font-size="10" fill="#64748b">Quantum Readiness Score</text>
+<text x="290" y="140" font-size="12" font-weight="600" fill="#334155">Issued: 2026-08-29 · next renewal 2026-11-27</text>
+<text x="290" y="164" font-size="12" fill="#64748b">Based on: 12,847 crypto assets · 6 environments</text>
+<rect x="290" y="180" width="280" height="30" rx="7" fill="#f0fdfa"/><text x="302" y="200" font-size="11" fill="#0a675f">✓ Evidence anchored: 9,412 / 12,847 assets on Base</text>
+<text x="290" y="232" font-size="12" font-weight="600" fill="#334155">Framework status</text>
+<g font-size="10">
+  <rect x="290" y="244" width="130" height="22" rx="6" fill="#fee2e2"/><text x="355" y="259" text-anchor="middle" fill="#b91c1c">NIST IR 8547: LAG</text>
+  <rect x="430" y="244" width="140" height="22" rx="6" fill="#ffedd5"/><text x="500" y="259" text-anchor="middle" fill="#c2410c">CNSA 2.0: WATCH</text>
+</g>
+
+<!-- Right: compliance + downloads -->
+<rect x="620" y="96" width="340" height="230" rx="16" fill="#ffffff" stroke="#e2e8f0"/>
+<text x="640" y="126" font-size="13" font-weight="800" fill="#0f172a">Compliance evidence</text>
+<g font-size="11">
+  <text x="640" y="156" fill="#16a34a">✓  NIST IR 8547 policy committed</text>
+  <text x="640" y="182" fill="#16a34a">✓  Evidence anchored on Base (immutable)</text>
+  <text x="640" y="208" fill="#f59e0b">⚠  23/47 systems CNSA 2.0 compliant</text>
+  <text x="640" y="234" fill="#f59e0b">⚠  FIPS 140-3 modules: 12/31</text>
+  <text x="640" y="260" fill="#dc2626">✗  RSA-2048 harvest-now risk: 389 assets</text>
+</g>
+<rect x="640" y="278" width="300" height="34" rx="8" fill="#0a675f"/><text x="790" y="300" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">Export Board Report (PDF)</text>
+
+<!-- History -->
+<rect x="40" y="350" width="920" height="170" rx="16" fill="#ffffff" stroke="#e2e8f0"/>
+<text x="60" y="380" font-size="13" font-weight="800" fill="#0f172a">Readiness history — every re-scan is attested</text>
+<g font-size="10">
+  <line x1="90" y1="450" x2="900" y2="450" stroke="#e2e8f0" stroke-width="2"/>
+  <circle cx="120" cy="450" r="6" fill="#0a675f"/><text x="120" y="430" text-anchor="middle" font-weight="700" fill="#0f172a">18</text><text x="120" y="470" text-anchor="middle" fill="#64748b">Mar 26</text>
+  <circle cx="280" cy="450" r="6" fill="#0a675f"/><text x="280" y="430" text-anchor="middle" font-weight="700" fill="#0f172a">24</text><text x="280" y="470" text-anchor="middle" fill="#64748b">May 26</text>
+  <circle cx="440" cy="450" r="6" fill="#0a675f"/><text x="440" y="430" text-anchor="middle" font-weight="700" fill="#0f172a">31</text><text x="440" y="470" text-anchor="middle" fill="#64748b">Jul 26</text>
+  <circle cx="600" cy="450" r="6" fill="#0a675f"/><text x="600" y="430" text-anchor="middle" font-weight="700" fill="#0f172a">38</text><text x="600" y="470" text-anchor="middle" fill="#64748b">Aug 26</text>
+  <circle cx="760" cy="450" r="7" fill="#dc2626" stroke="#fecaca" stroke-width="3"/><text x="760" y="430" text-anchor="middle" font-weight="700" fill="#0f172a">41</text><text x="760" y="470" text-anchor="middle" fill="#64748b">Today</text>
+</g>
+<text x="60" y="500" font-size="10" fill="#64748b">Each data point is a CBOM hash anchored on Base L2 — the history itself is independently verifiable.</text>
+
+<!-- Vendor evidence -->
+<rect x="40" y="540" width="920" height="190" rx="16" fill="#ffffff" stroke="#e2e8f0"/>
+<text x="60" y="570" font-size="13" font-weight="800" fill="#0f172a">Supply-chain evidence (vendor readiness)</text>
+<g font-size="11">
+  <rect x="60" y="586" width="270" height="60" rx="10" fill="#f8fafc" stroke="#cbd5e1"/><text x="76" y="608" font-weight="700" fill="#0f172a">OpenSSL 3.5</text><text x="76" y="626" fill="#16a34a">PQC: ML-KEM ✓ · 40 CVEs (12 high)</text><text x="76" y="640" fill="#64748b">readiness 61/100</text>
+  <rect x="345" y="586" width="270" height="60" rx="10" fill="#f8fafc" stroke="#cbd5e1"/><text x="361" y="608" font-weight="700" fill="#0f172a">mbedTLS 3.6</text><text x="361" y="626" fill="#16a34a">PQC: ML-KEM · ML-DSA ✓</text><text x="361" y="640" fill="#64748b">readiness 68/100</text>
+  <rect x="630" y="586" width="310" height="60" rx="10" fill="#f8fafc" stroke="#cbd5e1"/><text x="646" y="608" font-weight="700" fill="#0f172a">LegacyLib 2.1</text><text x="646" y="626" fill="#dc2626">No PQC support · 9 CVEs (3 high)</text><text x="646" y="640" fill="#64748b">readiness 5/100 — replace</text>
+</g>
+<rect x="60" y="660" width="880" height="52" rx="10" fill="#f0fdfa" stroke="#99f6e4"/>
+<text x="80" y="684" font-size="11" fill="#134e4a" font-weight="600">Vendor claims verified against NVD + deterministic PQC knowledge base — every score traceable to source.</text>
+<text x="80" y="702" font-size="10" fill="#047857">Source: 401 real CVEs · 16 libraries · NVD API 2.0 (2026-08-29)</text>
+</svg>

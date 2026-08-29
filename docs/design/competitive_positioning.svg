@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" width="1200" height="720" font-family="sans-serif">
+<rect x="0" y="0" width="1200" height="720" rx="18" fill="#f8fafc"/>
+
+<text x="40" y="44" font-size="20" font-weight="800" fill="#0f172a">Q-Trust Competitive Positioning — 2026</text>
+<text x="40" y="66" font-size="11" fill="#64748b">Verifiable evidence + real-data intelligence vs. enterprise incumbents and PQC vendors</text>
+
+<!-- 2x2 -->
+<rect x="40" y="96" width="540" height="420" rx="14" fill="#ffffff" stroke="#e2e8f0"/>
+<text x="60" y="126" font-size="14" font-weight="800" fill="#0f172a">Where the market sits</text>
+<line x1="60" y1="330" x2="560" y2="330" stroke="#cbd5e1" stroke-width="2"/>
+<line x1="310" y1="140" x2="310" y2="490" stroke="#cbd5e1" stroke-width="2"/>
+<text x="60" y="166" font-size="11" font-weight="700" fill="#64748b">▲ Discovery depth</text>
+<text x="185" y="490" text-anchor="middle" font-size="10" fill="#64748b">Inventory only</text>
+<text x="435" y="490" text-anchor="middle" font-size="10" fill="#64748b">Migration + remediation</text>
+<text x="40" y="520" font-size="10" fill="#64748b">X-axis → actionable migration depth · Y-axis ↑ discovery/evidence depth</text>
+
+<g font-size="11">
+  <circle cx="160" cy="180" r="26" fill="#e2e8f0"/><text x="160" y="185" text-anchor="middle" font-weight="700" fill="#334155">QC</text><text x="160" y="150" text-anchor="middle" font-weight="600" fill="#334155">QCipher / QryptoCyber</text>
+  <circle cx="255" cy="220" r="26" fill="#fef3c7"/><text x="255" y="225" text-anchor="middle" font-weight="700" fill="#92400e">SF</text><text x="255" y="190" text-anchor="middle" font-weight="600" fill="#92400e">SandboxAQ / PQShield</text>
+  <circle cx="200" cy="330" r="26" fill="#fee2e2"/><text x="200" y="335" text-anchor="middle" font-weight="700" fill="#991b1b">KF</text><text x="200" y="365" text-anchor="middle" font-weight="600" fill="#991b1b">Keyfactor / DigiCert</text>
+  <circle cx="380" cy="240" r="26" fill="#e0f2fe"/><text x="380" y="245" text-anchor="middle" font-weight="700" fill="#075985">IBM</text><text x="380" y="210" text-anchor="middle" font-weight="600" fill="#075985">IBM Quantum Safe</text>
+  <circle cx="300" cy="360" r="26" fill="#e2e8f0"/><text x="300" y="365" text-anchor="middle" font-weight="700" fill="#334155">QS</text><text x="300" y="390" text-anchor="middle" font-weight="600" fill="#334155">QuSecure</text>
+  <!-- Q-Trust -->
+  <circle cx="440" cy="290" r="34" fill="#0a675f" stroke="#5eead4" stroke-width="4"/><text x="440" y="283" text-anchor="middle" font-weight="800" fill="#ffffff" font-size="12">QT</text><text x="440" y="299" text-anchor="middle" font-size="8" fill="#ccfbf1">τ-b 0.807</text>
+  <text x="440" y="240" text-anchor="middle" font-weight="800" fill="#0a675f" font-size="12">Q-Trust</text>
+  <text x="440" y="256" text-anchor="middle" font-size="9" fill="#134e4a">open · verifiable · real-data ML</text>
+</g>
+
+<!-- Right: feature matrix -->
+<rect x="600" y="96" width="560" height="420" rx="14" fill="#ffffff" stroke="#e2e8f0"/>
+<text x="620" y="126" font-size="14" font-weight="800" fill="#0f172a">Feature matrix (Aug 2026 research)</text>
+<g font-size="11">
+  <rect x="620" y="140" width="520" height="28" rx="6" fill="#f1f5f9"/>
+  <text x="632" y="159" font-weight="700" fill="#334155">Capability</text><text x="830" y="159" text-anchor="middle" font-weight="700" fill="#334155">Q-Trust</text><text x="920" y="159" text-anchor="middle" font-weight="700" fill="#334155">Keyfactor</text><text x="1010" y="159" text-anchor="middle" font-weight="700" fill="#334155">DigiCert</text><text x="1100" y="159" text-anchor="middle" font-weight="700" fill="#334155">IBM</text>
+  <text x="632" y="192" fill="#334155">Crypto discovery</text><text x="830" y="192" text-anchor="middle" fill="#16a34a">●</text><text x="920" y="192" text-anchor="middle" fill="#16a34a">●</text><text x="1010" y="192" text-anchor="middle" fill="#16a34a">●</text><text x="1100" y="192" text-anchor="middle" fill="#16a34a">●</text>
+  <text x="632" y="224" fill="#334155">CBOM (CycloneDX 1.7)</text><text x="830" y="224" text-anchor="middle" fill="#16a34a">●</text><text x="920" y="224" text-anchor="middle" fill="#94a3b8">◐</text><text x="1010" y="224" text-anchor="middle" fill="#94a3b8">◐</text><text x="1100" y="224" text-anchor="middle" fill="#16a34a">●</text>
+  <text x="632" y="256" fill="#334155">ML migration planning</text><text x="830" y="256" text-anchor="middle" fill="#16a34a">●</text><text x="920" y="256" text-anchor="middle" fill="#94a3b8">◐</text><text x="1010" y="256" text-anchor="middle" fill="#94a3b8">◐</text><text x="1100" y="256" text-anchor="middle" fill="#94a3b8">◐</text>
+  <text x="632" y="288" fill="#334155">RL migration sequencing</text><text x="830" y="288" text-anchor="middle" fill="#16a34a">●</text><text x="920" y="288" text-anchor="middle" fill="#e2e8f0">○</text><text x="1010" y="288" text-anchor="middle" fill="#e2e8f0">○</text><text x="1100" y="288" text-anchor="middle" fill="#e2e8f0">○</text>
+  <text x="632" y="320" fill="#334155" font-weight="600">Verifiable on-chain evidence</text><text x="830" y="320" text-anchor="middle" fill="#0a675f" font-size="13">★</text><text x="920" y="320" text-anchor="middle" fill="#e2e8f0">○</text><text x="1010" y="320" text-anchor="middle" fill="#e2e8f0">○</text><text x="1100" y="320" text-anchor="middle" fill="#e2e8f0">○</text>
+  <text x="632" y="352" fill="#334155">Tamper-evident attestation</text><text x="830" y="352" text-anchor="middle" fill="#0a675f" font-size="13">★</text><text x="920" y="352" text-anchor="middle" fill="#94a3b8">◐</text><text x="1010" y="352" text-anchor="middle" fill="#94a3b8">◐</text><text x="1100" y="352" text-anchor="middle" fill="#94a3b8">◐</text>
+  <text x="632" y="384" fill="#334155">Public verification portal</text><text x="830" y="384" text-anchor="middle" fill="#0a675f" font-size="13">★</text><text x="920" y="384" text-anchor="middle" fill="#e2e8f0">○</text><text x="1010" y="384" text-anchor="middle" fill="#e2e8f0">○</text><text x="1100" y="384" text-anchor="middle" fill="#e2e8f0">○</text>
+  <text x="632" y="416" fill="#334155">Open source + SDK</text><text x="830" y="416" text-anchor="middle" fill="#16a34a">●</text><text x="920" y="416" text-anchor="middle" fill="#e2e8f0">○</text><text x="1010" y="416" text-anchor="middle" fill="#e2e8f0">○</text><text x="1100" y="416" text-anchor="middle" fill="#94a3b8">◐</text>
+  <text x="632" y="448" fill="#334155">Enterprise integrations</text><text x="830" y="448" text-anchor="middle" fill="#94a3b8">◐</text><text x="920" y="448" text-anchor="middle" fill="#16a34a">●</text><text x="1010" y="448" text-anchor="middle" fill="#16a34a">●</text><text x="1100" y="448" text-anchor="middle" fill="#16a34a">●</text>
+  <text x="632" y="480" fill="#334155">External audit + public deploy</text><text x="830" y="480" text-anchor="middle" fill="#dc2626">△</text><text x="920" y="480" text-anchor="middle" fill="#16a34a">●</text><text x="1010" y="480" text-anchor="middle" fill="#16a34a">●</text><text x="1100" y="480" text-anchor="middle" fill="#16a34a">●</text>
+</g>
+
+<!-- Bottom band -->
+<rect x="40" y="540" width="1120" height="150" rx="14" fill="#0a675f"/>
+<text x="60" y="572" font-size="14" font-weight="800" fill="#ffffff">The gap is credibility, not capability</text>
+<g font-size="11" fill="#ccfbf1">
+  <text x="60" y="600">✓  Already ahead: verifiable evidence layer · real-data ML (τ-b 0.807) · open source · SDK</text>
+  <text x="60" y="624">▲  Close now: external audit → public Sepolia deployment → Safe+timelock → relayer KMS</text>
+  <text x="60" y="648">→  Then win on: PQC Passport · GitHub/Jira integrations · executive reports · top-131 report</text>
+  <text x="60" y="672" fill="#99f6e4">87% of orgs pursue PQC · only 7% deploy at scale (DigiCert 2026) — the window is now.</text>
+</g>
+</svg>

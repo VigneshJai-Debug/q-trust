@@ -63,6 +63,23 @@ real-data moat, technology adoption). New rendered design images in
 `docs/design/`: `architecture_target.svg`, `dashboard_mockup.svg` (Quantum
 Security Control Center), `verify_page_mockup.svg`, `roadmap.svg`.
 
+### Specialist sub-audit + PQC Passport + competitive positioning (2026-08-29)
+
+- **`docs/SPECIALIST_AUDIT.md`** — nine specialized sub-agent reviews
+  (contracts, backend/indexer, frontend/UX, ML/planner, SDK, DevOps,
+  compliance, data/moat, competitive), each with code-verified findings and
+  prioritized actions. Verified in this pass: the indexer already has reorg
+  rewinding, `verify.ts` has SSRF guards, the copilot is honestly
+  deterministic-evidence-first, and 207 Foundry tests are present.
+- **New design images** in `docs/design/`: `passport_mockup.svg` (PQC
+  Passport — readiness score, attestation history, vendor evidence) and
+  `competitive_positioning.svg` (2×2 market map + feature matrix vs
+  Keyfactor / DigiCert Quantum Central / IBM Quantum Safe).
+- Research refresh: NIST IR 8547 (deprecate 2030 / disallow 2035), CNSA 2.0
+  (2027 vendor requirement), FIPS 140-2 sunset (Sep 2026), W3C VC 2.1 +
+  BBS+ selective disclosure, and market stats (87% pursue PQC, 7% deploy at
+  scale — DigiCert 2026) inform the roadmap.
+
 ### HPO real objectives + QTrace-FM real loss (2026-08-29)
 
 - **HPO no longer scores dummy/random objectives.** `planner/qtrust_planner/hpo.py`
