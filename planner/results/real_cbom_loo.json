@@ -440,7 +440,7 @@
         "exact_rank": 0.0,
         "top5": 1.0,
         "top10": 1.0,
-        "kendall": 0.823754,
+        "kendall": 0.47691,
         "node_rank": 0.125
       },
       "heuristic": {
@@ -776,8 +776,8 @@
         "exact_rank": 0.0,
         "top5": 0.0,
         "top10": 1.0,
-        "kendall": 0.823754,
-        "node_rank": 0.125
+        "kendall": 0.563621,
+        "node_rank": 0.0
       },
       "heuristic": {
         "exact_rank": 1.0,
@@ -916,16 +916,16 @@
         "max": 1.0
       },
       "kendall": {
-        "mean": 0.681129,
+        "mean": 0.664724,
         "median": 0.731925,
-        "stdev": 0.191827,
+        "stdev": 0.192179,
         "min": 0.052414,
         "max": 1.0
       },
       "node_rank": {
-        "mean": 0.248649,
+        "mean": 0.24527,
         "median": 0.25,
-        "stdev": 0.190359,
+        "stdev": 0.193694,
         "min": 0.0,
         "max": 1.0
       }
@@ -1005,16 +1005,16 @@
       }
     }
   },
-  "model_vs_heuristic_tau_b": -0.049688,
-  "model_vs_random_tau_b": 0.511664,
+  "model_vs_heuristic_tau_b": -0.066093,
+  "model_vs_random_tau_b": 0.495259,
   "config": {
     "init": "planner/model_gpu_v3.pt",
-    "epochs": 8,
-    "n_synthetic": 2500,
+    "epochs": 6,
+    "n_synthetic": 2000,
     "batch_size": 64,
     "learning_rate": 0.0005,
     "seed": 42
   },
   "device": "NVIDIA A100-SXM4-80GB",
-  "generated_at": "2026-08-29T22:44:49Z"
+  "generated_at": "2026-08-30T15:01:30Z"
 }

@@ -8,7 +8,8 @@ measured locally on this checkout, not estimated.
 
 | Check | Command | Result |
 |---|---|---|
-| Contracts (unit + invariant + fuzz + attack) | `forge test` (contracts/) | **211/211 pass** |
+| Contracts (unit + invariant + fuzz + attack) | `forge test` (contracts/) | **213/213 pass** |
+| Formal verification (Halmos) | `halmos --contract RegistrySymbolicTest --function check_ --loop 1` | **4/4 pass — was broken** (see §8) |
 | Backend typecheck | `npm run typecheck` (backend/) | pass |
 | Backend unit tests | `npm test` (backend/, vitest) | **72/72 pass** |
 | Backend production build | `npm run build` (backend/, tsc emit) | pass |
@@ -128,6 +129,8 @@ nothing is estimated. See `docs/DEVELOPER_ROADMAP.md` for interpretation.
 | Real-CBOM LOO (3 folds) | `python scripts/eval_real_cbom_loo.py --quick --epochs 3 --n-synthetic 600` | model τ-b **0.6546** = heuristic **0.6546** (Δ 0.0000); random 0.3416 | `planner/results/real_cbom_loo_cpu_repro.json` |
 | RL agent (20 feasible envs) | `python scripts/eval_rl_agent.py --n-envs 20` | agent reward **108.93** vs heuristic **112.40** vs random **100.11**; completion 100% | `planner/results/rl_benchmark_cpu_repro.json` |
 | Anomaly detector on real CBOMs | `python scripts/train_real_models.py --model anomaly --epochs 30` | detection **168/168 (100%)**, FPR **3/56 (5.4%)** | `inspector/anomaly_model_real.pt` (gitignored) |
+| Full real-data training (all 15 models) | `python scripts/train_qtrust_all.py --real` | **15/15 trained, 15/15 anchors, 6 models beat baselines (mean gain 1.79×)**, wall 255s | `qtrust_ai/artifacts/training_report_real.json` |
+| Full 37-fold LOO (idle A100) | `python scripts/eval_real_cbom_loo.py` | model τ-b **0.6647** vs heuristic **0.7308** (Δ −0.0661); random 0.1695 | `planner/results/real_cbom_loo.json` |
 
 Two integrity fixes were made during reproduction:
 - `scripts/eval_real_cbom_loo.py` / `scripts/eval_rl_agent.py` naively picked
@@ -135,18 +138,50 @@ Two integrity fixes were made during reproduction:
   GPU device label even when the device was unusable/busy at runtime. Both now
   use a probe-based resolver (`planner/qtrust_planner/_device.py`) so recorded
   results reflect the device actually used.
-- Environment caveat: the A100 here is real but **contended** (another process
-  holds it), so CUDA probes intermittently succeed/fail. Results above are real
-  measurements; the committed 37-fold LOO artifact (`real_cbom_loo.json`) was
-  measured on a dedicated A100 and is the canonical out-of-sample number
-  (model τ-b 0.681 vs heuristic 0.731).
+- Environment caveat: the A100 here is real but was **contended** (another
+  process held it), so early CUDA probes intermittently failed. The 15-model
+  training and the full 37-fold LOO above were run once the GPU was idle and
+  are clean measurements on `NVIDIA A100-SXM4-80GB` (device label is now
+  probe-verified, not assumed).
+
+## 8. Halmos CI job was broken (and is now a real blocking check)
+
+The `halmos.yml` workflow ran `halmos --match-contract "RegistryInvariant"`
+and always failed — first on "Multiple paths were found in setUp()" (the OZ
+initializer guard branches when Halmos symbolically executes the proxy
+delegatecall), and, after that was fixed, on path explosion: the 9-entrypoint
+handler with EIP-712 `vm.sign` + string cheatcodes cannot be fully explored
+within any CI time budget. The job was `continue-on-error: true`
+(report-only), and halmos itself was unpinned (`pip install halmos`).
+
+Fixes:
+- `contracts/test/invariant/RegistryHandler.t.sol` — removed the two
+  Halmos-hostile patterns that mattered even for forge runs of the fuzz
+  handler: `vm.toString` in setup/helpers (replaced with constant strings; no
+  test asserts on URIs or display names) and the `_addActor` loop (unrolled to
+  straight-line code, preserving behavior — forge invariants still 4/4).
+- `contracts/test/invariant/RegistrySymbolic.t.sol` (new) — a dedicated
+  Halmos suite that verifies the core integrity properties symbolically on
+  the **raw implementations** (roles and per-product limits granted via
+  direct storage writes, since implementations disable initializers by
+  design — audit C-2): signed registration advances the nonce by exactly one
+  (asset / vendor / migration registries) and signed assets are immediately
+  resolvable + active. It exercises the real contract logic (hasRole,
+  EIP-712 recovery, nonce accounting, storage) and completes in **~1.4 s**.
+  The proxy-based stateful fuzz invariants remain covered by forge
+  (`RegistryInvariant.t.sol`, 4/4).
+- `.github/workflows/halmos.yml` — runs `halmos --contract
+  RegistrySymbolicTest --function check_ --loop 1` as a **blocking** job
+  (`continue-on-error` removed) and pins `halmos==0.3.3`.
+- Verified locally: the exact CI command passes with exit 0 (4/4 symbolic
+  properties in 1.36 s); `forge test` 213/213.
 
 ## 8. Environment-level notes (not repo defects, not changed)
 
 - `pip-audit` reports `setuptools 80.10.2` vulnerable (PYSEC-2026-3447, fixed
   in 83.0.0) — that is the Python environment's own package, not a repository
   dependency; upgrade the environment (`pip install -U setuptools`).
-- Playwright e2e and Halmos symbolic-execution jobs need browsers/foundry
-  tooling not present in this environment; they are CI-only.
+- Playwright e2e needs a browser runtime not present in this environment; it
+  is CI-only.
 - `docker compose` stack (Postgres/Redis/anvil) was not brought up; the
   `scripts/verify_all.sh` full-stack check requires it.

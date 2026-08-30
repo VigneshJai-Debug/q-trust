@@ -71,17 +71,25 @@ contract RegistryHandler is Test {
 
         // Each actor owns a dedicated asset so migrations respect the
         // ownership rule (audit M-1): recordMigration* must only be invoked
-        // with an asset owned by the recording org.
-        for (uint256 i = 0; i < actors.length; i++) {
-            vm.prank(actors[i]);
-            bytes32 owned = assets.registerCBOM(
-                keccak256(abi.encode("owned-cbom", actors[i])),
-                "ipfs://QmOwned"
-            );
-            _assetOf[actors[i]] = owned;
-            seenAssetId[owned] = true;
-            _createdAssetIds.push(owned);
-        }
+        // with an asset owned by the recording org. Unrolled — Halmos treats
+        // loops as symbolic path joins ("Multiple paths were found in
+        // setUp()"), so setup must be straight-line code.
+        vm.prank(actors[0]);
+        _assetOf[actors[0]] = _registerOwned(actors[0]);
+        vm.prank(actors[1]);
+        _assetOf[actors[1]] = _registerOwned(actors[1]);
+        vm.prank(actors[2]);
+        _assetOf[actors[2]] = _registerOwned(actors[2]);
+    }
+
+    function _registerOwned(address actor) internal returns (bytes32) {
+        bytes32 owned = assets.registerCBOM(
+            keccak256(abi.encode("owned-cbom", actor)),
+            "ipfs://QmOwned"
+        );
+        seenAssetId[owned] = true;
+        _createdAssetIds.push(owned);
+        return owned;
     }
 
     function _ownedAsset(address actor) internal view returns (bytes32) {
@@ -94,7 +102,9 @@ contract RegistryHandler is Test {
         _keyOfActor[actor] = key_;
 
         assets.grantRole(assets.REGISTRAR_ROLE(), actor);
-        vendors.registerVendor(actor, _shortName(actors.length - 1), "ipfs://QmVendor");
+        // Constant name (no vm.toString): Halmos does not support the
+        // toString cheatcode, and no test depends on the vendor display name.
+        vendors.registerVendor(actor, "Vendor", "ipfs://QmVendor");
         migrations.grantRole(migrations.MIGRATOR_ROLE(), actor);
     }
 
@@ -309,16 +319,15 @@ contract RegistryHandler is Test {
         return actors[seed % actors.length];
     }
 
-    function _uri(uint256 salt) internal pure returns (string memory) {
-        return string.concat("ipfs://Qm", vm.toString(bound(salt, 0, 1e12)));
+    // Constant strings: Halmos does not support vm.toString, and no test
+    // asserts on metadata URIs or product IDs. Uniqueness comes from the
+    // salt-derived cbomHash/productKey dedup keys, not the strings.
+    function _uri(uint256) internal pure returns (string memory) {
+        return "ipfs://QmC";
     }
 
-    function _productId(uint256 salt) internal pure returns (string memory) {
-        return string.concat("Prod-", vm.toString(bound(salt, 0, 1e12)));
-    }
-
-    function _shortName(uint256 i) internal pure returns (string memory) {
-        return string.concat("Vendor-", vm.toString(i));
+    function _productId(uint256) internal pure returns (string memory) {
+        return "Prod-C";
     }
 
     function _signCBOM(

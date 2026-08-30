@@ -7,9 +7,9 @@
       "n": 2764,
       "qtrust": {
         "baseline": "qtrust (rules+AST+ML ensemble)",
-        "precision": 0.9696,
-        "recall": 0.7303,
-        "f1": 0.8331,
+        "precision": 0.9216,
+        "recall": 0.7732,
+        "f1": 0.8409,
         "accuracy": 0.8198
       },
       "baselines": [
@@ -36,7 +36,7 @@
         }
       ],
       "best_baseline": "majority (always crypto)",
-      "relative_gain": 0.093
+      "relative_gain": 0.1033
     },
     {
       "model": "discovery/CryptoCodeDetector",
@@ -158,6 +158,6 @@
   "summary": {
     "comparisons_run": 7,
     "models_beat_best_baseline": 6,
-    "mean_relative_gain": 1.7921
+    "mean_relative_gain": 1.7936
   }
 }

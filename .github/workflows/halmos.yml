@@ -1,12 +1,21 @@
 name: Formal Verification (Halmos)
 
-# Symbolically executes contract properties with Halmos.
+# Symbolically executes the core registry integrity properties with Halmos.
 #
-# STATUS: experimental / non-blocking. The full RegistryHandler setUp
-# currently trips Halmos' concretize-paths pass ("Multiple paths were found
-# in setUp()" — the OZ initializer stack contains internal branching that
-# halmos 0.3 cannot flatten). This job therefore runs in report-only mode;
-# flip continue-on-error to false once the setup is halmos-clean.
+# Scope note: the full stateful RegistryHandler setUp deploys the registries
+# behind ERC1967Proxies, and Halmos cannot flatten the OZ initializer guard's
+# internal branch ("Multiple paths were found in setUp()"), nor explore the
+# 9-entrypoint handler within a CI time budget. The stateful fuzz invariants
+# therefore run under forge (test/invariant/RegistryInvariant.t.sol).
+#
+# RegistrySymbolic.t.sol instead deploys the raw implementations (roles and
+# per-product limits granted via direct storage writes, since the
+# implementations disable initializers by design — audit C-2) and verifies:
+#   A. every signed registration advances the signer's nonce by exactly one
+#      (asset / vendor / migration registries),
+#   B. a signed registration is immediately resolvable and active.
+# This exercises the real registry logic (hasRole/onlyRole, EIP-712
+# recovery, nonce accounting, storage) symbolically in ~1s.
 
 on:
   push:
@@ -26,7 +35,6 @@ permissions:
 jobs:
   halmos:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -36,10 +44,10 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install Halmos
-        run: pip install halmos
+        run: pip install halmos==0.3.3
       - name: Build contracts
         run: forge build
         working-directory: contracts
-      - name: Run Halmos (report-only)
-        run: halmos --match-contract "RegistryInvariant" --loop 1 --invariant-depth 2
+      - name: Run Halmos symbolic checks
+        run: halmos --contract RegistrySymbolicTest --function check_ --loop 1
         working-directory: contracts

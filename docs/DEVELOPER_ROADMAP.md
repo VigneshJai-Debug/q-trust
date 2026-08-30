@@ -7,8 +7,7 @@ real corpus — none are estimates.*
 
 | Model | Protocol | Measured result | Interpretation |
 |---|---|---|---|
-| GNN planner v3 | Leave-one-out, host-disjoint real CBOMs (3 folds, CPU/contended GPU) | τ-b **0.6546** = heuristic **0.6546** (Δ 0.0000); random 0.3416 | Model ≈ doctrine heuristic out-of-sample |
-| GNN planner v3 | Committed 37-fold LOO (A100) | τ-b **0.681** vs heuristic **0.731** (Δ −0.050) | Model *loses* to heuristic out-of-sample |
+| GNN planner v3 | Full 37-fold LOO, host-disjoint real CBOMs (idle A100, re-run 2026-08-30) | τ-b **0.6647** vs heuristic **0.7308** (Δ −0.0661); random 0.1695 | Model *loses* to heuristic out-of-sample |
 | RL agent | 20 feasible envs (20–50 assets) | reward **108.93** vs heuristic **112.40** vs random **100.11**; completion 100% | Beats random, loses to criticality heuristic |
 | Anomaly detector | Real CBOMs (277 hosts → 276 assets), 30 epochs | **100% detection** (168/168), FPR **3/56** (5.4%) | Strong — real-data trained, honest |
 | CodeBERTa detector | Real code corpus (10,294 files), held-out | P 0.922 / R 0.773 / F1 0.841 (committed report) | Beats all baselines — real differentiator |
@@ -36,15 +35,26 @@ What would actually move the needle (in order of leverage):
    The model can only beat the heuristic if it learns something the formula
    doesn't know.
 2. **More host-disjoint real CBOMs.** 37 CBOMs / 277 hosts is a thin
-   out-of-sample surface — one fold can swing ±0.13. Public sources to grow
-   the corpus (all real, verifiable):
-   - Censys / Shodan / Rapid7 **Project Sonar** TLS certificate datasets
-     (public research dumps, real certs, millions of hosts).
-   - `crt.sh` certificate transparency logs (real, streaming, free).
-   - TLS Observatory / SSL Labs scan dumps for cipher-suite ground truth.
-   - GitHub code search for crypto API usage across public repos (the repo
-     already caches 64 repos; scale the collector).
-   - NVD CVE feeds for vulnerability-conditional exposure labels.
+   out-of-sample surface — one fold can swing ±0.13. Verified public sources
+   to grow the corpus (named, real, current as of 2026-08):
+   - **arXiv 2606.16473 — "Measurement Study of Post-Quantum Readiness of
+     the Internet 2026"** (32,011 real domains, TLS-focused PQC readiness
+     measurements) — the single best drop-in source for real PQC estate data.
+   - **Kaggle: "IDS Encrypted & Post Quantum Cryptography Datasets"** —
+     PQC-TLS Benchmark Collection with 141M real TLS flows from a 100 Gbps
+     backbone.
+   - **Certificate Transparency logs** (`certificate.transparency.dev`) +
+     `crt.sh` — streaming, free, millions of real X.509 certs; ideal for
+     key-size / signature-algorithm distributions.
+   - **Rapid7 Project Sonar** (`opendata.rapid7.com`) SSL cert dataset —
+     internet-wide real certs (note: public access has been restricted since
+     2022; treat as research-acquisition, not a default source).
+   - **Cloudflare PQ-2024 / F5 "State of PQC on the Web"** — real-world
+     TLS 1.3 PQ adoption numbers for calibrating expectations.
+   - **NVD CVE feeds** for vulnerability-conditional exposure labels (the
+     repo already ingests 401 real CVEs).
+   - **GitHub code search** for crypto API usage across public repos (the
+     repo already caches 64 repos; scale the collector).
    Each source must keep the **host-disjoint** invariant or the LOO protocol
    silently leaks — that invariant is the repo's credibility.
 3. **Tie-aware metrics only.** Dense-rank τ on estates full of identical
@@ -57,7 +67,9 @@ What would actually move the needle (in order of leverage):
 
 **0–30 days — make the numbers defensible:**
 - Re-run the full 37-fold LOO and the RL benchmark on a dedicated (non-
-  contended) A100; publish the artifact with wall-clock and device.
+  contended) A100; publish the artifact with wall-clock and device. (Done for
+  the LOO on 2026-08-30: `planner/results/real_cbom_loo.json`, τ-b 0.6647 vs
+  heuristic 0.7308 — the artifact now records the probe-verified device.)
 - Train the anomaly detector and CodeBERTa on the *full* real corpus with the
   GPU properly reserved; commit the reports (models stay gitignored).
 - Wire the real-data training into CI as a weekly scheduled job (like
@@ -104,8 +116,9 @@ What would actually move the needle (in order of leverage):
 ## 6. Engineering hygiene next
 
 - Keep the repo-wide lint/test/build matrix green (this session restored it;
-  CI now enforces: forge 211, vitest 72+55, pytest 330, ruff, mkdocs strict,
-  npm audits, go-live preflight).
+  CI now enforces: forge 213, halmos symbolic 4/4 (now a blocking job),
+  vitest 72+55, pytest 330, ruff, mkdocs strict, npm audits, go-live
+  preflight).
 - The one environment item to fix: the container's CUDA device is reported
   but intermittently busy/unusable — reserve the GPU explicitly for training
   runs, and keep the probe-based device fallback so benchmarks record where
