@@ -21,7 +21,6 @@ sys.path.insert(0, "qtrust")
 
 from qtrust.data.splits import repository_split
 from qtrust.evaluation.leakage import assert_no_leakage
-from qtrust.labeling.gold_builder import GoldSample, write_gold_dataset
 from qtrust.models.discovery.model import DiscoveryModel
 from qtrust.models.risk.model import RiskRankingModel, generate_qtrust_risk_bench
 from qtrust.models.graph.model import BlastRadiusGNN
@@ -63,7 +62,7 @@ def phase_risk() -> dict:
         assets = [{"algorithm": "RSA-2048", "internet_exposed": True, "data_lifetime_years": 12, "business_criticality": 5, "blast_radius": 16, "domain": "finance"}] * 100
     prefs = generate_qtrust_risk_bench(assets, n_pairs=5000, seed=42)
     m = RiskRankingModel(seed=42)
-    train = m.train(prefs[:4000])
+    m.train(prefs[:4000])
     eval_res = m.evaluate(prefs[4000:])
     print(f"[risk] pairwise_acc={eval_res['pairwise_accuracy']:.3f} τ={eval_res['kendall_tau']:.3f} n={eval_res['n']} (expert labels, not heuristic)")
     return eval_res

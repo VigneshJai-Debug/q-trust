@@ -74,7 +74,6 @@ def solve(tasks: List[MigrationTask], constraints: Dict[str, Any] | None = None)
 
 def benchmark(tasks: List[MigrationTask], constraints: Dict[str, Any]) -> Dict[str, Any]:
     """Compare heuristic vs CP-SAT vs RL vs human on same unseen scenario (QTRUST-005)."""
-    from qtrust.models.risk.model import RiskRankingModel
 
     # Heuristic: sort by heuristic priority formula (would be data_generator heuristic)
     heuristic_order = sorted(tasks, key=lambda t: t.risk_reduction, reverse=True)

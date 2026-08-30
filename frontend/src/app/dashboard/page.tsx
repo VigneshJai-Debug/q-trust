@@ -109,7 +109,7 @@ function DashboardInner() {
       <div className="mx-auto max-w-md py-24 text-center">
         <h1 className="text-xl font-bold text-slate-900">Welcome to Q-Trust</h1>
         <p className="mt-3 text-sm text-slate-600">
-          Your wallet is connected, but you haven't registered any assets yet.
+          Your wallet is connected, but you haven&rsquo;t registered any assets yet.
         </p>
         <div className="mt-6 space-y-3">
           <Link
@@ -123,7 +123,7 @@ function DashboardInner() {
             <Link href="/vendors" className="text-qtrust-600 hover:underline">
               vendor portal
             </Link>{" "}
-            if you're a vendor.
+            if you&rsquo;re a vendor.
           </p>
         </div>
       </div>

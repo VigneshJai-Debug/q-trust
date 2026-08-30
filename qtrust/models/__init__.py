@@ -13,11 +13,15 @@ from .digital_twin import DigitalTwin
 
 __all__ = [
     "DiscoveryModel",
+    "DiscoveryPrediction",
     "RiskRankingModel",
+    "generate_qtrust_risk_bench",
     "BlastRadiusGNN",
     "MigrationCostPredictor",
+    "mine_git_history",
     "MigrationFailurePredictor",
     "predict_interop",
+    "InteropRequest",
     "TemporalGNN",
     "evaluate_what_if",
     "DigitalTwin",

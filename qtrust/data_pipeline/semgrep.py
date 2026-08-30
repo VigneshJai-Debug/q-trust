@@ -3,10 +3,9 @@ Semgrep + dependency analysis — §4 complement to CodeQL.
 """
 from __future__ import annotations
 
-import json
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 
 SEMGREP_RULES = {

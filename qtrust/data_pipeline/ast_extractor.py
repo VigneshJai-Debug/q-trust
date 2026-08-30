@@ -6,7 +6,6 @@ Combines static lexical (A), API calls (B), AST (C), dependency graph (D), dataf
 from __future__ import annotations
 
 import ast
-import re
 from pathlib import Path
 from typing import Any, Dict, List
 

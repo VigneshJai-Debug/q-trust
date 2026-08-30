@@ -1,12 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 
+const emptySubscribe = (): (() => void) => () => {};
+
+/**
+ * Returns false during server render and hydration, true after mount.
+ * Implemented as a stable external-store read so wagmi/RainbowKit (and derived
+ * role lookups) only run on the client without the set-state-in-effect anti-
+ * pattern that cascading renders away.
+ */
 export function useMounted(): boolean {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  return mounted;
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => true, // client snapshot
+    () => false, // server snapshot
+  );
 }
 
 interface WalletGateProps {

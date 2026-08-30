@@ -2,13 +2,13 @@
   "name": "qtrust-frontend",
   "version": "2.2.0",
   "private": true,
-  "description": "Q-Trust frontend \u2014 verification page, org dashboard, vendor portal.",
+  "description": "Q-Trust frontend — verification page, org dashboard, vendor portal.",
   "license": "MIT",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "playwright test"
   },
@@ -32,6 +32,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
+    "@next/eslint-plugin-next": "^16.3.3",
     "@playwright/test": "^1.62.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -39,6 +40,8 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^6.1.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.3",
     "jsdom": "^29.1.1",
     "typescript": "^5.5.0",
     "vitest": "^4.1.11"

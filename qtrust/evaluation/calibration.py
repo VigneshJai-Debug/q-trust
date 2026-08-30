@@ -23,7 +23,7 @@ def platt_scale(logits: List[float], labels: List[int]) -> List[float]:
     # For now, sigmoid
     import math
 
-    return [1 / (1 + math.exp(-l)) for l in logits]
+    return [1 / (1 + math.exp(-logit)) for logit in logits]
 
 
 def calibration_report(probs: List[float], labels: List[int]) -> dict:

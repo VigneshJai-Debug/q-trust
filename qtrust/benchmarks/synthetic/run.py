@@ -11,13 +11,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "planner"))
 from qtrust_planner.data_generator import generate_dataset
-from qtrust_planner.train_gpu import compute_metrics
 
 
 def run_synthetic(n_graphs: int = 1000, seed: int = 999) -> dict:
     ds = generate_dataset(n_graphs=n_graphs, seed=seed)
-    taus = []
-    for data in ds[:100]:
-        # Dummy heuristic vs true rank would be computed; here placeholder
-        pass
-    return {"level": "synthetic", "n": n_graphs, "note": "synthetic only — not proof of superiority (§31)"}
+    return {
+        "level": "synthetic",
+        "n": n_graphs,
+        "graphs": len(ds),
+        "note": "synthetic only — not proof of superiority (§31)",
+    }

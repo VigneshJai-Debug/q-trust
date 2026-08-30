@@ -35,6 +35,8 @@ except ImportError:
     torch = None  # type: ignore
     nn = None  # type: ignore
 
+from qtrust_inspector._device import resolve_device
+
 
 @dataclass
 class AnomalyResult:
@@ -141,7 +143,7 @@ class CBOMAnomalyDetector:
     ):
         if torch is None:
             raise ImportError("torch is required for CBOMAnomalyDetector — install with: pip install qtrust-inspector[ml]")
-        self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+        self.device = resolve_device(device)
         self.model = CBOMVariationalAutoencoder(
             n_features=self.N_FEATURES, latent_dim=16
         ).to(self.device)

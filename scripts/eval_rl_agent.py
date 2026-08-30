@@ -38,6 +38,7 @@ import sys  # noqa: E402
 
 sys.path.insert(0, str(ROOT / "planner"))
 
+from qtrust_planner._device import resolve_device  # noqa: E402
 from qtrust_planner.rl_agent import (  # noqa: E402
     MigrationAgent,
     MigrationEnvironment,
@@ -118,7 +119,7 @@ def main() -> None:
     parser.add_argument("--json-out", type=str, default=None)
     args = parser.parse_args()
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = str(resolve_device())  # probe-based; never label GPU numbers we didn't measure on GPU
     agent = MigrationAgent(n_features=6, hidden_dim=128)
     sd = torch.load(args.model_path, map_location="cpu", weights_only=True)
     agent.load_state_dict(sd)

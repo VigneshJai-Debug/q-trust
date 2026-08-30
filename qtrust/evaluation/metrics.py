@@ -13,7 +13,7 @@ Tuned for: minimize critical missed vulns (Recall@Critical ≥97%, §34-35).
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, List, Tuple
+from typing import Dict, List
 
 import numpy as np
 

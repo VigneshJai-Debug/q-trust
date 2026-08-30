@@ -91,7 +91,7 @@ function VendorsInner() {
       <div className="mx-auto max-w-md py-24 text-center">
         <h1 className="text-xl font-bold text-slate-900">Welcome to Q-Trust Vendor Portal</h1>
         <p className="mt-3 text-sm text-slate-600">
-          Your wallet is connected, but you're not registered as a vendor yet.
+          Your wallet is connected, but you&rsquo;re not registered as a vendor yet.
         </p>
         <div className="mt-6 space-y-3">
           <Link
@@ -105,7 +105,7 @@ function VendorsInner() {
             <Link href="/dashboard" className="text-qtrust-600 hover:underline">
               org dashboard
             </Link>{" "}
-            if you're an organization.
+            if you&rsquo;re an organization.
           </p>
         </div>
       </div>

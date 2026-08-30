@@ -14,7 +14,9 @@ Current: 277 hosts → 37 CBOMs (prototype). This script:
 Usage:
     python scripts/expand_real_cbom.py --target 1000 --workers 32 --out qtrust_data/gold/cboms
 """
-import argparse, json, sys
+import argparse
+import json
+import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))

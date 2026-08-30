@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from qtrust.data.splits import repository_split
-from qtrust.labeling.weak import apply_lfs
 from qtrust.data_pipeline.ast_extractor import extract_signals
 
 
@@ -87,8 +86,6 @@ class DiscoveryModel:
         return {"train": len(train), "val": len(val), "note": "weak→train, gold→val, repo-split"}
 
     def evaluate(self, dataset: List[Dict[str, Any]]) -> Dict[str, Any]:
-        from collections import Counter
-        from qtrust.benchmarks.adversarial.run import generate_adversarial
 
         y_true, y_pred = [], []
         for ex in dataset:

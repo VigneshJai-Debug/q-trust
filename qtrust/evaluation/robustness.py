@@ -5,7 +5,7 @@ Tests model on obfuscated, aliased, wrapped, dynamic import samples.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from qtrust.benchmarks.adversarial.run import generate_adversarial
 

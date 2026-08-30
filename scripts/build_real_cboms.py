@@ -119,12 +119,11 @@ def build_cboms(
     # and risk scoring see the real key, not the cert's signature wrapper.
     def _normalize_algorithm(asset: dict) -> dict:
         kt = str(asset.get("key_type") or "").lower()
-        alg = (asset.get("algorithm") or "").lower()
         ks = asset.get("key_size")
         out = dict(asset)
         if "ecpublic" in kt or kt.startswith("ec"):
             n = int(ks) if ks else 256
-            out["algorithm"] = f"ECDSA-P{n}" if n in (256, 384, 521) else f"ECDSA-P256"
+            out["algorithm"] = f"ECDSA-P{n}" if n in (256, 384, 521) else "ECDSA-P256"
             out["_sig_algorithm"] = asset.get("algorithm")
         elif "rsapublic" in kt or kt == "rsa":
             n = int(ks) if ks else 2048

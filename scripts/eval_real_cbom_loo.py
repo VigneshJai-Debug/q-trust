@@ -54,7 +54,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "planner"))
 
-from qtrust_planner.benchmark import heuristic_order, mean_metrics, random_order, score_order  # noqa: E402
+from qtrust_planner._device import resolve_device  # noqa: E402
+from qtrust_planner.benchmark import heuristic_order, random_order, score_order  # noqa: E402
 from qtrust_planner.data_generator import cbom_to_dependency_graph  # noqa: E402
 from qtrust_planner.train_gpu import train_gpu  # noqa: E402
 
@@ -96,7 +97,9 @@ def run_loo(
     """Run leave-one-out real-CBOM evaluation. Returns the full report dict."""
     import torch
 
-    device = torch.device(device_name or ("cuda" if torch.cuda.is_available() else "cpu"))
+    # Probe-based resolution: a reported-but-unusable CUDA device (contended
+    # or absent driver) must not silently mislabel results as GPU-measured.
+    device = resolve_device(device_name)
     graphs = load_real_graphs(cbom_dir, seed=seed)
     if quick:
         graphs = graphs[:3]

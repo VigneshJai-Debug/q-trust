@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { CHAIN, CONTRACTS } from "@/lib/config";
 import { API_BASE_URL } from "@/lib/api";
+import { useMounted } from "@/components/wallet-gate";
 import { ShieldCheckIcon, ChartBarIcon, DocumentCheckIcon, BeakerIcon, CpuChipIcon, ClockIcon } from "@/app/icons";
 
 function useCountUp(target: number, duration = 1100, enabled = true): number {
@@ -124,10 +125,9 @@ export function StatsTicker() {
 export function PublicStatsClient() {
   const [health, setHealth] = useState<{ status: string; chain_id: number; relayer: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useMounted();
 
   useEffect(() => {
-    setMounted(true);
     let cancelled = false;
     const ctrl = new AbortController();
     fetch(`${API_BASE_URL.replace(/\/$/, "")}/health`, { signal: ctrl.signal, cache: "no-store" })

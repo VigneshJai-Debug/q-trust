@@ -39,6 +39,8 @@ except ImportError:
     torch = None  # type: ignore
     nn = None  # type: ignore
 
+from qtrust_inspector._device import resolve_device
+
 
 # ---------------------------------------------------------------------------
 # Model
@@ -269,7 +271,7 @@ class SideChannelAnalyzer:
         trace_length: int = 1000,
         device: Optional[str] = None,
     ):
-        self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+        self.device = resolve_device(device)
         self.trace_length = trace_length
         self.model = SideChannelDetector(trace_length=trace_length).to(self.device)
         self._calibration: Optional[dict] = None
