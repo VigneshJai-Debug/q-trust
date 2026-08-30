@@ -46,6 +46,8 @@ try {
   redis.connect().catch(() => { console.warn("Redis unavailable — webhook subscriptions disabled"); redis = null; });
 } catch { redis = null; }
 
+// REG-14: API returns JSON, not HTML — CSP false is intentional for /docs Swagger UI.
+// Frontend (Next.js) enforces strict CSP via next.config.js (QTRUST-014).
 await server.register(helmet, { contentSecurityPolicy: false, hsts: { maxAge: 15552000 } });
 server.register(cors, { origin: CORS_ORIGINS.includes("*") ? true : CORS_ORIGINS, methods: ["GET", "POST", "OPTIONS"] });
 

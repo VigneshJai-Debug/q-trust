@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qtrust-inspector"
-version = "1.1.0"
+version = "2.2.0"
 description = "Multi-language cryptographic inventory & post-quantum risk scanner producing CycloneDX CBOMs, SARIF findings, compliance scoring (NIST/CNSA/PCI/BSI/NCSC/ASD), PCAP & network-log HNDL analysis, and migration roadmaps."
 readme = "README.md"
 requires-python = ">=3.10"

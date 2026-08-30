@@ -90,7 +90,7 @@ def validate_scan_cidr(cidr: str, allow_private: bool = False) -> None:
 # Map of algorithms to their post-quantum readiness status.
 PQC_ALGORITHMS = {
     "ML-KEM-512", "ML-KEM-768", "ML-KEM-1024",
-    "ML-DSA-441", "ML-DSA-659", "ML-DSA-877",
+    "ML-DSA-44", "ML-DSA-65", "ML-DSA-87",
     "SLH-DSA-SHA2-128s", "SLH-DSA-SHA2-128f", "SLH-DSA-SHA2-192s",
     "SLH-DSA-SHA2-192f", "SLH-DSA-SHA2-256s", "SLH-DSA-SHA2-256f",
     "HQC-128", "HQC-192", "HQC-256",

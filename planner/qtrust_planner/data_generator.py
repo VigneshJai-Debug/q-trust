@@ -57,9 +57,9 @@ ALGORITHM_POOL = [
     ("ML-KEM-512", "ML-KEM", 512),
     ("ML-KEM-768", "ML-KEM", 768),
     ("ML-KEM-1024", "ML-KEM", 1024),
-    ("ML-DSA-441", "ML-DSA", 441),
-    ("ML-DSA-659", "ML-DSA", 659),
-    ("ML-DSA-877", "ML-DSA", 877),
+    ("ML-DSA-44", "ML-DSA", 44),
+    ("ML-DSA-65", "ML-DSA", 65),
+    ("ML-DSA-87", "ML-DSA", 87),
 ]
 
 

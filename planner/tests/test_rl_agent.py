@@ -126,7 +126,7 @@ REAL_CBOM = {
          "criticality": "critical", "expired": False, "not_after": "2027-01-01T00:00:00+00:00"},
         {"host": "mail.example.edu", "algorithm": "ECDSA-P256", "key_size": 256,
          "criticality": "high"},
-        {"host": "vpn.example.edu", "algorithm": "ML-DSA-659", "key_size": 659,
+        {"host": "vpn.example.edu", "algorithm": "ML-DSA-65", "key_size": 65,
          "criticality": "medium"},
     ],
 }
@@ -136,7 +136,7 @@ def test_from_cbom_pins_real_assets():
     env = MigrationEnvironment.from_cbom(REAL_CBOM, seed=7)
     env.reset()
     assert env.n_assets == 3
-    assert [a["algorithm"] for a in env.assets] == ["RSA-2048", "ECDSA-P256", "ML-DSA-659"]
+    assert [a["algorithm"] for a in env.assets] == ["RSA-2048", "ECDSA-P256", "ML-DSA-65"]
     # PQC asset is detected as ready; classical ones are not.
     assert env.assets[2]["pqc_ready"] is True
     assert env.assets[0]["pqc_ready"] is False

@@ -41,8 +41,7 @@ jobs:
             --output scan-${{ matrix.language }}.sarif \
             --cyclonedx cbom-${{ matrix.language }}.json \
             --risk \
-            --compliance all \
-            || true
+            --compliance all
 
       - name: Upload SARIF to GitHub Security
         if: always()
@@ -67,8 +66,7 @@ jobs:
             --output results.json \
             --risk \
             --compliance cnsa-2.0 \
-            --ci-gate high \
-            || echo "::warning::PQC compliance gate found findings"
+            --ci-gate high
 
   network-scan:
     name: TLS/SSH Endpoint Scan
@@ -137,23 +135,32 @@ jobs:
       - name: Generate Executive Report
         run: |
           python -c "
-          import json, glob
+          import json, glob, sys
           findings = []
-          for f in glob.glob('cbom-*.json'):
+          errors = []
+          for path in glob.glob('cbom-*.json'):
               try:
-                  data = json.load(f)
+                  with open(path) as fh:
+                      data = json.load(fh)
                   findings.extend(data.get('components', []))
-              except: pass
-          
+              except Exception as e:
+                  errors.append(f'{path}: {e}')
+                  print(f'::warning::Failed to load {path}: {e}', file=sys.stderr)
+          if errors and not findings:
+              print('::error::No CBOMs could be loaded — readiness score is UNKNOWN, not 100', file=sys.stderr)
+              sys.exit(1)
           total = len(findings)
           pqc_ready = sum(1 for c in findings if c.get('quantumSafe', False))
-          score = max(0, 100 - (total * 2) + (pqc_ready * 5)) if total > 0 else 100
-          
+          if total == 0 and not errors:
+              score = 100  # no assets is genuinely healthy
+          else:
+              score = max(0, 100 - (total * 2) + (pqc_ready * 5)) if total > 0 else 0
           report = {
               'quantum_readiness_score': score,
               'total_assets': total,
               'pqc_ready': pqc_ready,
               'vulnerable': total - pqc_ready,
+              'load_errors': errors,
           }
           print(json.dumps(report, indent=2))
           with open('pqc-report.json', 'w') as f:

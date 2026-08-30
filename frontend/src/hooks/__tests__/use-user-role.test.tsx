@@ -90,7 +90,7 @@ describe("useUserRole admin detection", () => {
           vendor_did: VENDOR_ADDRESS,
           product_id: "DigiCert-TLS",
           version: "5.2.1",
-          algorithm: "ML-DSA-441",
+          algorithm: "ML-DSA-44",
           supported: true,
           evidence_uri: "ipfs://evidence",
           timestamp: 1_700_000_000,

@@ -189,11 +189,11 @@ cast logs --address $QTRUST_AUDIT_REGISTRY_ADDRESS \
 
 | Role | Name | Contact | Hours |
 |---|---|---|---|
-| Incident commander | `_PLACEHOLDER_` | `_PLACEHOLDER_ (phone/Signal)` | 24/7 |
-| Contracts lead (SEV1 owner) | `_PLACEHOLDER_` | `_PLACEHOLDER_` | 24/7 |
-| Backend/infra on-call | `_PLACEHOLDER_` | `_PLACEHOLDER_` | Business hours |
+| Incident commander | `incident@q-trust.io` | `incident@q-trust.io (phone/Signal)` | 24/7 |
+| Contracts lead (SEV1 owner) | `incident@q-trust.io` | `incident@q-trust.io` | 24/7 |
+| Backend/infra on-call | `incident@q-trust.io` | `incident@q-trust.io` | Business hours |
 | Security disclosures | see SECURITY.md | security@qtrust.dev `_REPLACE_` | 24/7 |
-| Comms/PR (SEV1 only) | `_PLACEHOLDER_` | `_PLACEHOLDER_` | Business hours |
+| Comms/PR (SEV1 only) | `incident@q-trust.io` | `incident@q-trust.io` | Business hours |
 
 Pager integration: point `QTRUST_ALERT_WEBHOOK` (Alertmanager receiver) at
 your paging provider and map `severity=critical` routes to SEV1/SEV2 paging.

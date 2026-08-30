@@ -511,7 +511,7 @@ def train_agent_ppo(
     # QTRUST_DISABLE_COMPILE=1 opts out (recommended for RL rollouts).
     agent = MigrationAgent(n_features=6, hidden_dim=128).to(device)
     if init_path and os.path.exists(init_path):
-        agent.load_state_dict(torch.load(init_path, map_location=device))
+        agent.load_state_dict(torch.load(init_path, map_location=device, weights_only=True))  # REG-04: weights_only=True
         print(f"Initialized from pretrained checkpoint: {init_path}")
     if not os.environ.get("QTRUST_DISABLE_COMPILE", "0") == "1":
         try:

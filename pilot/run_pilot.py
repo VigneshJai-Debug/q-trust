@@ -191,13 +191,13 @@ def step5_onchain(asset_id: str, plan: dict, cbom: CBOM) -> None:
     try:
         attestation_id = client.attest_product(
             product_id="DigiCert-TLS", version="5.2.1",
-            algorithm="ML-DSA-441", supported=True,
+            algorithm="ML-DSA-44", supported=True,
             evidence_uri="ipfs://QmMockEvidence",
         )
     except RuntimeError as e:
         if "reverted" not in str(e):
             raise
-        existing = client.get_attestations_by_product("DigiCert-TLS", "5.2.1", "ML-DSA-441")
+        existing = client.get_attestations_by_product("DigiCert-TLS", "5.2.1", "ML-DSA-44")
         if not existing:
             raise
         attestation_id = existing[0]
@@ -212,11 +212,11 @@ def step5_onchain(asset_id: str, plan: dict, cbom: CBOM) -> None:
         migration_id=migration_id,
         asset_id=asset_id,
         from_algorithm=top["algorithm"],
-        to_algorithm="ML-DSA-441",
+        to_algorithm="ML-DSA-44",
         evidence_hash=evidence_hash,
         evidence_uri="ipfs://QmMockEvidence",
     )
-    print(f"Migration:  {migration_id} ({top['algorithm']} -> ML-DSA-441)")
+    print(f"Migration:  {migration_id} ({top['algorithm']} -> ML-DSA-44)")
 
     # Independent on-chain verification of the migration
     client.verify_migration(migration_id)
@@ -273,8 +273,8 @@ def step6_verify(asset_id: str) -> None:
     exists, active, org = client.verify_asset(asset_id)
     print(f"  verifyAsset -> exists={exists} active={active} org={org}")
     print(f"  Org assets: {client.get_assets_by_org(client.account.address)}")
-    support = client.check_product_support("DigiCert-TLS", "5.2.1", "ML-DSA-441")
-    print(f"  checkProductSupport(ML-DSA-441) -> supported={support[0]} vendor={support[1]}")
+    support = client.check_product_support("DigiCert-TLS", "5.2.1", "ML-DSA-44")
+    print(f"  checkProductSupport(ML-DSA-44) -> supported={support[0]} vendor={support[1]}")
     migrations = client.get_migrations_by_org(client.account.address)
     print(f"  Org migrations: {len(migrations)}")
 

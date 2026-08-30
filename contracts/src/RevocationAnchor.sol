@@ -178,7 +178,10 @@ contract RevocationAnchor is AccessControl, ReentrancyGuard, Pausable, Initializ
             lastUpdated: block.timestamp,
             active: true
         });
-        _allIssuers.push(issuer);
+        // REG-21: dedupe _allIssuers (was duplicated on reactivate)
+        bool already = false;
+        for (uint256 i = 0; i < _allIssuers.length; i++) if (_allIssuers[i] == issuer) { already = true; break; }
+        if (!already) _allIssuers.push(issuer);
 
         emit IssuerRegistered(issuer, issuerDid, block.timestamp);
     }

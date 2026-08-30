@@ -26,7 +26,11 @@ from typing import Any
 # planner/planner/registry instead of the tracked one).
 _DEFAULT_REGISTRY = Path(__file__).resolve().parents[1] / "registry"
 REGISTRY_DIR = Path(os.environ.get("QTRUST_REGISTRY_DIR", str(_DEFAULT_REGISTRY)))
-REGISTRY_DIR.mkdir(parents=True, exist_ok=True)
+# REG-24 FIX: do not mkdir at import time (unsafe for multi-worker). Lazy in _ensure_registry().
+
+
+def _ensure_registry() -> None:
+    REGISTRY_DIR.mkdir(parents=True, exist_ok=True)
 
 def _git_commit() -> str:
     try:
@@ -45,6 +49,7 @@ def log_run(
     tags: dict[str, str] | None = None,
 ) -> str:
     """Log a run to the file registry and optionally to MLflow."""
+    _ensure_registry()
     ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     git_commit = _git_commit()
     run_id = hashlib.sha256(f"{run_name}-{ts}-{git_commit}".encode()).hexdigest()[:12]

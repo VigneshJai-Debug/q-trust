@@ -26,7 +26,7 @@ REAL_CBOM = {
          "not_after": "2027-01-01T00:00:00+00:00"},
         {"host": "mail.example.edu", "algorithm": "ECDSA-P256", "key_size": 256,
          "criticality": "high"},
-        {"host": "vpn.example.edu", "algorithm": "ML-DSA-659", "key_size": 659,
+        {"host": "vpn.example.edu", "algorithm": "ML-DSA-65", "key_size": 65,
          "criticality": "medium"},
         {"host": "vpn.example.edu", "algorithm": "ML-KEM-768", "key_size": 768,
          "criticality": "low"},

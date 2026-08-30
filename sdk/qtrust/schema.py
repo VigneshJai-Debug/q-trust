@@ -23,7 +23,7 @@ def _validate_hash(v: str) -> str:
 class CBOMEntry(BaseModel):
     """A single cryptographic asset in a CBOM."""
     asset_type: str = Field(..., description="tls_cert | ssh_key | code_signing | hsm | jwt")
-    algorithm: str = Field(..., description="e.g., RSA-2048, ECC-P256, ML-DSA-441")
+    algorithm: str = Field(..., description="e.g., RSA-2048, ECC-P256, ML-DSA-44")
     location: str = Field(..., description="Hostname, file path, or service identifier")
     vendor: str | None = Field(None, description="Vendor if known (e.g., DigiCert)")
     product: str | None = Field(None, description="Product ID if known")

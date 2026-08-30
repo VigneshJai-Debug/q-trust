@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-08-30
+
+### Added
+- Q-Trust ML Factory (qtrust/ + qtrust_bench/ + dvc.yaml, 64-section strategy)
+- Truth audit (docs/TRUTH_AUDIT.md) classifying every number REAL/SYNTHETIC/DEMO
+- Calibrated What-If engine with intervals and provenance (qtrust/models/what_if.py)
+- LayerNorm GNN retrain (planner/model_real_v3_rigorous.pt, tau 0.971/0.80)
+
+### Fixed
+- REG-01..08 P0 integrity: CI triggers, model checksums, deep-probe fabrication, torch.load, ML-DSA names, API key, pqc-scan gates
+
+## [2.1.1] - 2026-08-29
+
+### Fixed
+- Real TLS CBOM host-disjoint 37 CBOMs, X.509 encoder fix (sha256WithRSAEncryption → RSA), tie-aware tau-b
+
+## [2.1.0] - 2026-08-28
+
+### Added
+- Real-data training campaign: 13,058 code files, 277 TLS hosts, 401 NVD CVEs, 37 CBOMs
+
+## [2.0.0] - 2026-08-27
+
+### Added
+- 11 UUPS registries, EIP-712 gasless, 7-day timelock governance
+- Initial CBOM/SARIF scanner (10 modules), 7 compliance frameworks
+
+## [Unreleased]
+
 ### Credential verification is now real cryptography (2026-08-29)
 
 Principal-level audit P0: `/v1/credentials/verify` previously returned

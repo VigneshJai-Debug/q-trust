@@ -270,7 +270,9 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
         }
         attestationId = keccak256(abi.encode(vendorDid, productIdHash));
 
-        if (_attestations[attestationId].vendorDid != address(0)) {
+        // REG-25: allow re-attest after revocation (was permanent tombstone)
+        bool isNew = _attestations[attestationId].vendorDid == address(0);
+        if (!isNew && !_attestations[attestationId].revoked) {
             revert DuplicateAttestation(attestationId);
         }
 
@@ -285,8 +287,11 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
             revoked: false
         });
 
-        _attestationsByVendor[vendorDid].push(attestationId);
-        _attestationsByProduct[productIdHash].push(attestationId);
+        // REG-25: dedupe on re-attest
+        if (isNew) {
+            _attestationsByVendor[vendorDid].push(attestationId);
+            _attestationsByProduct[productIdHash].push(attestationId);
+        }
 
         emit ProductAttested(
             attestationId, vendorDid, productId, version,

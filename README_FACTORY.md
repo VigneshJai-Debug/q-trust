@@ -43,10 +43,10 @@ benchmarks/
   migration_outcomes/ # git-history mining (§17-18)
 ```
 
-Report: `Critical Recall 98.4% | NDCG@50 94.8%` not "Accuracy 97%."
+Report (targets, not claims): `Critical Recall ≥98% | NDCG@50 ≥94%` — see `docs/TRUTH_AUDIT.md` for real measured values (current discovery F1 0.841, GNN τ 0.971 synthetic, 0.807 real). Do not quote placeholder numbers as benchmark output (REG-08).
 
 ## What-If Engine (§64)
-"If I replace RSA-2048 with ML-DSA-65 → Risk 87→12, Cost 43h, Failure 8.2% → Recommended? 94%"
+DEMO: "If I replace RSA-2048 with ML-DSA-65 → Risk 87→12, Cost 43h, Failure 8.2% → Recommended? 94%" — production WhatIf returns calibrated intervals + provenance, see `qtrust/models/what_if.py` (`is_demo` flag).
 
 ## MLOps (§49-54)
 Versioned `risk-v3.2 + dataset hash + feature schema` → Merkle → chain.

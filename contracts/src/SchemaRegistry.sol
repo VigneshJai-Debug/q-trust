@@ -37,6 +37,12 @@ contract SchemaRegistry is AccessControl, ReentrancyGuard, Pausable, Initializab
         uint256 timestamp
     );
 
+    event SchemaDeactivated( // REG-26: was missing (monitoring gap)
+        string indexed schemaId,
+        uint256 indexed version,
+        uint256 timestamp
+    );
+
     struct SchemaInfo {
         string  schemaId;
         uint256 version;
@@ -155,14 +161,15 @@ contract SchemaRegistry is AccessControl, ReentrancyGuard, Pausable, Initializab
         emit SchemaEquivalenceAdded(fromSchemaId, toSchemaId, equivalenceType, block.timestamp);
     }
 
-    /// @notice Deactivate a schema version (admin only)
+    /// @notice Deactivate a schema version (admin only) — REG-26 + REG-27
     function deactivateSchema(
         string calldata schemaId,
         uint256 version
-    ) external whenNotPaused onlyRole(DEFAULT_ADMIN_ROLE) {
+    ) external nonReentrant whenNotPaused onlyRole(DEFAULT_ADMIN_ROLE) {
         SchemaInfo storage sv = _schemaVersions[schemaId][version];
         if (sv.timestamp == 0) revert SchemaNotFound(schemaId);
         sv.active = false;
+        emit SchemaDeactivated(schemaId, version, block.timestamp); // REG-26
     }
 
     /// @notice Pause all operations
@@ -198,6 +205,7 @@ contract SchemaRegistry is AccessControl, ReentrancyGuard, Pausable, Initializab
     }
 
     /// @notice Get all schema IDs
+    // REG-27: unbounded view — prefer paginated getPolicyIds(offset,limit) to avoid gas griefing
     function getAllSchemaIds() external view returns (string[] memory) {
         return _allSchemaIds;
     }

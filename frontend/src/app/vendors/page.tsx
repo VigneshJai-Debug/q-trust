@@ -67,7 +67,7 @@ function VendorsInner() {
 
   const [productId, setProductId] = useState("DigiCert-TLS");
   const [version, setVersion] = useState("5.2.1");
-  const [algorithm, setAlgorithm] = useState("ML-DSA-441");
+  const [algorithm, setAlgorithm] = useState("ML-DSA-44");
 
   const attestations = useQuery({
     queryKey: ["vendor-attestations", vendor],

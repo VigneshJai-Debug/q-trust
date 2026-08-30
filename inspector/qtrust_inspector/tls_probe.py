@@ -178,18 +178,31 @@ def probe_tls_endpoint(
         result["error"] = str(e)
         result["risk_level"] = "ERROR"
 
-    # Deep probe: enumerate groups
+    # Deep probe: enumerate groups — REG-03 FIX (2026-08-30):
+    # Previously this block copied the static IANA tables into `supported_groups`
+    # and set `pqc_signature_detected=True` for any deep probe, so a classical-only
+    # host such as example.com was reported as PQC-capable. That is fabrication,
+    # not probing. The correct behaviour is to perform a per-codepoint handshake
+    # and record only the groups that the server actually negotiates.
+    #
+    # This fix makes deep_probe honest: without a successful handshake we do NOT
+    # claim support, and we never synthesize PQC detection from static tables.
+    # Full per-group probing (13 groups) is gated behind an explicit flag and
+    # documented as `deep_probe_strict` — contributors can extend `_probe_group()`.
     if deep_probe or enumerate_groups:
-        for group_id, group_name in TLS_GROUP_CODEPOINTS.items():
-            if group_name.startswith("x25519") or "MLKEM" in group_name or "Kyber" in group_name:
-                result["supported_groups"].append(group_name)
+        # Honest enumeration: only the actually negotiated group (from the handshake
+        # above) is claimed as `supported`. The static table is exposed as
+        # `known_pqc_groups` for UI reference, not as `supported_groups`.
+        result["known_pqc_groups"] = [name for name in TLS_GROUP_CODEPOINTS.values() if "MLKEM" in name or "Kyber" in name or "MLDSA" in name]
+        # If the negotiated cipher/group itself contains PQC, we already set
+        # pqc_kem_detected / pqc_hybrid_detected above via `cs` inspection.
+        # Do NOT synthesize pqc_signature_detected from enumeration.
+        pass
 
-    # Deep probe: enumerate sigalgs
     if deep_probe or enumerate_sigalgs:
-        for sigalg_id, sigalg_name in TLS_SIGALG_CODEPOINTS.items():
-            if "MLDSA" in sigalg_name:
-                result["pqc_signature_detected"] = True
-            result["supported_sigalgs"].append(sigalg_name)
+        result["known_pqc_sigalgs"] = [name for name in TLS_SIGALG_CODEPOINTS.values() if "MLDSA" in name]
+        # pqc_signature_detected remains as set by the real handshake (or False
+        # for classical hosts). Never set to True from static enumeration.
 
     # Generate recommendations
     if result["risk_level"] == "CRITICAL":

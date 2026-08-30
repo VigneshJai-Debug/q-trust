@@ -1,6 +1,6 @@
 {
   "name": "qtrust-frontend",
-  "version": "0.1.0",
+  "version": "2.2.0",
   "private": true,
   "description": "Q-Trust frontend \u2014 verification page, org dashboard, vendor portal.",
   "license": "MIT",

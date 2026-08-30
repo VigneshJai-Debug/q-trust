@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { createHash } from "node:crypto";
 import { Redis } from "ioredis";
 import { requireApiKey } from "../middleware/auth.js";
+import { isPublicHttpsUrl } from "../services/webhook.js"; // REG-19
 import { encryptSecret, decryptSecret } from "../services/secret-box.js";
 import { setSubscriberResolver } from "../services/webhook.js";
 import { isValidAddress } from "../config.js";
@@ -20,6 +21,9 @@ export async function registerWebhookRoutes(app: FastifyInstance, redis: Redis |
       return reply.status(400).send({ error: "Invalid address format" });
     }
     try { new URL(url); } catch { return reply.status(400).send({ error: "Invalid url format" }); }
+    if (!isPublicHttpsUrl(url)) {
+      return reply.status(400).send({ error: "URL must be public HTTPS (no localhost/private)" });
+    }
     if (!redis) {
       return reply.status(503).send({ error: "Redis unavailable — webhook service not running" });
     }
@@ -65,7 +69,14 @@ export async function registerWebhookRoutes(app: FastifyInstance, redis: Redis |
 
   app.get("/v1/webhooks/subscribers", { preHandler: requireApiKey }, async () => {
     if (!redis) return { subscribers: [] };
-    const keys = await redis.keys("subscribers:*");
+    // REG-20: SCAN not KEYS (blocking O(N) on live Redis)
+    const keys: string[] = [];
+    let cursor = "0";
+    do {
+      const [nextCursor, batch] = await redis.scan(cursor, "MATCH", "subscribers:*", "COUNT", 100);
+      cursor = nextCursor;
+      keys.push(...batch);
+    } while (cursor !== "0");
     const byId = new Map<string, { id: string; url: string; events: string[] }>();
     for (const key of keys) {
       const event = key.replace("subscribers:", "");

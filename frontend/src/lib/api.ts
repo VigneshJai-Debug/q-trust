@@ -225,9 +225,19 @@ export async function relayAttestation(payload: {
   nonce: number;
   signature: string;
 }): Promise<{ txHash: string; vendorDid: string; attestationId: string }> {
+  // REG-06 FIX: browser relay must send X-Api-Key when backend is hardened.
+  // In dev (no QTRUST_API_KEYS) the backend stays open; in production the
+  // key is injected via NEXT_PUBLIC_QTRUST_API_KEY or via a backend proxy.
+  // If no key is configured, the request will 401 in hardened mode — surface
+  // a clear error instead of a generic “Relay failed”.
+  const apiKey =
+    (typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_QTRUST_API_KEY as string | undefined) : undefined) ??
+    (typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_QTRUST_API_KEYS as string | undefined)?.split(",")[0] : undefined);
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (apiKey) headers["x-api-key"] = apiKey;
   const res = await fetch(`${API_BASE_URL}/v1/relay/attestation`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers,
     body: JSON.stringify(payload),
   });
   const json = await res.json();
@@ -307,9 +317,9 @@ export const PQC_ALGORITHMS = [
   { value: "ML-KEM-512", label: "ML-KEM-512 (NIST FIPS 203, Category 1)" },
   { value: "ML-KEM-768", label: "ML-KEM-768 (NIST FIPS 203, Category 3)" },
   { value: "ML-KEM-1024", label: "ML-KEM-1024 (NIST FIPS 203, Category 5)" },
-  { value: "ML-DSA-441", label: "ML-DSA-441 (NIST FIPS 204, Category 2)" },
-  { value: "ML-DSA-659", label: "ML-DSA-659 (NIST FIPS 204, Category 3)" },
-  { value: "ML-DSA-877", label: "ML-DSA-877 (NIST FIPS 204, Category 5)" },
+  { value: "ML-DSA-44", label: "ML-DSA-44 (NIST FIPS 204, Category 2)" },
+  { value: "ML-DSA-65", label: "ML-DSA-65 (NIST FIPS 204, Category 3)" },
+  { value: "ML-DSA-87", label: "ML-DSA-87 (NIST FIPS 204, Category 5)" },
   { value: "SLH-DSA-SHA2-128s", label: "SLH-DSA-SHA2-128s (NIST FIPS 205, Category 1)" },
   { value: "SLH-DSA-SHA2-128f", label: "SLH-DSA-SHA2-128f (NIST FIPS 205, Category 1)" },
   { value: "SLH-DSA-SHA2-192s", label: "SLH-DSA-SHA2-192s (NIST FIPS 205, Category 3)" },

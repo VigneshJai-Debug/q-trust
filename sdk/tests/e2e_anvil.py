@@ -94,25 +94,25 @@ def main() -> None:
         # VendorAlreadyRegistered — fine on a warm chain.
         assert "reverted" in str(e)
     attestation_id = client.attest_product(
-        "DigiCert-TLS", "5.2.1", "ML-DSA-441", True, "ipfs://QmEvidence"
+        "DigiCert-TLS", "5.2.1", "ML-DSA-44", True, "ipfs://QmEvidence"
     )
     assert attestation_id.startswith("0x") and len(attestation_id) == 66
     print(f"  attestation_id={attestation_id}")
 
     att = client.get_attestation(attestation_id)
-    assert att.supported and att.algorithm == "ML-DSA-441" and not att.revoked
+    assert att.supported and att.algorithm == "ML-DSA-44" and not att.revoked
     print(
         f"  get_attestation: product={att.product_id} {att.version} alg={att.algorithm}"
         f" supported={att.supported}"
     )
 
     supported, vendor, att_id = client.check_product_support(
-        "DigiCert-TLS", "5.2.1", "ML-DSA-441"
+        "DigiCert-TLS", "5.2.1", "ML-DSA-44"
     )
     assert supported and vendor.lower() == org.lower() and att_id == attestation_id
     print(f"  check_product_support: supported={supported}")
 
-    ids = client.get_attestations_by_product("DigiCert-TLS", "5.2.1", "ML-DSA-441")
+    ids = client.get_attestations_by_product("DigiCert-TLS", "5.2.1", "ML-DSA-44")
     assert attestation_id in ids
     print(f"  get_attestations_by_product: {len(ids)} found")
 
@@ -122,19 +122,19 @@ def main() -> None:
     assert att.revoked
     print(f"  revoke_attestation: revoked={att.revoked}")
 
-    supported, _, _ = client.check_product_support("DigiCert-TLS", "5.2.1", "ML-DSA-441")
+    supported, _, _ = client.check_product_support("DigiCert-TLS", "5.2.1", "ML-DSA-44")
     assert not supported
     print(f"  after revoke check_product_support: supported={supported}")
 
     print("=== 3. Migration recording ===")
     mig_id = client.hash_string(f"migration-{asset_id}")
     client.record_migration(
-        mig_id, asset_id, "RSA-2048", "ML-DSA-441", client.hash_string("evidence-log-1")
+        mig_id, asset_id, "RSA-2048", "ML-DSA-44", client.hash_string("evidence-log-1")
     )
     mig = client.get_migration(mig_id)
     assert (
         mig.from_algorithm == "RSA-2048"
-        and mig.to_algorithm == "ML-DSA-441"
+        and mig.to_algorithm == "ML-DSA-44"
         and not mig.verified
     )
     print(
@@ -195,7 +195,7 @@ def main() -> None:
     try:
         client.record_migration(
             client.hash_string("m-ghost"), client.hash_string("ghost-asset"),
-            "RSA-2048", "ML-DSA-441", client.hash_string("evidence-ghost"),
+            "RSA-2048", "ML-DSA-44", client.hash_string("evidence-ghost"),
         )
         raise AssertionError("record_migration on a ghost asset must revert")
     except RuntimeError as e:

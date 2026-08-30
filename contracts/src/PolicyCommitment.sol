@@ -121,11 +121,11 @@ contract PolicyCommitment is AccessControl, ReentrancyGuard, Pausable, Initializ
         emit PolicyCommitted(policyId, version, policyHash, policyURI, msg.sender, block.timestamp);
     }
 
-    /// @notice Deactivate a specific policy version (admin only)
+    /// @notice Deactivate a specific policy version (admin only) — REG-26 parity with SchemaRegistry
     function deactivatePolicy(
         string calldata policyId,
         uint256 version
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    ) external nonReentrant whenNotPaused onlyRole(DEFAULT_ADMIN_ROLE) {
         PolicyVersion storage pv = _policyVersions[policyId][version];
         if (pv.timestamp == 0) revert PolicyNotFound(policyId);
         pv.active = false;
@@ -166,6 +166,7 @@ contract PolicyCommitment is AccessControl, ReentrancyGuard, Pausable, Initializ
     }
 
     /// @notice Get all policy IDs
+    // REG-27: unbounded view — prefer paginated getPolicyIds(offset,limit) to avoid gas griefing
     function getAllPolicyIds() external view returns (string[] memory) {
         return _allPolicyIds;
     }

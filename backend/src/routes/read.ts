@@ -13,6 +13,7 @@ import {
   getOrgSummary,
 } from "../services/verify.js";
 import { isValidAddress, isValidBytes32, CONTRACTS, publicClient, PLANNER_URL, PLANNER_API_KEY } from "../config.js";
+import { requireApiKey } from "../middleware/auth.js"; // REG-18: prevent unauthenticated compute amplification
 import {
   RevocationAnchorAbi,
   PolicyCommitmentAbi,
@@ -119,7 +120,7 @@ export async function registerReadRoutes(app: FastifyInstance): Promise<void> {
     return checkProductSupport(productId, q.version, q.algorithm);
   });
 
-  app.post("/v1/plans", async (request, reply) => {
+  app.post("/v1/plans", { preHandler: requireApiKey }, async (request, reply) => {
     const body = request.body as { cbom?: Record<string, unknown>; deadline?: string };
     if (!body.cbom || !Array.isArray((body.cbom as any).assets) || !(body.cbom as any).assets.length) {
       return reply.status(400).send({ error: "cbom.assets (non-empty array) is required" });
@@ -144,7 +145,7 @@ export async function registerReadRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.get("/v1/plans/:did", async (request, reply) => {
+  app.get("/v1/plans/:did", { preHandler: requireApiKey }, async (request, reply) => {
     try {
       const did = (request.params as { did: string }).did;
       const q = request.query as { deadline?: string };
