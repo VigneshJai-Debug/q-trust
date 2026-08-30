@@ -69,12 +69,29 @@ class PairwisePreference:
     expert_id: str
 
 
+DEMO_SYNTHETIC_WARNING = (
+    "SYNTHETIC DEMO ONLY — NOT an expert benchmark. "
+    "Do NOT publish Kendall τ vs this synthetic as 'expert' performance. "
+    "Real benchmark requires qtrust_data/gold/riskbench-v1/ human annotations (§10)."
+)
+
+
 def expert_preference(asset_a: Dict[str, Any], asset_b: Dict[str, Any], expert_id: str = "expert-0") -> PairwisePreference:
-    """Synthetic expert labeling — in production, real security professionals answer
-    'Which should be migrated first?' (§10). Here we simulate expert logic with
-    enriched features (internet exposure, lifetime 12y vs 30d, dependencies) NOT the
-    heuristic formula under test. This breaks circularity."""
-    # Expert logic: internet-exposed + long lifetime + high business criticality > internal
+    """DEPRECATED SYNTHETIC — DEMO ONLY (§QTRUST-001).
+
+    This generates a *demonstration* preference using:
+
+        internet exposure + data lifetime + business criticality + blast radius
+
+    It is **NOT** a human expert label. It exists so CI and unit tests can run
+    without a human-annotated dataset. Any benchmark that uses this function
+    MUST be labeled ``synthetic`` (§31 Level 1) and must NOT be claimed as
+    ``expert τ = X`` in README/papers. See ``QTrustRiskBench.load_real()`` for
+    the production path.
+    """
+    import warnings
+
+    warnings.warn(DEMO_SYNTHETIC_WARNING, UserWarning, stacklevel=2)
     score_a = (
         (5 if asset_a.get("internet_exposed") else 0)
         + asset_a.get("data_lifetime_years", 0) * 0.5
@@ -95,13 +112,85 @@ def expert_preference(asset_a: Dict[str, Any], asset_b: Dict[str, Any], expert_i
 def generate_qtrust_risk_bench(
     assets: List[Dict[str, Any]], n_pairs: int = 10000, seed: int = 42
 ) -> List[PairwisePreference]:
-    """QTrust-RiskBench (§12): 100k assets → 1M comparisons, 20-50 experts."""
+    """Generate SYNTHETIC DEMO RiskBench — CI only, not for publication (§12, QTRUST-001).
+
+    For a real benchmark, populate ``qtrust_data/gold/riskbench-v1/`` via
+    ``qtrust/labeling/expert.py`` annotation UI and load with
+    ``QTrustRiskBench.load_real()``.
+    """
     rnd = random.Random(seed)
     prefs: List[PairwisePreference] = []
     for _ in range(n_pairs):
         a, b = rnd.sample(assets, 2)
         prefs.append(expert_preference(a, b, expert_id=f"expert-{rnd.randint(0, 30)}"))
     return prefs
+
+
+class QTrustRiskBench:
+    """Real human-annotated benchmark — QTrust-RiskBench-v1 (§12, QTRUST-001).
+
+    Expected layout::
+
+        qtrust_data/gold/riskbench-v1/
+          pairs.jsonl          # one JSON per line: {asset_a, asset_b, preference, expert_id, confidence, domain, rationale, timestamp}
+          experts.json         # [{id, domain, years_experience}]
+          manifest.json        # {n_pairs, n_experts, n_assets, created_at, inter_rater_kappa}
+
+    Acceptance: 5-10 experts, 5k-10k pairs (v1), then 100k/1M/20+ experts (v2).
+    Reports: Kendall τ vs experts, NDCG@10/50, inter-rater agreement, model-vs-expert disagreement.
+    """
+
+    REAL_PATH = "qtrust_data/gold/riskbench-v1/pairs.jsonl"
+
+    @staticmethod
+    def load_real(path: str = REAL_PATH) -> List[PairwisePreference]:
+        import json
+        from pathlib import Path
+
+        p = Path(path)
+        if not p.exists():
+            raise FileNotFoundError(
+                f"Real RiskBench not found at {p}. "
+                f"Current synthetic data is DEMO ONLY and must not be published as expert performance. "
+                f"To create v1: run annotation UI (qtrust/labeling/expert.py) with 5-10 experts, "
+                f"collect 5k-10k pairwise comparisons with blinded annotation + adjudication, "
+                f"then write to {p}."
+            )
+        prefs: List[PairwisePreference] = []
+        for line in p.read_text().splitlines():
+            if not line.strip():
+                continue
+            d = json.loads(line)
+            prefs.append(
+                PairwisePreference(
+                    asset_a=d["asset_a"],
+                    asset_b=d["asset_b"],
+                    preference=d["preference"],
+                    expert_confidence=float(d.get("confidence", 0.8)),
+                    domain=d.get("domain", "finance"),
+                    expert_id=d.get("expert_id", "expert-0"),
+                )
+            )
+        return prefs
+
+    @staticmethod
+    def inter_rater_agreement(prefs: List[PairwisePreference]) -> Dict[str, float]:
+        """Fleiss' κ / pairwise agreement on duplicated pairs shown to multiple experts."""
+        from collections import defaultdict
+
+        by_pair: Dict[str, List[str]] = defaultdict(list)
+        for pr in prefs:
+            key = f"{hash(str(pr.asset_a))}|{hash(str(pr.asset_b))}"
+            by_pair[key].append(pr.preference)
+        agreements = []
+        for vals in by_pair.values():
+            if len(vals) < 2:
+                continue
+            # Pairwise agreement within this pair's expert votes
+            agreement = max(vals.count("a"), vals.count("b")) / len(vals)
+            agreements.append(agreement)
+        kappa = sum(agreements) / len(agreements) if agreements else 0.0
+        return {"pairwise_agreement": round(kappa, 3), "duplicated_pairs": len(agreements), "n": len(prefs)}
 
 
 class RiskRankingModel:

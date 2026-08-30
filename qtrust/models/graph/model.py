@@ -53,7 +53,20 @@ class BlastRadiusGNN:
         self.seed = seed
 
     def build_graph(self, cbom: Dict[str, Any]) -> Dict[str, Any]:
-        # Real CBOM → dependency graph (see planner/qtrust_planner/data_generator.py:cbom_to_dependency_graph)
+        """Build enterprise dependency graph — QTRUST-004 fix.
+
+        PRODUCTION requires real relationships from:
+
+        * imports / calls (AST, ``qtrust/data_pipeline/ast_extractor.py``)
+        * SBOM/CBOM ``dependencies`` / ``dependsOn`` (CycloneDX 1.7)
+        * package manager (``qtrust/data_pipeline/packages.py``)
+        * runtime traces / Kubernetes / service mesh
+        * Git history (``qtrust/models/migration/cost.py:mine_git_history``)
+
+        This implementation extracts real edges where available and falls back
+        to an **explicitly-labeled** synthetic chain only for CI/demo, so
+        benchmarks cannot be mistaken for enterprise graph performance.
+        """
         nodes: List[Dict[str, Any]] = []
         edges: List[Dict[str, Any]] = []
         for i, asset in enumerate(cbom.get("assets", [])):
@@ -63,13 +76,28 @@ class BlastRadiusGNN:
                     "type": "algorithm",
                     "algorithm": asset.get("algorithm"),
                     "criticality": asset.get("criticality", "medium"),
-                    "dependencies": asset.get("dependencies", []),
+                    "file": asset.get("file") or asset.get("location"),
+                    "service": asset.get("service"),
+                    "library": asset.get("library"),
                 }
             )
-        # Synthetic edges for demo
-        for i in range(len(nodes) - 1):
-            edges.append({"src": nodes[i]["id"], "dst": nodes[i + 1]["id"], "type": "depends_on"})
-        return {"nodes": nodes, "edges": edges, "n": len(nodes)}
+            # Real edges: use declared dependencies where present (CycloneDX/SBOM)
+            for dep in asset.get("dependencies", []):
+                # dep may be an asset index or a service/library id
+                target = dep if isinstance(dep, str) else dep.get("id", f"asset-{dep}")
+                edges.append({"src": f"asset-{i}", "dst": str(target), "type": "depends_on", "provenance": "cbom_declarations"})
+            # Library → algorithm edge where library is known
+            if asset.get("library"):
+                edges.append({"src": asset["library"], "dst": f"asset-{i}", "type": "uses", "provenance": "package_manager"})
+
+        # Fallback for demo/Synthetic CBOMs that declare no dependencies:
+        # create a *labeled* chain so tests still have a graph, but mark it
+        if not edges and len(nodes) > 1:
+            for i in range(len(nodes) - 1):
+                edges.append({"src": nodes[i]["id"], "dst": nodes[i + 1]["id"], "type": "depends_on", "provenance": "synthetic_demo"})
+            # Attach warning for callers/benchmarks
+            return {"nodes": nodes, "edges": edges, "n": len(nodes), "is_synthetic": True, "warning": "QTRUST-004: linear chain is synthetic_demo — replace with imports/calls/SBOM edges for production"}
+        return {"nodes": nodes, "edges": edges, "n": len(nodes), "is_synthetic": False}
 
     def train_phases(self, datasets: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
         """Phase 1 synthetic → Phase 5 temporal (see §14)."""

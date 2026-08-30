@@ -88,6 +88,7 @@ class DiscoveryModel:
 
     def evaluate(self, dataset: List[Dict[str, Any]]) -> Dict[str, Any]:
         from collections import Counter
+        from qtrust.benchmarks.adversarial.run import generate_adversarial
 
         y_true, y_pred = [], []
         for ex in dataset:
@@ -100,8 +101,21 @@ class DiscoveryModel:
         prec = tp / (tp + fp) if tp + fp else 0
         rec = tp / (tp + fn) if tp + fn else 0
         f1 = 2 * prec * rec / (prec + rec) if prec + rec else 0
-        # Critical recall §34-35
+        # Critical recall §34-35, QTRUST-007: optimize for recall, not F1
         crit_fn = sum(1 for t, p, ex in zip(y_true, y_pred, dataset) if t == 1 and p == 0 and ex.get("criticality") == "critical")
         crit_total = sum(1 for t, ex in zip(y_true, dataset) if t == 1 and ex.get("criticality") == "critical")
         critical_recall = 1 - crit_fn / crit_total if crit_total else 1.0
-        return {"precision": prec, "recall": rec, "f1": f1, "critical_recall": critical_recall, "n": len(dataset)}
+        # Hard negatives (§20): "RSA" in doc vs RSA.generate()
+        hard_neg = [ex for ex in dataset if "RSA" in ex.get("code", "") and not ex.get("is_crypto")]
+        hard_fp = sum(1 for ex in hard_neg if self.predict(ex["code"], ex["language"]).is_crypto)
+        # Calibrated confidence (§QTRUST-008) — would use Platt scaling in production
+        return {
+            "precision": prec,
+            "recall": rec,
+            "f1": f1,
+            "critical_recall": critical_recall,
+            "hard_negative_fp": hard_fp,
+            "hard_negative_n": len(hard_neg),
+            "n": len(dataset),
+            "target": "critical_recall ≥0.99, recall ≥0.95, precision ≥0.90 (QTRUST-007)",
+        }
