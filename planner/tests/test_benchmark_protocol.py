@@ -97,6 +97,29 @@ def test_tie_aware_tau_b_does_not_penalize_identical_assets():
     assert scores_bad < -0.5
 
 
+def test_all_identical_priorities_do_not_return_nan():
+    """Real inventories contain CBOMs where EVERY asset is identical (e.g.
+    eight RSA-2048 certs with the same key size and expiry). scipy's τ-b
+    divides by the number of distinguishable pairs — zero here — and returns
+    NaN, which would silently poison any mean/max/min aggregate. Since no
+    pair's relative order can be wrong, the tie-aware score must be 1.0 for
+    ANY ranking (regardless of which identical asset is listed first)."""
+    import math
+
+    n = 8
+    graph = _Graph(
+        y_order=torch.arange(n),
+        y_priority=torch.full((n,), 0.5),  # all tied
+    )
+    for pred in ([0, 1, 2, 3, 4, 5, 6, 7], [7, 6, 5, 4, 3, 2, 1, 0]):
+        kendall = score_order(pred, graph)["kendall"]
+        assert not math.isnan(kendall), "τ-b must not be NaN for all-tied priorities"
+        assert abs(kendall - 1.0) < 1e-9
+    # Without y_priority (legacy graphs) the same must hold via the rank path.
+    legacy = _Graph(y_order=torch.arange(n))
+    assert not math.isnan(score_order(list(range(n)), legacy)["kendall"])
+
+
 def test_tie_aware_tau_b_matches_tau_a_when_no_ties():
     """On synthetic graphs (all priorities distinct) τ-b must equal the
     classic τ-a — so historical synthetic numbers remain comparable."""

@@ -108,7 +108,16 @@ def score_order(pred_order: list[int], graph) -> dict[str, float]:
     # so negate the priority to make both scales "lower = first" before pairing.
     if n > 1 and hasattr(graph, "y_priority") and graph.y_priority.numel() == n:
         true_priority = [-float(v) for v in graph.y_priority.tolist()]
-        kt = kendalltau(pred_rank, true_priority, variant="b").statistic
+        if len(set(true_priority)) <= 1:
+            # Every asset is genuinely indistinguishable (e.g. eight RSA-2048
+            # certs with identical key size/expiry). scipy's τ-b divides by
+            # the number of distinguishable pairs — zero here — and returns
+            # NaN, which would poison any aggregate. The correct tie-aware
+            # value is 1.0: there is no pair whose relative order could be
+            # wrong, so every ranking is equally (perfectly) correct.
+            kt = 1.0
+        else:
+            kt = kendalltau(pred_rank, true_priority, variant="b").statistic
     else:
         kt = kendalltau(pred_rank, true_rank).statistic if n > 1 else 1.0
     return {

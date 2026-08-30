@@ -195,29 +195,41 @@ class CBOMAnomalyDetector:
         # Audit H-9: compute the RSA ratio once instead of re-scanning all
         # assets inside the loop (O(n²) -> O(n)).
         n_assets = len(assets)
-        rsa_count = sum(1 for a in assets if "RSA" in a.get("algorithm", "").upper())
+        rsa_count = sum(1 for a in assets if "RSA" in (a.get("algorithm") or "").upper())
         rsa_ratio = rsa_count / n_assets
 
         for asset in assets:
-            alg = asset.get("algorithm", "Unknown").upper()
+            # Real scans can carry null algorithm (e.g. a TLS endpoint that
+            # refused the handshake); treat it as Unknown instead of crashing
+            # the whole detector on `.upper()` of None.
+            alg = (asset.get("algorithm") or "Unknown").upper()
             alg_type = 13  # Unknown
             for prefix, code in alg_types.items():
                 if alg.startswith(prefix):
                     alg_type = code
                     break
 
-            key_size = asset.get("key_size", 0)
+            # Null-safe reads: real TLS scans can carry null key_size (the
+            # endpoint refused the handshake / no key parsed).
+            try:
+                key_size = float(asset.get("key_size") or 0)
+            except (TypeError, ValueError):
+                key_size = 0.0
             is_pqc = 1.0 if any(pqc in alg for pqc in ["ML-KEM", "ML-DSA", "SLH-DSA"]) else 0.0
 
             crit_map = {"low": 0.25, "medium": 0.5, "high": 0.75, "critical": 1.0}
-            criticality = crit_map.get(asset.get("criticality", "medium"), 0.5)
+            criticality = crit_map.get((asset.get("criticality") or "medium").lower(), 0.5)
 
             is_expired = 1.0 if asset.get("expired", False) else 0.0
             has_vendor = 1.0 if asset.get("vendor") else 0.0
             is_self_signed = 1.0 if asset.get("self_signed", False) else 0.0
 
-            weak_key = 1.0 if ("RSA" in alg and key_size < 2048) else 0.0
-            days_until_expiry = min(asset.get("days_until_expiry", 365) / 365.0, 1.0)
+            weak_key = 1.0 if ("RSA" in alg and key_size and key_size < 2048) else 0.0
+            try:
+                days_left = float(asset.get("days_until_expiry") or 365)
+            except (TypeError, ValueError):
+                days_left = 365.0
+            days_until_expiry = min(days_left / 365.0, 1.0)
 
             features.append([
                 alg_type / 13.0,

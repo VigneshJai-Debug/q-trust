@@ -1,27 +1,66 @@
 stages:
-  traces_v1:
-    cmd: python -m qtrust_inspector.qscan_code  # placeholder: real harness is inspector/scripts/trace_harness.c
+  raw_ingest:
+    cmd: python -m qtrust.data_pipeline.github --out qtrust_data/raw
     deps:
-      - inspector/qtrust_inspector/side_channel.py
+      - qtrust/data_pipeline/github.py
     outs:
-      - inspector/data/traces_v1:
-          persist: true
-  estates_v1:
-    cmd: python -m qtrust_planner.data_generator
-    deps:
-      - planner/qtrust_planner/data_generator.py
-    outs:
-      - planner/data/estates_v1:
-          persist: true
-  planner_benchmark:
-    cmd: PYTHONPATH=planner python -m qtrust_planner.benchmark_v3 --n-graphs 200 --json-out planner/results/benchmark_v3.json
-    deps:
-      - planner/qtrust_planner/benchmark_v3.py
-      - planner/qtrust_planner/eval_harness.py
-    outs:
-      - planner/results/benchmark_v3.json
-      - planner/results/eval_harness.json
+      - qtrust_data/raw
 
-# Data hash example (replace with `dvc status --show-hash` after first capture):
-# traces_v1 hash: sha256:deadbeef (placeholder until hardware rig lands, pdf §17 fallback is simulator-trained model with domain caveat)
-# estates_v1 hash: sha256:deadbeef
+  bronze:
+    cmd: python -m qtrust.data.bronze --in qtrust_data/raw --out qtrust_data/bronze
+    deps:
+      - qtrust/data/bronze.py
+      - qtrust_data/raw
+    outs:
+      - qtrust_data/bronze
+
+  silver:
+    cmd: python -m qtrust.data_pipeline.ast_extractor --in qtrust_data/bronze --out qtrust_data/silver
+    deps:
+      - qtrust/data_pipeline/ast_extractor.py
+      - qtrust_data/bronze
+    outs:
+      - qtrust_data/silver
+
+  gold:
+    cmd: python -m qtrust.labeling.gold_builder --in qtrust_data/silver --out qtrust_data/gold/gold.json
+    deps:
+      - qtrust/labeling/gold_builder.py
+      - qtrust_data/silver
+    outs:
+      - qtrust_data/gold/gold.json
+      - qtrust_data/gold/manifest.json
+
+  splits:
+    cmd: python -m qtrust.data.splits --in qtrust_data/gold/gold.json --out qtrust_data/splits
+    deps:
+      - qtrust/data/splits.py
+      - qtrust_data/gold/gold.json
+    outs:
+      - qtrust_data/splits/train.json
+      - qtrust_data/splits/val.json
+      - qtrust_data/splits/test.json
+
+  discovery_train:
+    cmd: python -m qtrust.models.discovery.train --gold qtrust_data/gold/gold.json
+    deps:
+      - qtrust/models/discovery/model.py
+      - qtrust_data/gold/gold.json
+    outs:
+      - qtrust/models/discovery/artifacts/model.pt
+
+  risk_train:
+    cmd: python -m qtrust.models.risk.train --gold qtrust_data/gold/gold.json
+    deps:
+      - qtrust/models/risk/model.py
+      - qtrust_data/gold/gold.json
+    outs:
+      - qtrust/models/risk/artifacts/model.pt
+
+  evaluate:
+    cmd: python -m qtrust.evaluation.run_all --splits qtrust_data/splits --out qtrust_bench/evaluation/report.json
+    deps:
+      - qtrust/evaluation/metrics.py
+      - qtrust_data/splits
+    outs:
+      - qtrust_bench/evaluation/report.json

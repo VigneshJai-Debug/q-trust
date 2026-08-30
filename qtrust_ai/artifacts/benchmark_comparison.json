@@ -7,9 +7,9 @@
       "n": 2764,
       "qtrust": {
         "baseline": "qtrust (rules+AST+ML ensemble)",
-        "precision": 0.9216,
-        "recall": 0.7732,
-        "f1": 0.8409,
+        "precision": 0.9696,
+        "recall": 0.7303,
+        "f1": 0.8331,
         "accuracy": 0.8198
       },
       "baselines": [
@@ -36,7 +36,7 @@
         }
       ],
       "best_baseline": "majority (always crypto)",
-      "relative_gain": 0.1033
+      "relative_gain": 0.093
     },
     {
       "model": "discovery/CryptoCodeDetector",
@@ -100,8 +100,8 @@
     {
       "model": "risk/QuantumExposureModel",
       "metric": "MAE (held-out real TLS hosts)",
-      "n_train_hosts": 104,
-      "n_eval": 27,
+      "n_train_hosts": 221,
+      "n_eval": 56,
       "qtrust": {
         "baseline": "qtrust (calibrated, host-held-out)",
         "mae": 0.0
@@ -109,7 +109,7 @@
       "baselines": [
         {
           "baseline": "constant-mean predictor",
-          "mae": 7.1497
+          "mae": 7.4412
         }
       ],
       "best_baseline": "constant-mean predictor",
@@ -118,7 +118,7 @@
     {
       "model": "monitoring/CryptoAnomalyDetector",
       "metric": "false-positive rate (held-out real hosts)",
-      "n": 27,
+      "n": 56,
       "qtrust": {
         "baseline": "qtrust (baseline+zscore)",
         "fp_rate": 0.0
@@ -138,13 +138,13 @@
       "n": 16,
       "qtrust": {
         "baseline": "qtrust (5-layer propagation)",
-        "kendall_tau": 0.7701,
-        "ndcg@5": 0.974
+        "kendall_tau": 0.7176,
+        "ndcg@5": 0.9722
       },
       "baselines": [
         {
           "baseline": "random ordering",
-          "kendall_tau": -0.0449
+          "kendall_tau": -0.0695
         },
         {
           "baseline": "uniform scores",
@@ -152,12 +152,12 @@
         }
       ],
       "best_baseline": "uniform scores",
-      "relative_gain": 0.7701
+      "relative_gain": 0.7176
     }
   ],
   "summary": {
     "comparisons_run": 7,
     "models_beat_best_baseline": 6,
-    "mean_relative_gain": 1.8011
+    "mean_relative_gain": 1.7921
   }
 }

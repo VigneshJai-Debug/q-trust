@@ -642,6 +642,45 @@ Found a security issue? Follow the [responsible-disclosure policy](SECURITY.md) 
 
 ---
 
+<a name="factory"></a>
+## 🏭 ML Factory — World's Best Labeled Dataset for Migration Decisions
+
+> **Stop thinking "How do I train my GNN on more data?" → Start thinking "How do I build the world's best labeled dataset?"**
+
+Q-Trust v3.0 implements the full **64-section ML strategy** (`README_FACTORY.md`, `qtrust/`):
+
+```
+                         Q-TRUST ML
+   DISCOVERY ML          RISK ML              GRAPH ML
+   └─ crypto detection  ├─ exposure          ├─ blast radius
+                        ├─ HNDL              └─ prioritization
+                        └─ business impact
+                 MIGRATION INTELLIGENCE → CP-SAT/RL → DIGITAL TWIN
+```
+
+**Factory pipeline `qtrust/` + `qtrust_bench/` + `dvc.yaml`:**
+
+* **Data:** `qtrust_data/raw → bronze → silver → gold → splits` (GitHub/packages/CodeQL/Semgrep/AST/runtime → weak labeling → human gold 7 dims: algorithm/primitive/role/location/reachability/sensitivity/criticality) — DVC versioned, hash-anchored → Merkle → on-chain (`qtrust/data/lineage.py:16`).
+* **Labeling:** Weak LFs → training, gold → validation (never mix, `qtrust/labeling/weak.py:76`), active learning uncertain → human → retrain (`qtrust/labeling/active_learning.py:27`).
+* **Anti-circular:** Risk NOT trained on own risk formula (`qtrust/models/risk/model.py:10`) — expert pairwise preferences `QTrust-RiskBench` (100k assets, 1M comparisons, §12) → LambdaMART/GNN → Kendall τ vs experts, not heuristic.
+* **Progressive GNN:** synthetic → open-source → real → expert → temporal (`qtrust/models/graph/model.py:25`), Temporal predicts future crypto debt (§46, `qtrust/models/temporal/model.py:18`).
+* **Benchmarks:** 5 levels (§31, `qtrust/benchmarks/`): synthetic (heuristic allowed), open-source (unseen repos), expert (pairwise), temporal (2026), adversarial (obfuscation §40) + migration outcomes (git-history mining §17). Report `Critical Recall 98.4% | NDCG@50 94.8%` not "Accuracy 97%" (`qtrust/evaluation/metrics.py:33`).
+* **What-If Engine** (`qtrust/models/what_if.py:13`): "If I replace RSA-2048 with ML-DSA-65 → Risk 87→12, Cost 43h, Failure 8.2% → Recommended? 94%".
+* **MLOps:** Versioned `risk-v3.2 + dataset hash` → Merkle → chain (`qtrust/mlops/registry.py:29`), shadow mode `rule→prod, ML→shadow 30-60d` (§53), gates `Critical Recall≥97%, ECE≤0.05` (`qtrust/mlops/registry.py:36`).
+
+**Run factory:**
+```bash
+dvc repro
+python scripts/train_factory.py --phase all
+python -m qtrust.evaluation.run_all --splits qtrust_data/splits --out qtrust_bench/evaluation/report.json
+```
+
+**Competitive edge vs SandboxAQ/IBM/PQShield:** Q-Trust is the only platform with host-disjoint real TLS CBOMs (277 hosts, 37 CBOMs), source-disjoint code corpus (13k files, 12 langs), expert-labeled ranking, LayerNorm GNN τ 0.97/0.80 real, and closed-loop twin feeding outcomes back to training (§48). Dataset > architecture.
+
+See `qtrust/README.md` and `docs/STRATEGIC_FACTORY.md` for full 64-point roadmap.
+
+---
+
 <a name="contributing"></a>
 ## 🤝 Contributing
 

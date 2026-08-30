@@ -35,6 +35,28 @@ def test_feature_extraction_shape():
     assert torch.isfinite(features).all()
 
 
+def test_feature_extraction_handles_null_fields_from_real_scans():
+    """Live TLS scans can return findings with null algorithm / key_size
+    (e.g. an endpoint that refused the handshake). The feature extractor must
+    treat those as Unknown/0 instead of crashing on `.upper()` / division."""
+    detector = CBOMAnomalyDetector()
+    cbom = {
+        "assets": [
+            {"algorithm": None, "key_size": None, "criticality": None,
+             "expired": False, "vendor": None, "self_signed": False,
+             "days_until_expiry": None, "location": "uic.edu"},
+            {"algorithm": "sha256WithRSAEncryption", "key_size": 2048,
+             "criticality": "medium", "expired": False, "vendor": None,
+             "self_signed": False, "days_until_expiry": 90, "location": "h2"},
+        ]
+    }
+    features = detector._extract_features(cbom)
+    assert features.shape == (2, 10)
+    assert torch.isfinite(features).all()
+    # Null-key asset is treated as Unknown algorithm type (13/13 = 1.0).
+    assert features[0, 0] == 1.0
+
+
 def test_score_requires_training():
     detector = CBOMAnomalyDetector()
     with pytest.raises(RuntimeError, match="not trained"):

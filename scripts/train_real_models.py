@@ -1,13 +1,14 @@
 """Train Q-Trust models on REAL scanned data.
 
-Data sources (produced by scripts/scan_hosts.py):
-    - /tmp/real_data/uni_cbom.json     (50 .edu TLS endpoints)
-    - /tmp/real_data/top500_cbom.json  (top-500 websites)
+Data source: the host-disjoint real CBOM corpus in ``planner/data/real_cboms/``
+built by ``scripts/build_real_cboms.py`` from a live TLS scan
+(``scripts/scan_hosts.py`` → ``qtrust_ai/artifacts/real_datasets/tls_scan.json``).
+Every host appears in exactly one CBOM, so train/eval splits never leak hosts.
 
 Models:
-    anomaly : VAE anomaly detector on per-host CBOMs + injected anomalies
+    anomaly : VAE anomaly detector on real CBOMs + injected anomalies
     gnn     : MigrationGNNv3 on synthetic graphs mixed with real CBOM graphs
-    rl      : REINFORCE agent on real-CBOM migration environments
+    rl      : PPO agent on real-CBOM migration environments
 
 Usage:
     python scripts/train_real_models.py --model all
@@ -26,7 +27,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "inspector"))
 sys.path.insert(0, str(REPO_ROOT / "planner"))
 
-DATA_DIR = Path("/tmp/real_data")
+DATA_DIR = REPO_ROOT / "planner" / "data" / "real_cboms"
 
 
 # ---------------------------------------------------------------------------
@@ -34,11 +35,12 @@ DATA_DIR = Path("/tmp/real_data")
 # ---------------------------------------------------------------------------
 
 def load_real_findings(paths: list[Path]) -> list[dict]:
-    """Load ScanResult JSONs and flatten findings into raw asset records."""
+    """Load the host-disjoint real CBOM corpus and flatten assets into raw
+    asset records (each CBOM's assets carry ``_source`` = the CBOM file)."""
     findings = []
     for path in paths:
         data = json.loads(path.read_text())
-        for f in data.get("findings", []):
+        for f in data.get("assets", []):
             f["_source"] = path.stem
             findings.append(f)
     return findings
@@ -286,13 +288,13 @@ def main() -> None:
     parser.add_argument("--rl-episodes", type=int, default=3_000)
     args = parser.parse_args()
 
-    paths = sorted(DATA_DIR.glob("*_cbom.json"))
+    paths = sorted(DATA_DIR.glob("*.json"))
     if not paths:
-        raise FileNotFoundError(f"no *_cbom.json scans found in {DATA_DIR}")
+        raise FileNotFoundError(f"no real CBOMs found in {DATA_DIR} — run scripts/build_real_cboms.py first")
     findings = load_real_findings(paths)
     assets = [normalize_asset(f) for f in findings]
     assets = [a for a in assets if a["algorithm"] != "Unknown" or a["key_size"]]
-    print(f"Loaded {len(findings)} real findings -> {len(assets)} normalized assets")
+    print(f"Loaded {len(findings)} real assets -> {len(assets)} normalized assets")
 
     if args.model in ("anomaly", "all"):
         print("\n=== Anomaly detector ===")

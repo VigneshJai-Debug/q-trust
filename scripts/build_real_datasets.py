@@ -274,12 +274,47 @@ CURATED_HOSTS: List[str] = [
     "cisa.gov", "fbi.gov", "whitehouse.gov", "state.gov", "who.int",
     "un.org", "esa.int", "cern.ch", "mit.edu", "stanford.edu", "harvard.edu",
     "ox.ac.uk", "cam.ac.uk", "ethz.ch", "tum.de", "berkeley.edu",
+    # --- v1.1 expansion (2026-08-29): more banks, cloud, gov/edu, health, retail ---
+    "capitalone.com", "americanexpress.com", "citi.com", "barclays.co.uk",
+    "ubs.com", "wellsfargoadvisors.com", "fidelity.com", "schwab.com",
+    "etrade.com", "robinhood.com", "coinbase.com", "binance.com", "kraken.com",
+    "blockchain.com", "ledger.com", "trezor.io", "gemini.com", "circle.com",
+    "wise.com", "revolut.com", "monzo.com", "starlingbank.com", "chime.com",
+    "sofi.com", "ally.com", "discover.com", "synchrony.com", "navyfederal.org",
+    "usbank.com", "pnc.com", "truist.com", "keybank.com", "regions.com",
+    "bbva.com", "santander.com", "deutsche-bank.de", "bnpparibas.com",
+    "credit-suisse.com", "ing.com", "rabobank.nl", "nordea.com", "danske-bank.com",
+    "healthcare.gov", "cdc.gov", "nih.gov", "fda.gov", "medicare.gov",
+    "mayoclinic.org", "clevelandclinic.org", "johnshopkins.edu", "washington.edu",
+    "utexas.edu", "umich.edu", "gatech.edu", "cmu.edu", "cornell.edu",
+    "princeton.edu", "yale.edu", "columbia.edu", "uchicago.edu", "ufl.edu",
+    "ucdavis.edu", "uci.edu", "ucsb.edu", "ucsd.edu", "uic.edu", "psu.edu",
+    "tamu.edu", "purdue.edu", "indiana.edu", "wisc.edu", "umn.edu", "osu.edu",
+    "vt.edu", "ncsu.edu", "uiuc.edu", "colorado.edu", "arizona.edu", "asu.edu",
+    "walmart.com", "target.com", "costco.com", "homedepot.com", "lowes.com",
+    "bestbuy.com", "ebay.com", "etsy.com", "shopify.com", "zara.com",
+    "hm.com", "nike.com", "adidas.com", "levi.com", "gap.com", "macys.com",
+    "nordstrom.com", "sephora.com", "ulta.com", "walgreens.com", "cvs.com",
+    "riteaid.com", "kroger.com", "wholefoods.com", "traderjoes.com", "aldi.us",
+    "tesla.com", "rivian.com", "lucidmotors.com", "ford.com", "gm.com",
+    "toyota.com", "honda.com", "bmw.com", "mercedes-benz.com", "audi.com",
+    "volkswagen.com", "ferrari.com", "porsche.com", "lyft.com", "uber.com",
+    "airbnb.com", "booking.com", "expedia.com", "kayak.com", "tripadvisor.com",
+    "delta.com", "united.com", "aa.com", "southwest.com", "lufthansa.com",
+    "emirates.com", "qatarairways.com", "singaporeair.com", "jal.com",
+    "ana.co.jp", "klm.com", "britishairways.com", "airfrance.fr", "ryanair.com",
+    "easyjet.com", "wizzair.com", "doordash.com", "grubhub.com",
+    "instacart.com", "postmates.com", "deliveroo.co.uk", "just-eat.co.uk",
 ]
 
 
-def scan_real_hosts(max_hosts: int = 60) -> Dict[str, Any]:
-    """Scan real hosts with scripts/scan_hosts.py → per-host CBOMs."""
-    hosts = CURATED_HOSTS[:max_hosts]
+def scan_real_hosts(max_hosts: Optional[int] = None) -> Dict[str, Any]:
+    """Scan real hosts with scripts/scan_hosts.py → per-host CBOMs.
+
+    ``max_hosts=None`` scans the full CURATED_HOSTS list (283 hosts as of
+    v1.1); an int caps the scan to the first N hosts.
+    """
+    hosts = CURATED_HOSTS if max_hosts is None else CURATED_HOSTS[:max_hosts]
     hosts_file = ARTIFACTS / "hosts.txt"
     hosts_file.write_text("\n".join(hosts) + "\n")
     out_file = ARTIFACTS / "tls_scan.json"
@@ -417,7 +452,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Build real datasets for qtrust_ai")
     parser.add_argument("--parts", default="code,tls,nvd",
                         help="comma list: code,tls,nvd")
-    parser.add_argument("--hosts", type=int, default=120, help="max hosts to scan")
+    parser.add_argument("--hosts", type=int, default=None, help="max hosts to scan (default: all curated hosts)")
     parser.add_argument("--max-files-per-repo", type=int, default=600)
     args = parser.parse_args()
 

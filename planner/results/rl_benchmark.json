@@ -1,5 +1,5 @@
 {
-  "model_path": "/home/nvidia/Project/planner/rl_agent.pt",
+  "model_path": "planner/rl_agent.pt",
   "n_envs": 40,
   "asset_range": [
     20,

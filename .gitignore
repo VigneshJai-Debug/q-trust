@@ -153,3 +153,10 @@ exports/
 # data/cbom_for_planner.json is written by pilot/run_pilot.py on each run (it
 # embeds a scan timestamp), so it is regenerated and must not be committed.
 data/
+
+# Real-data benchmark fixtures ARE committed (they back README/CHANGELOG
+# claims and are small): the host-disjoint real-CBOM corpus used by the
+# flagship real-data benchmark and the eval harness. Regenerate with
+# scripts/build_real_cboms.py; force-tracked so a fresh clone can reproduce
+# the real-CBOM numbers without re-scanning.
+!planner/data/real_cboms/
