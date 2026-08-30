@@ -307,6 +307,10 @@ contract VendorRegistry is AccessControl, Pausable, Initializable, UUPSUpgradeab
     ) external onlyRole(VENDOR_ADMIN_ROLE) whenNotPaused {
         StringBounds.checkDID(name);
         StringBounds.checkURI(metadataURI);
+        // REG-22: address(0) collides with the not-found sentinel used by
+        // getVendor/isVendorActive — such a record could never be revoked or
+        // queried, so reject it outright.
+        if (vendorDid == address(0)) revert VendorNotFound(vendorDid);
         if (_vendors[vendorDid].registeredAt != 0) revert VendorAlreadyRegistered(vendorDid);
         _vendors[vendorDid] = VendorInfo({
             name: name,

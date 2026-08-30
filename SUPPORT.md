@@ -34,7 +34,7 @@ Thank you for using Q-Trust — the post-quantum trust infrastructure platform
 Please report privately via one of:
 
 * **Preferred:** [GitHub Security Advisories](https://github.com/humoge7502/q-trust/security/advisories/new) — confidential end-to-end, with coordinated disclosure and CVE assignment
-* **Alternative:** Email `security@q-trust.example` (encrypt sensitive reports with the PGP key published at `/.well-known/security.txt` — see `frontend/public/.well-known/security.txt`)
+* **Alternative:** Email `humoge7502.security@gmail.com` (mention "Q-Trust security" in the subject; GitHub Security Advisories remain preferred)
 
 Include: affected component and version/commit (`contracts/`, `backend/`, `sdk/`, `inspector/`, `planner/`, `frontend`), minimal reproduction (PoC, calldata, HTTP request, or test case), impact assessment, and whether you wish to be credited.
 

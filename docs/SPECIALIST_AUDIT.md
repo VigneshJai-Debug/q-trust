@@ -172,8 +172,8 @@ specialist below confirms the first two and specifies the third.
 1. **No public deployment** — Base Sepolia addresses are the single
   biggest missing proof point.
 2. **No fork / upgrade / reorg tests in CI** (see sub-agent 2).
-3. **`security@q-trust.example` is a placeholder** — replace before
-  public release (SECURITY.md admits it).
+3. **Placeholder security contact** — since replaced by
+  `humoge7502.security@gmail.com` (see SECURITY.md).
 4. **No chaos / disaster-recovery drill** for the read model.
 
 ### Actions

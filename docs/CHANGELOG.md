@@ -306,7 +306,9 @@ Low, and Informational code findings are fixed unless explicitly noted below.
 - CI `abi-drift` job — regenerates `abis.ts`/`contracts.py` from Forge
   artifacts and fails on drift (previously claimed but not implemented).
 - CI `golive-preflight` job (release tags only) — fails releases that still
-  carry `_PLACEHOLDER_` escalation contacts or the placeholder security email.
+  carry unresolved escalation-contact placeholders. The historical markers
+  and the placeholder security email have since been replaced with real
+  contacts.
 - Pre-commit hooks pinned to commit SHAs (supply-chain parity with CI).
 
 ### Changed

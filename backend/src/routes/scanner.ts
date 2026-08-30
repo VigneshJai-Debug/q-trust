@@ -392,15 +392,15 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
     try {
       result = await runInspector(["--scan-type", "source", "--path", resolvedDir]);
     } catch (err) {
+      // REG-15: internal inspector stderr/raw error strings are logged, but
+      // never returned to the caller — only a generic 503.
       request.log.error(err, "Inspector scan failed");
       reply.code(503);
-      return {
-        error: `Cryptographic scanner unavailable or failed: ${err instanceof Error ? err.message : String(err)}`,
-      };
+      return { error: "Cryptographic scanner unavailable or failed" };
     }
     if (result?.error) {
       reply.code(503);
-      return { error: `Cryptographic scanner failed: ${result.error}` };
+      return { error: "Cryptographic scanner failed" };
     }
     const findings = Array.isArray(result.findings) ? result.findings : [];
     scanHistory.push({ targetHash: hashTarget(resolvedDir), type: "source", timestamp: new Date().toISOString(), count: findings.length });
@@ -424,15 +424,15 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
     try {
       result = await runInspector(["--scan-type", "manifests", "--path", resolvedDir]);
     } catch (err) {
+      // REG-15: internal inspector stderr/raw error strings are logged, but
+      // never returned to the caller — only a generic 503.
       request.log.error(err, "Inspector scan failed");
       reply.code(503);
-      return {
-        error: `Cryptographic scanner unavailable or failed: ${err instanceof Error ? err.message : String(err)}`,
-      };
+      return { error: "Cryptographic scanner unavailable or failed" };
     }
     if (result?.error) {
       reply.code(503);
-      return { error: `Cryptographic scanner failed: ${result.error}` };
+      return { error: "Cryptographic scanner failed" };
     }
     const findings = Array.isArray(result.findings) ? result.findings : [];
     scanHistory.push({ targetHash: hashTarget(resolvedDir), type: "manifests", timestamp: new Date().toISOString(), count: findings.length });
@@ -466,15 +466,15 @@ export async function registerScannerRoutes(app: FastifyInstance): Promise<void>
     try {
       result = await runInspector(["--scan-type", scanType, "--path", resolvedTarget]);
     } catch (err) {
+      // REG-15: internal inspector stderr/raw error strings are logged, but
+      // never returned to the caller — only a generic 503.
       request.log.error(err, "Inspector scan failed");
       reply.code(503);
-      return {
-        error: `Cryptographic scanner unavailable or failed: ${err instanceof Error ? err.message : String(err)}`,
-      };
+      return { error: "Cryptographic scanner unavailable or failed" };
     }
     if (result?.error) {
       reply.code(503);
-      return { error: `Cryptographic scanner failed: ${result.error}` };
+      return { error: "Cryptographic scanner failed" };
     }
     const allFindings = Array.isArray(result.findings) ? result.findings : [];
     scanHistory.push({ targetHash: hashTarget(resolvedTarget), type: "full", timestamp: new Date().toISOString(), count: allFindings.length });

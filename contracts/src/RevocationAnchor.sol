@@ -171,6 +171,10 @@ contract RevocationAnchor is AccessControl, ReentrancyGuard, Pausable, Initializ
         string calldata issuerDid
     ) external onlyRole(DEFAULT_ADMIN_ROLE) whenNotPaused {
         StringBounds.checkDID(issuerDid);
+        // REG-21: address(0) would create an issuer record indistinguishable
+        // from "not registered" (the sentinel checked in _updateRoot), making
+        // it unrevokable and invisible to verifiers. Reject it.
+        if (issuer == address(0)) revert IssuerNotRegistered(issuer);
         _issuers[issuer] = IssuerInfo({
             issuerDid: issuerDid,
             currentRoot: bytes32(0),

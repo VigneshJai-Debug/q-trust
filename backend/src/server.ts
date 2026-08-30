@@ -18,7 +18,7 @@ import { registerHealthRoutes } from "./routes/health.js";
 import { registerReadRoutes } from "./routes/read.js";
 import { registerWriteRoutes } from "./routes/write.js";
 import { registerWebhookRoutes } from "./routes/webhooks.js";
-import { gracefulShutdown } from "./middleware/auth.js";
+import { gracefulShutdown, requireApiKey } from "./middleware/auth.js";
 import { initSentry, registerSentryHooks } from "./plugins/sentry.js";
 import { registerMetrics } from "./plugins/metrics.js";
 import { CORS_ORIGINS, CHAIN_ID } from "./config.js";
@@ -64,6 +64,19 @@ await server.register(swagger, {
   openapi: { info: { title: "Q-Trust API", version: PACKAGE_VERSION, description: "Q-Trust supply-chain verification API." }, servers: [{ url: process.env.QTRUST_PUBLIC_URL ?? "http://localhost:3001" }] },
 });
 await server.register(swaggerUi, { routePrefix: "/docs" });
+
+// REG-18: /docs (Swagger UI) and the raw OpenAPI JSON map the whole API
+// surface for anyone — in production they are gated behind the same API-key
+// middleware. Local dev stays open so interactive docs work out of the box.
+if (process.env.NODE_ENV === "production") {
+  server.addHook("onRequest", async (request, reply) => {
+    const url = request.url.split("?")[0];
+    if (url === "/docs" || url.startsWith("/docs/") || url === "/documentation" || url.startsWith("/documentation/")) {
+      const verdict = await requireApiKey(request, reply);
+      if (verdict !== undefined) return reply;
+    }
+  });
+}
 
 // Route plugins — each is a Fastify plugin with its own schemas and per-route limits.
 await registerHealthRoutes(server);

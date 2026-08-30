@@ -109,9 +109,16 @@ contract SchemaRegistry is AccessControl, ReentrancyGuard, Pausable, Initializab
 
         SchemaEntry storage entry = _schemas[schemaId];
         if (entry.exists) {
-            if (version <= _schemaVersions[schemaId][entry.latestVersion].version) {
+            // Audit M-5 / REG-23: strict version sequencing (same as
+            // PolicyCommitment). A new schema must start at version 1 and
+            // every next version must be exactly latest + 1 — otherwise a
+            // malicious authority could register v=type(uint256).max for a
+            // fresh schema and permanently brick all future versions.
+            if (version != entry.latestVersion + 1) {
                 revert SchemaAlreadyExists(schemaId);
             }
+        } else if (version != 1) {
+            revert SchemaNotFound(schemaId);
         }
 
         _schemaVersions[schemaId][version] = SchemaInfo({

@@ -3,7 +3,7 @@
 # See also SECURITY.md at the repository root.
 
 Contact: https://github.com/humoge7502/q-trust/security/advisories/new
-Contact: mailto:security@q-trust.example
+Contact: mailto:humoge7502.security@gmail.com
 Expires: 2027-08-26T00:00:00.000Z
 Acknowledgments: https://github.com/humoge7502/q-trust/blob/main/SECURITY.md#disclosure-policy
 Preferred-Languages: en

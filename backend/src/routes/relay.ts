@@ -62,8 +62,10 @@ export async function registerRelayRoutes(app: FastifyInstance): Promise<void> {
       const nonce = await getVendorNonce((request.params as { did: string }).did as `0x${string}`);
       return { did: (request.params as { did: string }).did, nonce: nonce.toString() };
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return reply.status(400).send({ error: msg });
+      // REG-15: raw provider/RPC error strings are logged, never returned
+      // to (anonymous) callers — only a generic validation message.
+      request.log.error(err, "Vendor nonce lookup failed");
+      return reply.status(400).send({ error: "Invalid issuer address or vendor not registered" });
     }
   });
 
@@ -122,8 +124,9 @@ export async function registerRelayRoutes(app: FastifyInstance): Promise<void> {
       const nonce = await getOrgNonce((request.params as { did: string }).did as `0x${string}`);
       return { did: (request.params as { did: string }).did, nonce: nonce.toString() };
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return reply.status(400).send({ error: msg });
+      // REG-15: sanitized — see vendor nonce route.
+      request.log.error(err, "Org nonce lookup failed");
+      return reply.status(400).send({ error: "Invalid issuer address or org not registered" });
     }
   });
 
@@ -154,8 +157,9 @@ export async function registerRelayRoutes(app: FastifyInstance): Promise<void> {
       const nonce = await getAuditNonce((request.params as { did: string }).did as `0x${string}`);
       return { did: (request.params as { did: string }).did, nonce: nonce.toString() };
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return reply.status(400).send({ error: msg });
+      // REG-15: sanitized — see vendor nonce route.
+      request.log.error(err, "Audit nonce lookup failed");
+      return reply.status(400).send({ error: "Invalid issuer address or auditor not registered" });
     }
   });
 }

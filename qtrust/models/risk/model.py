@@ -247,16 +247,20 @@ class RiskRankingModel:
             if pred == p.preference:
                 correct += 1
         acc = correct / len(prefs) if prefs else 0
-        # REG-16 FIX: use scipy.stats.kendalltau when available, not 2*acc-1
-        kendall = 2 * acc - 1  # fallback approximation
+        # REG-16 FIX: real Kendall τ-b via scipy.stats.kendalltau over the
+        # pairwise predictions vs the expert preferences, not 2*acc-1.
+        kendall = 2 * acc - 1  # fallback when scipy is unavailable
+        tau_note = "2*acc-1 fallback (scipy unavailable)"
         try:
             from scipy.stats import kendalltau
-            # Build ranked lists for real tau
+
             pred_scores = [self.predict_score(p.asset_a) for p in prefs]
-            true_prefs = [1 if p.preference == "a" else 0 for p in prefs]
-            # This is still approximation; real needs per-asset ranking
-            # For now, report both
-            kendall = 2 * acc - 1
+            true_prefs = [1.0 if p.preference == "a" else 0.0 for p in prefs]
+            if len(set(pred_scores)) > 1 or len(set(true_prefs)) > 1:
+                tau, _ = kendalltau(pred_scores, true_prefs)
+                if tau == tau:  # not NaN (constant inputs give NaN)
+                    kendall = float(tau)
+                    tau_note = "scipy.stats.kendalltau (tau-b) over pairwise predictions vs expert preferences"
         except Exception:
             pass
-        return {"pairwise_accuracy": acc, "kendall_tau": round(kendall, 3), "kendall_tau_note": "REG-16: 2*acc-1 fallback — replace with scipy kendalltau on ranked lists for n>2", "n": len(prefs)}
+        return {"pairwise_accuracy": acc, "kendall_tau": round(kendall, 3), "kendall_tau_note": tau_note, "n": len(prefs)}

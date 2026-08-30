@@ -61,7 +61,7 @@
       "family": "DSA",
       "pqc_ready": false,
       "severity": 1.0,
-      "recommended_replacement": "ML-DSA-659",
+      "recommended_replacement": "ML-DSA-65",
       "migrate_days": 1.0,
       "notes": "1024-bit DSA is deprecated; migrate immediately."
     },
@@ -69,7 +69,7 @@
       "family": "DSA",
       "pqc_ready": false,
       "severity": 0.9,
-      "recommended_replacement": "ML-DSA-659",
+      "recommended_replacement": "ML-DSA-65",
       "migrate_days": 1.5,
       "notes": "Quantum-vulnerable; migrate."
     },
@@ -93,7 +93,7 @@
       "family": "ECDSA",
       "pqc_ready": false,
       "severity": 0.85,
-      "recommended_replacement": "ML-DSA-659",
+      "recommended_replacement": "ML-DSA-65",
       "migrate_days": 1.5,
       "notes": "Hybrid ECDSA+ML-DSA is the current NIST recommendation."
     },
@@ -101,7 +101,7 @@
       "family": "EdDSA",
       "pqc_ready": false,
       "severity": 0.8,
-      "recommended_replacement": "ML-DSA-659",
+      "recommended_replacement": "ML-DSA-65",
       "migrate_days": 1.5,
       "notes": "Quantum-vulnerable for signing."
     },
@@ -109,7 +109,7 @@
       "family": "EdDSA",
       "pqc_ready": false,
       "severity": 0.7,
-      "recommended_replacement": "ML-DSA-659",
+      "recommended_replacement": "ML-DSA-65",
       "migrate_days": 2.0,
       "notes": "Quantum-vulnerable for signing."
     },
@@ -185,7 +185,7 @@
       "migrate_days": 0.0,
       "notes": "NIST FIPS 203; already post-quantum."
     },
-    "ML-DSA-441": {
+    "ML-DSA-44": {
       "family": "ML-DSA",
       "pqc_ready": true,
       "severity": 0.05,
@@ -193,7 +193,7 @@
       "migrate_days": 0.0,
       "notes": "NIST FIPS 204; already post-quantum."
     },
-    "ML-DSA-659": {
+    "ML-DSA-65": {
       "family": "ML-DSA",
       "pqc_ready": true,
       "severity": 0.05,
@@ -201,7 +201,7 @@
       "migrate_days": 0.0,
       "notes": "NIST FIPS 204; already post-quantum."
     },
-    "ML-DSA-877": {
+    "ML-DSA-87": {
       "family": "ML-DSA",
       "pqc_ready": true,
       "severity": 0.05,

@@ -24,7 +24,7 @@ interface WebhookEvent {
   payload: Record<string, unknown>;
 }
 
-function isPublicHttpsUrl(url: string): boolean {
+export function isPublicHttpsUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "https:") return false;

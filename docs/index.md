@@ -142,7 +142,7 @@ hide:
 
     ---
 
-    Supported versions, reporting via GitHub Advisories / `security@q-trust.example`, SLAs, controls.
+    Supported versions, reporting via GitHub Advisories / `humoge7502.security@gmail.com`, SLAs, controls.
 
     [:octicons-arrow-right-24: Security](SECURITY.md)
 
@@ -266,7 +266,7 @@ See [GPU Features](GPU_FEATURES.md) to put the A100 to work (`make -f Makefile.g
 
 ## Security & trust
 
-Threat model, SLAs, and controls live in [Security](SECURITY.md) — reports via [GitHub Security Advisories](https://github.com/humoge7502/q-trust/security/advisories/new) or `security@q-trust.example` (PGP via `/.well-known/security.txt`). Contracts are `UUPS` + 2-day `TimelockController`, EIP-712 domain-separated nonces, `whenNotPaused` on all writes, and SSRF DNS pinning. Audited: `docs/Q-Trust_Codebase_Audit.pdf` — all Critical/High fixed with regressions in `contracts/test/AuditRemediations.t.sol`.
+Threat model, SLAs, and controls live in [Security](SECURITY.md) — reports via [GitHub Security Advisories](https://github.com/humoge7502/q-trust/security/advisories/new) or `humoge7502.security@gmail.com`. Contracts are `UUPS` + 2-day `TimelockController`, EIP-712 domain-separated nonces, `whenNotPaused` on all writes, and SSRF DNS pinning. Audited: `docs/Q-Trust_Codebase_Audit.pdf` — all Critical/High fixed with regressions in `contracts/test/AuditRemediations.t.sol`.
 
 ---
 

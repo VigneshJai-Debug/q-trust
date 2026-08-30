@@ -1,0 +1,30 @@
+name: Workflow Lint (actionlint)
+
+# REG-01 remediation: the main CI triggers were once corrupted
+# ("branches: ain]") and every downstream check silently stopped gating
+# main. This workflow validates all workflow files on every push/PR so a
+# syntax error in any workflow file is caught immediately — it must never
+# depend on another workflow's triggers being valid.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: Validate GitHub Workflows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Download actionlint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash -s --
+          ./actionlint --version
+
+      - name: Run actionlint on all workflow files
+        run: ./actionlint -color

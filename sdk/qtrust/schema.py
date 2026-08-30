@@ -2,9 +2,59 @@
 """Pydantic models for Q-Trust attestation objects."""
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+# REG-05: canonical algorithm names. FIPS 203/204 define ML-KEM-{512,768,1024}
+# and ML-DSA-{44,65,87}; earlier builds emitted malformed names such as
+# "ML-DSA-441" (parameter counts concatenated with the variant). Everything
+# entering a CBOM is normalized through this table.
+_CANONICAL_ALGORITHMS = {
+    "ML-DSA-44", "ML-DSA-65", "ML-DSA-87",
+    "ML-KEM-512", "ML-KEM-768", "ML-KEM-1024",
+    "SLH-DSA-SHA2-128s", "SLH-DSA-SHA2-128f", "SLH-DSA-SHA2-192s",
+    "SLH-DSA-SHA2-192f", "SLH-DSA-SHA2-256s", "SLH-DSA-SHA2-256f",
+    "FALCON-512", "FALCON-1024", "HQC-128", "HQC-192", "HQC-256",
+    "RSA-1024", "RSA-2048", "RSA-3072", "RSA-4096",
+    "ECC-P256", "ECC-P384", "ECC-P521",
+    "ECDSA-P256", "ECDSA-P384", "ECDSA-P521",
+    "ECDH-P256", "ECDH-P384", "ECDH-P521",
+    "DSA-1024", "DSA-2048", "DH-2048", "DH-4096",
+    "Ed25519", "Ed448", "X25519", "X448",
+    "SHA-1", "SHA-256", "SHA-384", "SHA-512",
+    "SHA3-256", "SHA3-384", "SHA3-512",
+    "AES-128", "AES-192", "AES-256", "3DES", "DES", "RC4",
+    "HMAC-SHA256", "HMAC-SHA384", "HMAC-SHA512", "HMAC-MD5",
+    "ChaCha20-Poly1305",
+}
+
+# Common malformed variants -> canonical name (e.g. parameter count
+# concatenated with the variant: ML-DSA-441 -> ML-DSA-44).
+_MALFORMED_ALGORITHM_MAP = {
+    "ML-DSA-441": "ML-DSA-44",
+    "ML-DSA-659": "ML-DSA-65",
+    "ML-DSA-877": "ML-DSA-87",
+}
+
+
+def canonicalize_algorithm(name: str) -> str:
+    """Normalize an algorithm name to its canonical form (REG-05).
+
+    Fixes known malformed variants (e.g. ML-DSA-441 -> ML-DSA-44) and
+    normalizes whitespace/underscores/case for lookup.
+    """
+    if not name or not name.strip():
+        raise ValueError("algorithm name must be non-empty")
+    cleaned = re.sub(r"[\s_]+", "-", name.strip())
+    if cleaned in _MALFORMED_ALGORITHM_MAP:
+        return _MALFORMED_ALGORITHM_MAP[cleaned]
+    upper = cleaned.upper()
+    for canonical in _CANONICAL_ALGORITHMS:
+        if upper == canonical.upper():
+            return canonical
+    return cleaned
 
 
 def _validate_hash(v: str) -> str:
@@ -30,6 +80,12 @@ class CBOMEntry(BaseModel):
     version: str | None = Field(None, description="Product version")
     criticality: str = Field("medium", description="low | medium | high | critical")
     expires_at: int | None = Field(None, description="Unix timestamp of expiry, if applicable")
+
+    @field_validator("algorithm")
+    @classmethod
+    def _canonical_algorithm(cls, v: str) -> str:
+        """REG-05: normalize every algorithm name to its canonical form at ingress."""
+        return canonicalize_algorithm(v)
 
 
 class CBOM(BaseModel):

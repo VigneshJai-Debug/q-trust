@@ -10,6 +10,7 @@
  */
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import client from "prom-client";
+import { requireApiKey } from "../middleware/auth.js"; // REG-18
 
 const registry = new client.Registry();
 
@@ -87,7 +88,13 @@ export function registerMetrics(server: FastifyInstance): void {
       .observe(seconds);
   });
 
-  server.get("/metrics", async (_request, reply) => {
+  server.get("/metrics", {
+    // REG-18: /metrics enumerates internal routes and process details —
+    // an unauthenticated recon surface. In production it is gated behind
+    // the same API-key middleware as the rest of the API; local dev stays
+    // open so Prometheus against a laptop still works out of the box.
+    preHandler: requireApiKey,
+  }, async (_request, reply) => {
     reply.header("content-type", registry.contentType);
     return registry.metrics();
   });

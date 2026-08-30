@@ -326,9 +326,9 @@ export const PQC_ALGORITHMS = [
   { value: "SLH-DSA-SHA2-192f", label: "SLH-DSA-SHA2-192f (NIST FIPS 205, Category 3)" },
   { value: "SLH-DSA-SHA2-256s", label: "SLH-DSA-SHA2-256s (NIST FIPS 205, Category 5)" },
   { value: "SLH-DSA-SHA2-256f", label: "SLH-DSA-SHA2-256f (NIST FIPS 205, Category 5)" },
-  { value: "HQC-128", label: "HQC-128 (NIST FIPS 230, Category 1)" },
-  { value: "HQC-192", label: "HQC-192 (NIST FIPS 230, Category 3)" },
-  { value: "HQC-256", label: "HQC-256 (NIST FIPS 230, Category 5)" },
+  { value: "HQC-128", label: "HQC-128 (NIST-selected KEM, Category 1)" },
+  { value: "HQC-192", label: "HQC-192 (NIST-selected KEM, Category 3)" },
+  { value: "HQC-256", label: "HQC-256 (NIST-selected KEM, Category 5)" },
   { value: "FALCON-512", label: "Falcon-512 (Category 1)" },
   { value: "FALCON-1024", label: "Falcon-1024 (Category 5)" },
 ] as const;
