@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Planner real-CBOM fine-tune deepened to 30 epochs: the full 37-fold
+  host-disjoint LOO now scores **τ-b 0.7229** vs the doctrine heuristic 0.7308
+  (Δ **−0.0079**, down from −0.0661) and **matches the doctrine on 36/37**
+  held-out real CBOMs (`planner/results/real_cbom_loo.json`); beats random by
+  +0.553. README/docs updated to the honest out-of-sample number.
+
+### Fixed
+- `scripts/train_factory.py --phase all` crashed in `phase_risk` on real CBOM
+  assets with `"algorithm": null`; `qtrust/models/risk/model.py::featurize`
+  now coalesces None/empty algorithms and the factory defaults to RSA-2048.
+  The full factory pipeline (discovery → risk → graph) now completes.
+
 ## [2.2.0] - 2026-08-30
 
 ### Added

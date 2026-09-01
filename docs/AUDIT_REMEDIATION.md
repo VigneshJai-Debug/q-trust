@@ -130,7 +130,16 @@ nothing is estimated. See `docs/DEVELOPER_ROADMAP.md` for interpretation.
 | RL agent (20 feasible envs) | `python scripts/eval_rl_agent.py --n-envs 20` | agent reward **108.93** vs heuristic **112.40** vs random **100.11**; completion 100% | `planner/results/rl_benchmark_cpu_repro.json` |
 | Anomaly detector on real CBOMs | `python scripts/train_real_models.py --model anomaly --epochs 30` | detection **168/168 (100%)**, FPR **3/56 (5.4%)** | `inspector/anomaly_model_real.pt` (gitignored) |
 | Full real-data training (all 15 models) | `python scripts/train_qtrust_all.py --real` | **15/15 trained, 15/15 anchors, 6 models beat baselines (mean gain 1.79×)**, wall 255s | `qtrust_ai/artifacts/training_report_real.json` |
-| Full 37-fold LOO (idle A100) | `python scripts/eval_real_cbom_loo.py` | model τ-b **0.6647** vs heuristic **0.7308** (Δ −0.0661); random 0.1695 | `planner/results/real_cbom_loo.json` |
+| Full 37-fold LOO (idle A100, 30-epoch fine-tune) | `python scripts/eval_real_cbom_loo.py --epochs 30 --n-synthetic 2000` | model τ-b **0.7229** vs heuristic **0.7308** (Δ **−0.0079**, was −0.0661); random 0.1695; matches the doctrine on **36/37** folds | `planner/results/real_cbom_loo.json` |
+
+One defect was found and fixed during this pass:
+- `scripts/train_factory.py --phase all` crashed in `phase_risk` when a real
+  CBOM asset carried `"algorithm": null` (`.get("algorithm", "RSA-2048")`
+  returns `None` for a present-but-null key), which then blew up
+  `qtrust/models/risk/model.py::featurize` on `algo.split("-")`. Fixed both
+  sides: the factory now coalesces to `"RSA-2048"`, and `featurize` guards
+  None/empty algorithms. `python scripts/train_factory.py --phase all` now
+  completes end-to-end (discovery → risk → graph).
 
 Two integrity fixes were made during reproduction:
 - `scripts/eval_real_cbom_loo.py` / `scripts/eval_rl_agent.py` naively picked

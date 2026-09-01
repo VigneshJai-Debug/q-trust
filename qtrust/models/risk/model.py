@@ -36,8 +36,8 @@ FEATURES = [
 def featurize(asset: Dict[str, Any]) -> List[float]:
     # Simplified featurizer — real would use blast_radius GNN output, etc.
     vuln_map = {"RSA": 5, "ECDSA": 5, "ECDH": 5, "AES-128": 3, "AES-256": 1, "ML-KEM": 0}
-    algo = asset.get("algorithm", "RSA-2048")
-    base = vuln_map.get(algo.split("-")[0], 3)
+    algo = (asset.get("algorithm") or "RSA-2048").split("-")[0]
+    base = vuln_map.get(algo, 3)
     return [
         float(base),
         min(1.0, asset.get("key_size", 2048) / 4096),

@@ -50,7 +50,7 @@ def phase_risk() -> dict:
         for a in cbom.get("assets", []):
             assets.append(
                 {
-                    "algorithm": a.get("algorithm", "RSA-2048"),
+                    "algorithm": a.get("algorithm") or "RSA-2048",
                     "internet_exposed": True,
                     "data_lifetime_years": 12 if "finance" in p.name else 3,
                     "business_criticality": 5 if "finance" in p.name else 2,
