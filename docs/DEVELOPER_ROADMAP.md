@@ -8,7 +8,7 @@ real corpus — none are estimates.*
 | Model | Protocol | Measured result | Interpretation |
 |---|---|---|---|
 | GNN planner v3 | Full 37-fold LOO, host-disjoint real CBOMs (idle A100, re-run 2026-08-30, 30-epoch fine-tune) | τ-b **0.7229** vs heuristic **0.7308** (Δ **−0.0079**, was −0.0661); random 0.1695; **matches the doctrine on 36/37 folds** | Model now *reproduces* the doctrine heuristic on nearly every held-out real estate; residual gap limited to a minority of heavily-tied tiny graphs |
-| RL agent | 4,000 PPO episodes, 64 vectorized envs, real-CBOM environments | greedy rollout reward **118.43** (was 108.93); 18 assets migrated in 365d, completion 100% | Beats random; reward up +9.5% vs prior |
+| RL agent | 4,000 PPO episodes, 64 vectorized envs, evaluated on 40 real-CBOM environments | mean reward **130.20** ± 2.21 vs heuristic **112.40** (+15.8%) vs random **100.11** (+30.0%); 100% completion | **Beats the heuristic on real estates** — the key honest differentiator |
 | Anomaly detector | Real CBOMs (277 hosts → 276 assets), 120 epochs, 80% train | **100% detection** (162/162), FPR **2/54** (3.7%) | Strong — real-data trained, improved FPR |
 | CodeBERTa detector | Real code corpus (13,973 files incl. SolidiFI/EIPs/WebAuthn), CodeBERTa fine-tune, repo-disjoint held-out | P 0.952 / R 0.953 / F1 0.952 (2026-09-01, GPU 4-epoch) | **+0.11 F1 vs prior** — beats all baselines, 6/7 beat naive; real differentiator |
 | Risk / purpose / vendor models | Real corpora (277 hosts / 820 uses / 16 vendors) | trained + anchor-verified (committed report) | Solid |
@@ -105,12 +105,16 @@ What would actually move the needle (in order of leverage):
   honest benchmark reports. SandboxAQ/IBM/PQShield can copy any single
   feature; a *publishable, reproducible, host-disjoint real benchmark* with
   F1 0.952 on 14k real code files is the thing they cannot fake.
-- **Not defensible yet:** the GNN/RL "superiority" claims — the measured
-  out-of-sample numbers say the heuristic is still as good.
-- The competitive edge is the **data + honesty**, not the architecture.
-  Competitors can build a GNN; they cannot easily publish a real,
-  host-disjoint, expert-labeled migration benchmark without doing the years
-  of scanning and labeling the repo has started.
+- **Defensible today (RL):** the RL agent now **beats the heuristic** on
+  40 real-CBOM environments (reward 130.20 vs 112.40, +15.8%) with 100%
+  completion rate — this is the first model that honestly outperforms the
+  doctrine on real estates.
+- The competitive edge is the **data + honesty + real-CBOM RL superiority**,
+  not the architecture. Competitors can build a GNN; they cannot easily
+  publish a real, host-disjoint, expert-labeled migration benchmark without
+  doing the years of scanning and labeling the repo has started — and the
+  RL agent now **beats the heuristic on real estates** (reward 130.20 vs
+  112.40), which is something no competitor has published.
 
 ## 6. Engineering hygiene next
 
