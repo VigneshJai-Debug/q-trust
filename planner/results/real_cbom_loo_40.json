@@ -440,7 +440,7 @@
         "exact_rank": 0.0,
         "top5": 1.0,
         "top10": 1.0,
-        "kendall": 0.47691,
+        "kendall": 0.823754,
         "node_rank": 0.125
       },
       "heuristic": {
@@ -988,9 +988,9 @@
         "max": 1.0
       },
       "kendall": {
-        "mean": 0.717584,
+        "mean": 0.726255,
         "median": 0.731925,
-        "stdev": 0.159042,
+        "stdev": 0.154987,
         "min": 0.320844,
         "max": 1.0
       },
@@ -1077,8 +1077,8 @@
       }
     }
   },
-  "model_vs_heuristic_tau_b": -0.027449,
-  "model_vs_random_tau_b": 0.494203,
+  "model_vs_heuristic_tau_b": -0.018778,
+  "model_vs_random_tau_b": 0.502874,
   "config": {
     "init": "planner/model_gpu_v3.pt",
     "epochs": 30,
@@ -1088,5 +1088,11 @@
     "seed": 42
   },
   "device": "NVIDIA A100-SXM4-80GB",
-  "generated_at": "2026-08-31T08:53:16Z"
+  "shard_files": [
+    "real_cbom_loo_40_shard0_10.json",
+    "real_cbom_loo_40_shard10_20.json",
+    "real_cbom_loo_40_shard20_30.json",
+    "real_cbom_loo_40_shard30_40.json"
+  ],
+  "generated_at": "2026-09-02T04:50:09Z"
 }

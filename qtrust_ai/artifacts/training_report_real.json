@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-01T16:53:06.308952+00:00",
+  "generated_at": "2026-09-02T05:09:46.017444+00:00",
   "epochs": 5,
-  "rl_episodes": 60,
+  "rl_episodes": 40,
   "real_datasets": true,
   "datasets_used": {
     "code_corpus": 13973,
@@ -12,7 +12,7 @@
     {
       "model": "discovery/CryptoCodeDetector",
       "status": "trained",
-      "seconds": 285.17,
+      "seconds": 283.51,
       "train": {
         "epochs": 5,
         "examples": 11558,
@@ -160,7 +160,7 @@
     {
       "model": "discovery/AlgorithmPurposeClassifier",
       "status": "trained",
-      "seconds": 5.35,
+      "seconds": 5.4,
       "train": {
         "examples": 935,
         "distribution": {
@@ -260,7 +260,7 @@
     {
       "model": "graph/TemporalGNN",
       "status": "trained",
-      "seconds": 13.01,
+      "seconds": 14.99,
       "train": {
         "examples": 301,
         "mae": 4.018,
@@ -292,7 +292,7 @@
     {
       "model": "risk/QuantumExposureModel",
       "status": "trained",
-      "seconds": 0.34,
+      "seconds": 0.33,
       "train": {
         "examples": 277,
         "factor_weights": {
@@ -342,7 +342,7 @@
     {
       "model": "migration/PQCRecommender",
       "status": "trained",
-      "seconds": 3.89,
+      "seconds": 3.97,
       "train": {
         "examples": 935,
         "classes": [
@@ -398,7 +398,7 @@
     {
       "model": "migration/MigrationCostPredictor",
       "status": "trained",
-      "seconds": 1.19,
+      "seconds": 1.15,
       "train": {
         "examples": 401,
         "weights": {
@@ -431,7 +431,7 @@
     {
       "model": "migration/MigrationFailurePredictor",
       "status": "trained",
-      "seconds": 0.58,
+      "seconds": 0.53,
       "train": {
         "examples": 600,
         "weights": {
@@ -473,7 +473,7 @@
     {
       "model": "migration/InteroperabilityPredictor",
       "status": "trained",
-      "seconds": 3.6,
+      "seconds": 3.13,
       "train": {
         "examples": 505,
         "bias_compat": 0.15,
@@ -514,10 +514,10 @@
     {
       "model": "migration/MultiObjectiveRLAgent",
       "status": "trained",
-      "seconds": 17.09,
+      "seconds": 7.75,
       "train": {
-        "episodes": 60,
-        "mean_reward": 0.9839,
+        "episodes": 40,
+        "mean_reward": 0.9312,
         "weights": {
           "w_security": 0.28,
           "w_compliance": 0.18,
@@ -574,7 +574,7 @@
     {
       "model": "monitoring/CryptoAnomalyDetector",
       "status": "trained",
-      "seconds": 0.37,
+      "seconds": 0.36,
       "train": {
         "n": 30,
         "algos": 7,
@@ -685,7 +685,7 @@
     {
       "model": "vendor/SupplyChainRiskModel + VendorReadinessModel",
       "status": "trained",
-      "seconds": 0.04,
+      "seconds": 0.03,
       "train": {
         "_scm": {
           "vendor_a": 91.0,
@@ -834,6 +834,6 @@
     "errors": 0,
     "anchors_ok": 15,
     "anchors_total": 15,
-    "wall_seconds": 337.5
+    "wall_seconds": 327.85
   }
 }

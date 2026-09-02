@@ -1,0 +1,204 @@
+{
+  "protocol": "leave-one-out (host-disjoint CBOMs, real TLS scan)",
+  "n_cboms": 3,
+  "n_hosts": 24,
+  "fold_metrics": {
+    "real_finance_0.json": {
+      "model": {
+        "exact_rank": 0.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.731925,
+        "node_rank": 0.125
+      },
+      "heuristic": {
+        "exact_rank": 1.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.731925,
+        "node_rank": 1.0
+      },
+      "random": {
+        "exact_rank": 0.0,
+        "top5": 0.0,
+        "top10": 1.0,
+        "kendall": -0.146385,
+        "node_rank": 0.0
+      },
+      "n_assets": 8
+    },
+    "real_finance_1.json": {
+      "model": {
+        "exact_rank": 0.0,
+        "top5": 0.0,
+        "top10": 1.0,
+        "kendall": 0.5,
+        "node_rank": 0.125
+      },
+      "heuristic": {
+        "exact_rank": 1.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.5,
+        "node_rank": 1.0
+      },
+      "random": {
+        "exact_rank": 0.0,
+        "top5": 0.0,
+        "top10": 1.0,
+        "kendall": 0.214286,
+        "node_rank": 0.125
+      },
+      "n_assets": 8
+    },
+    "real_finance_2.json": {
+      "model": {
+        "exact_rank": 0.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.731925,
+        "node_rank": 0.125
+      },
+      "heuristic": {
+        "exact_rank": 1.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.731925,
+        "node_rank": 1.0
+      },
+      "random": {
+        "exact_rank": 0.0,
+        "top5": 0.0,
+        "top10": 1.0,
+        "kendall": 0.341565,
+        "node_rank": 0.0
+      },
+      "n_assets": 8
+    }
+  },
+  "aggregate": {
+    "model": {
+      "exact_rank": {
+        "mean": 0.0,
+        "median": 0.0,
+        "stdev": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "top5": {
+        "mean": 0.666667,
+        "median": 1.0,
+        "stdev": 0.57735,
+        "min": 0.0,
+        "max": 1.0
+      },
+      "top10": {
+        "mean": 1.0,
+        "median": 1.0,
+        "stdev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "kendall": {
+        "mean": 0.654617,
+        "median": 0.731925,
+        "stdev": 0.133902,
+        "min": 0.5,
+        "max": 0.731925
+      },
+      "node_rank": {
+        "mean": 0.125,
+        "median": 0.125,
+        "stdev": 0.0,
+        "min": 0.125,
+        "max": 0.125
+      }
+    },
+    "heuristic": {
+      "exact_rank": {
+        "mean": 1.0,
+        "median": 1.0,
+        "stdev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "top5": {
+        "mean": 1.0,
+        "median": 1.0,
+        "stdev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "top10": {
+        "mean": 1.0,
+        "median": 1.0,
+        "stdev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "kendall": {
+        "mean": 0.654617,
+        "median": 0.731925,
+        "stdev": 0.133902,
+        "min": 0.5,
+        "max": 0.731925
+      },
+      "node_rank": {
+        "mean": 1.0,
+        "median": 1.0,
+        "stdev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      }
+    },
+    "random": {
+      "exact_rank": {
+        "mean": 0.0,
+        "median": 0.0,
+        "stdev": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "top5": {
+        "mean": 0.0,
+        "median": 0.0,
+        "stdev": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "top10": {
+        "mean": 1.0,
+        "median": 1.0,
+        "stdev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "kendall": {
+        "mean": 0.136489,
+        "median": 0.214286,
+        "stdev": 0.253107,
+        "min": -0.146385,
+        "max": 0.341565
+      },
+      "node_rank": {
+        "mean": 0.041667,
+        "median": 0.0,
+        "stdev": 0.072169,
+        "min": 0.0,
+        "max": 0.125
+      }
+    }
+  },
+  "model_vs_heuristic_tau_b": 0.0,
+  "model_vs_random_tau_b": 0.518128,
+  "config": {
+    "init": "planner/model_gpu_v3.pt",
+    "epochs": 2,
+    "n_synthetic": 300,
+    "batch_size": 64,
+    "learning_rate": 0.0005,
+    "seed": 42
+  },
+  "device": "NVIDIA A100-SXM4-80GB",
+  "generated_at": "2026-09-02T08:23:58Z"
+}

@@ -65,5 +65,5 @@
   "trained_on": "PPO, 64 vectorized envs, packed real-CBOM estates with scan-derived risk labels (retrain_rl_real_cbom.py, seed 42)",
   "model": "planner/rl_agent_real.pt",
   "env_seeds": "from_cbom(cbom, seed=i) for i in range(n_envs)",
-  "generated_at": "2026-09-02T08:19:28Z"
+  "generated_at": "2026-09-02T08:24:06Z"
 }

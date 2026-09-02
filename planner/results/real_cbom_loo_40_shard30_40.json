@@ -1,0 +1,261 @@
+{
+  "protocol": "leave-one-out (host-disjoint CBOMs, real TLS scan)",
+  "shard": [
+    30,
+    40
+  ],
+  "n_cboms_total": 40,
+  "n_hosts_total": 280,
+  "fold_metrics": {
+    "real_security_0.json": {
+      "model": {
+        "exact_rank": 0.0,
+        "top5": 0.0,
+        "top10": 1.0,
+        "kendall": 0.779194,
+        "node_rank": 0.5
+      },
+      "heuristic": {
+        "exact_rank": 1.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.779194,
+        "node_rank": 1.0
+      },
+      "random": {
+        "exact_rank": 0.0,
+        "top5": 0.0,
+        "top10": 1.0,
+        "kendall": -0.595854,
+        "node_rank": 0.125
+      },
+      "n_assets": 8
+    },
+    "real_security_1.json": {
+      "model": {
+        "exact_rank": 0.0,
+        "top5": 0.0,
+        "top10": 1.0,
+        "kendall": 0.779194,
+        "node_rank": 0.25
+      },
+      "heuristic": {
+        "exact_rank": 1.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.779194,
+        "node_rank": 1.0
+      },
+      "random": {
+        "exact_rank": 0.0,
+        "top5": 0.0,
+        "top10": 1.0,
+        "kendall": -0.137505,
+        "node_rank": 0.0
+      },
+      "n_assets": 8
+    },
+    "real_security_2.json": {
+      "model": {
+        "exact_rank": 1.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.816497,
+        "node_rank": 1.0
+      },
+      "heuristic": {
+        "exact_rank": 1.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.816497,
+        "node_rank": 1.0
+      },
+      "random": {
+        "exact_rank": 0.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.816497,
+        "node_rank": 0.333333
+      },
+      "n_assets": 3
+    },
+    "real_tech_0.json": {
+      "model": {
+        "exact_rank": 0.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.823754,
+        "node_rank": 0.75
+      },
+      "heuristic": {
+        "exact_rank": 1.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.823754,
+        "node_rank": 1.0
+      },
+      "random": {
+        "exact_rank": 0.0,
+        "top5": 0.0,
+        "top10": 1.0,
+        "kendall": 0.390199,
+        "node_rank": 0.125
+      },
+      "n_assets": 8
+    },
+    "real_tech_1.json": {
+      "model": {
+        "exact_rank": 1.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 1.0,
+        "node_rank": 1.0
+      },
+      "heuristic": {
+        "exact_rank": 1.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 1.0,
+        "node_rank": 1.0
+      },
+      "random": {
+        "exact_rank": 1.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 1.0,
+        "node_rank": 1.0
+      },
+      "n_assets": 2
+    },
+    "real_tech_2.json": {
+      "model": {
+        "exact_rank": 0.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.731925,
+        "node_rank": 0.125
+      },
+      "heuristic": {
+        "exact_rank": 1.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.731925,
+        "node_rank": 1.0
+      },
+      "random": {
+        "exact_rank": 0.0,
+        "top5": 0.0,
+        "top10": 1.0,
+        "kendall": -0.146385,
+        "node_rank": 0.0
+      },
+      "n_assets": 8
+    },
+    "real_tech_3.json": {
+      "model": {
+        "exact_rank": 0.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.731925,
+        "node_rank": 0.5
+      },
+      "heuristic": {
+        "exact_rank": 1.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.731925,
+        "node_rank": 1.0
+      },
+      "random": {
+        "exact_rank": 0.0,
+        "top5": 0.0,
+        "top10": 1.0,
+        "kendall": 0.341565,
+        "node_rank": 0.125
+      },
+      "n_assets": 8
+    },
+    "real_tech_4.json": {
+      "model": {
+        "exact_rank": 0.0,
+        "top5": 0.0,
+        "top10": 1.0,
+        "kendall": 0.731925,
+        "node_rank": 0.125
+      },
+      "heuristic": {
+        "exact_rank": 1.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.731925,
+        "node_rank": 1.0
+      },
+      "random": {
+        "exact_rank": 0.0,
+        "top5": 0.0,
+        "top10": 1.0,
+        "kendall": 0.048795,
+        "node_rank": 0.25
+      },
+      "n_assets": 8
+    },
+    "real_tech_5.json": {
+      "model": {
+        "exact_rank": 0.0,
+        "top5": 0.0,
+        "top10": 1.0,
+        "kendall": 0.471405,
+        "node_rank": 0.333333
+      },
+      "heuristic": {
+        "exact_rank": 1.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.471405,
+        "node_rank": 1.0
+      },
+      "random": {
+        "exact_rank": 0.0,
+        "top5": 0.0,
+        "top10": 1.0,
+        "kendall": -0.353553,
+        "node_rank": 0.222222
+      },
+      "n_assets": 9
+    },
+    "real_tech_6.json": {
+      "model": {
+        "exact_rank": 1.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.816497,
+        "node_rank": 1.0
+      },
+      "heuristic": {
+        "exact_rank": 1.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.816497,
+        "node_rank": 1.0
+      },
+      "random": {
+        "exact_rank": 0.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.816497,
+        "node_rank": 0.333333
+      },
+      "n_assets": 3
+    }
+  },
+  "config": {
+    "init": "planner/model_gpu_v3.pt",
+    "epochs": 30,
+    "n_synthetic": 2000,
+    "batch_size": 64,
+    "learning_rate": 0.0005,
+    "seed": 42
+  },
+  "device": "NVIDIA A100-SXM4-80GB",
+  "generated_at": "2026-09-02T04:34:56Z"
+}

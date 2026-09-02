@@ -123,6 +123,17 @@ Q-Trust_v2.0.0_Senior_Engineer_Codebase_Audit.pdf
 .ipynb_checkpoints/
 Q-Trust*.pdf
 
+# ─── Local dataset collection (2.4 GB, not pushable to GitHub) ───────────────
+# Q-Trust_Dataset_Collection/ is the local mirror of the public benchmark
+# datasets used to build the real code corpus (SolidiFI / SmartBugs / EIPs /
+# WebAuthn blockchain code) plus unrelated reference datasets (SST-2, ml-100k,
+# World Bank CSVs, …). It contains files far above GitHub's 100 MB limit
+# (e.g. ACVP-Server-master.zip 443 MB) so it cannot be committed; the derived
+# corpus is cached under qtrust_ai/artifacts/real_datasets/ (also ignored,
+# rebuilt by scripts/build_real_datasets.py + scripts/expand_real_corpus.py)
+# and the benchmark JSONs that cite it are force-tracked.
+Q-Trust_Dataset_Collection/
+
 # ─── GitHub kit delivery — profile repo is separate (humoge7502/humoge7502) ─
 # The folder `profile-repo/` is a prepared copy of the profile kit for
 # humoge7502/humoge7502. It is NOT part of the q-trust codebase and must not

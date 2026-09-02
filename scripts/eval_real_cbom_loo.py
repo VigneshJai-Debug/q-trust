@@ -37,6 +37,21 @@ Result JSON schema (written to ``planner/results/real_cbom_loo.json``):
       "generated_at": "..."
     }
 
+GPU-parallel execution (8×A100 class):
+
+    # shard 1..K — each trains a fold slice on its own CUDA device
+    CUDA_VISIBLE_DEVICES=0 python scripts/eval_real_cbom_loo.py --fold-start 0  --fold-end 10
+    CUDA_VISIBLE_DEVICES=1 python scripts/eval_real_cbom_loo.py --fold-start 10 --fold-end 20
+    CUDA_VISIBLE_DEVICES=2 python scripts/eval_real_cbom_loo.py --fold-start 20 --fold-end 30
+    CUDA_VISIBLE_DEVICES=3 python scripts/eval_real_cbom_loo.py --fold-start 30 --fold-end 40
+
+    # merge the shard artifacts into the canonical report
+    python scripts/eval_real_cbom_loo.py --merge-shards
+
+Fold seeds are derived from the full graph list BEFORE slicing, so every
+shard reproduces exactly the seeds a monolithic run would use — the merged
+report is bit-identical to a single-process run with the same config.
+
 Usage:
     python scripts/eval_real_cbom_loo.py                     # defaults below
     python scripts/eval_real_cbom_loo.py --epochs 8 --n-synthetic 2000 --seed 42
@@ -93,22 +108,34 @@ def run_loo(
     device_name: str | None = None,
     quick: bool = False,
     out_path: Path = RESULT_PATH,
+    fold_start: int = 0,
+    fold_end: int | None = None,
 ) -> dict:
-    """Run leave-one-out real-CBOM evaluation. Returns the full report dict."""
+    """Run leave-one-out real-CBOM evaluation. Returns the full report dict.
+
+    ``fold_start`` / ``fold_end`` (exclusive) select a contiguous fold slice
+    so the LOO can be sharded across GPUs; each shard writes a partial
+    artifact that ``merge_shards`` combines into the canonical report.
+    """
     import torch
 
     # Probe-based resolution: a reported-but-unusable CUDA device (contended
     # or absent driver) must not silently mislabel results as GPU-measured.
     device = resolve_device(device_name)
-    graphs = load_real_graphs(cbom_dir, seed=seed)
-    if quick:
-        graphs = graphs[:3]
-    print(f"Device: {torch.cuda.get_device_name(0) if device.type == 'cuda' else 'cpu'}")
-    print(f"LOO over {len(graphs)} real CBOMs (host-disjoint corpus)")
-
-    # Deterministic per-fold seeds so the run is reproducible.
+    all_graphs = load_real_graphs(cbom_dir, seed=seed)
+    # Deterministic per-fold seeds over the FULL corpus BEFORE slicing, so
+    # every shard uses exactly the seeds a monolithic run would use.
     rng = __import__("random").Random(seed)
-    fold_seeds = [rng.randint(0, 1_000_000) for _ in graphs]
+    all_seeds = [rng.randint(0, 1_000_000) for _ in all_graphs]
+    if quick:
+        all_graphs, all_seeds = all_graphs[:3], all_seeds[:3]
+    if fold_end is None:
+        fold_end = len(all_graphs)
+    graphs = all_graphs[fold_start:fold_end]
+    fold_seeds = all_seeds[fold_start:fold_end]
+    print(f"Device: {torch.cuda.get_device_name(0) if device.type == 'cuda' else 'cpu'}")
+    print(f"LOO over {len(graphs)} real CBOMs (folds {fold_start}..{fold_end - 1}, "
+          f"corpus {len(all_graphs)}) (host-disjoint corpus)")
 
     fold_metrics: dict[str, dict] = {}
     model_scores_all: list[dict] = []
@@ -117,8 +144,9 @@ def run_loo(
     t0 = time.time()
 
     for fold, (name, held_out) in enumerate(graphs):
-        train_real = [g for n, g in graphs if n != name]
-        ft_path = REPO_ROOT / "planner" / f"_loo_fold{fold}.pt"
+        gi = fold_start + fold  # global fold index (stable across shards)
+        train_real = [g for n, g in all_graphs if n != name]
+        ft_path = REPO_ROOT / "planner" / f"_loo_fold{gi}.pt"
         train_gpu(
             n_graphs=n_synthetic,
             epochs=epochs,
@@ -184,6 +212,40 @@ def run_loo(
         "heuristic": _agg(heur_scores_all),
         "random": _agg(rand_scores_all),
     }
+    config = {
+        "init": str(BASE_MODEL.relative_to(REPO_ROOT)),
+        "epochs": epochs,
+        "n_synthetic": n_synthetic,
+        "batch_size": batch_size,
+        "learning_rate": learning_rate,
+        "seed": seed,
+    }
+    device_label = torch.cuda.get_device_name(0) if device.type == "cuda" else "cpu"
+
+    if len(graphs) != len(all_graphs):
+        # Fold-slice (shard) mode: persist the partial artifact; a later
+        # --merge-shards pass assembles the canonical report from all shards.
+        shard = {
+            "protocol": "leave-one-out (host-disjoint CBOMs, real TLS scan)",
+            "shard": [fold_start, fold_end],
+            "n_cboms_total": len(all_graphs),
+            "n_hosts_total": sum(int(g.n_assets) for _, g in all_graphs),
+            "fold_metrics": fold_metrics,
+            "config": config,
+            "device": device_label,
+            "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+        shard_path = out_path.with_name(
+            f"{out_path.stem}_shard{fold_start}_{fold_end}.json"
+        )
+        shard_path.parent.mkdir(parents=True, exist_ok=True)
+        shard_path.write_text(json.dumps(shard, indent=2))
+        n_ties = sum(1 for m in fold_metrics.values()
+                     if abs(m["model"]["kendall"] - m["heuristic"]["kendall"]) < 1e-9)
+        print(f"\nWrote shard {shard_path} "
+              f"({len(fold_metrics)} folds, model-heuristic ties {n_ties})")
+        return shard
+
     report = {
         "protocol": "leave-one-out (host-disjoint CBOMs, real TLS scan)",
         "n_cboms": len(graphs),
@@ -196,20 +258,81 @@ def run_loo(
         "model_vs_random_tau_b": round(
             agg["model"]["kendall"]["mean"] - agg["random"]["kendall"]["mean"], 6
         ),
-        "config": {
-            "init": str(BASE_MODEL.relative_to(REPO_ROOT)),
-            "epochs": epochs,
-            "n_synthetic": n_synthetic,
-            "batch_size": batch_size,
-            "learning_rate": learning_rate,
-            "seed": seed,
-        },
-        "device": torch.cuda.get_device_name(0) if device.type == "cuda" else "cpu",
+        "config": config,
+        "device": device_label,
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(report, indent=2))
     print(f"\nWrote {out_path}")
+    print(f"Out-of-sample real-CBOM τ-b: model {agg['model']['kendall']['mean']:.4f} "
+          f"vs heuristic {agg['heuristic']['kendall']['mean']:.4f} "
+          f"(Δ {report['model_vs_heuristic_tau_b']:+.4f})")
+    return report
+
+
+def merge_shards(out_path: Path) -> dict:
+    """Combine all ``<stem>_shard<start>_<end>.json`` artifacts next to
+    ``out_path`` into the canonical LOO report (single-GPU-equivalent)."""
+    shard_files = sorted(out_path.parent.glob(f"{out_path.stem}_shard*.json"))
+    if not shard_files:
+        raise FileNotFoundError(
+            f"no shard artifacts found for {out_path.name} — run fold slices first"
+        )
+    fold_metrics: dict[str, dict] = {}
+    config: dict | None = None
+    devices: list[str] = []
+    n_cboms_total = -1
+    n_hosts_total = -1
+    for sf in shard_files:
+        data = json.loads(sf.read_text())
+        overlap = set(fold_metrics) & set(data["fold_metrics"])
+        if overlap:
+            raise ValueError(f"duplicate folds across shards: {sorted(overlap)}")
+        fold_metrics.update(data["fold_metrics"])
+        config = config or data.get("config")
+        devices.append(str(data.get("device")))
+        n_cboms_total = max(n_cboms_total, int(data.get("n_cboms_total", 0)))
+        n_hosts_total = max(n_hosts_total, int(data.get("n_hosts_total", 0)))
+
+    def _agg(runs: list[dict]) -> dict:
+        out = {}
+        for k in ("exact_rank", "top5", "top10", "kendall", "node_rank"):
+            vals = [r[k] for r in runs]
+            out[k] = {
+                "mean": round(statistics.mean(vals), 6),
+                "median": round(statistics.median(vals), 6),
+                "stdev": round(statistics.stdev(vals), 6) if len(vals) > 1 else 0.0,
+                "min": round(min(vals), 6),
+                "max": round(max(vals), 6),
+            }
+        return out
+
+    model_runs = [m["model"] for m in fold_metrics.values()]
+    heur_runs = [m["heuristic"] for m in fold_metrics.values()]
+    rand_runs = [m["random"] for m in fold_metrics.values()]
+    agg = {"model": _agg(model_runs), "heuristic": _agg(heur_runs), "random": _agg(rand_runs)}
+    report = {
+        "protocol": "leave-one-out (host-disjoint CBOMs, real TLS scan)",
+        "n_cboms": len(fold_metrics),
+        "n_hosts": n_hosts_total,
+        "fold_metrics": dict(sorted(fold_metrics.items())),
+        "aggregate": agg,
+        "model_vs_heuristic_tau_b": round(
+            agg["model"]["kendall"]["mean"] - agg["heuristic"]["kendall"]["mean"], 6
+        ),
+        "model_vs_random_tau_b": round(
+            agg["model"]["kendall"]["mean"] - agg["random"]["kendall"]["mean"], 6
+        ),
+        "config": config,
+        "device": devices[0] if len(set(devices)) == 1 else devices,
+        "shard_files": [str(sf.name) for sf in shard_files],
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(report, indent=2))
+    print(f"Merged {len(shard_files)} shards -> {out_path} "
+          f"({report['n_cboms']} folds)")
     print(f"Out-of-sample real-CBOM τ-b: model {agg['model']['kendall']['mean']:.4f} "
           f"vs heuristic {agg['heuristic']['kendall']['mean']:.4f} "
           f"(Δ {report['model_vs_heuristic_tau_b']:+.4f})")
@@ -226,7 +349,16 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--out", type=Path, default=RESULT_PATH)
     parser.add_argument("--quick", action="store_true", help="3 folds (smoke test)")
+    parser.add_argument("--fold-start", type=int, default=0,
+                        help="first fold index for this shard (GPU-parallel LOO)")
+    parser.add_argument("--fold-end", type=int, default=None,
+                        help="exclusive last fold index for this shard")
+    parser.add_argument("--merge-shards", action="store_true",
+                        help="merge *_shard*.json artifacts into the canonical report")
     args = parser.parse_args()
+    if args.merge_shards:
+        merge_shards(args.out)
+        raise SystemExit(0)
     run_loo(
         epochs=args.epochs,
         n_synthetic=args.n_synthetic,
@@ -236,4 +368,6 @@ if __name__ == "__main__":
         device_name=args.device,
         quick=args.quick,
         out_path=args.out,
+        fold_start=args.fold_start,
+        fold_end=args.fold_end,
     )

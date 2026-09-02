@@ -95,6 +95,101 @@ def normalize_asset(f: dict) -> dict:
     }
 
 
+def risk_criticality_from_scan(
+    algorithm: str,
+    key_size: int,
+    expired: bool = False,
+    self_signed: bool = False,
+    days_until_expiry: int | None = None,
+    not_after: str | None = None,
+) -> str:
+    """Deterministic real-asset criticality derived from TLS scan fields.
+
+    Raw TLS findings never carry an explicit criticality, so the RL migration
+    environments built from real CBOMs previously defaulted every asset to
+    ``medium`` — with a single criticality value the per-step reward has no
+    order-dependent term (+5 only for *critical* assets migrated before day 90,
+    and deadline pressure that only bites when total migration effort exceeds
+    365 days), so every completing policy scored identically and PPO had no
+    gradient to learn from. That made the real-CBOM RL benchmark degenerate
+    (agent ≈ heuristic ≈ random) and the archived "+15.8% vs heuristic"
+    headline unreproducible by any script in the repo.
+
+    The base strength ladder (aligned with the inspector's canonical
+    ``_assess_criticality``: RSA-1024 → critical, RSA-2048 → high) is then
+    raised by the other real scan fields the CBOMs carry: expired (+2),
+    self-signed (+1), and expiring within 90 days (+1, computed from the
+    certificate's real ``not_after``). It is a pure function of the
+    certificate's real attributes — deterministic, auditable, and shared by
+    the RL retrain and benchmark scripts so the training and evaluation
+    environments use the same labels.
+
+    Returns one of low / medium / high / critical.
+    """
+    alg = (algorithm or "").upper()
+    base = 2
+    if alg.startswith(("ML-KEM", "ML-DSA", "SLH-DSA", "HQC", "FALCON")):
+        base = 1  # already post-quantum — lowest migration urgency
+    elif "RSA" in alg:
+        if key_size and key_size <= 1024:
+            return "critical"  # broken key size
+        base = 4 if (not key_size or key_size < 3072) else 3  # RSA-2048 high, RSA-4096 medium
+    elif alg.startswith(("ECDSA", "ECDH", "ECC")) or alg in ("ED25519", "ED448", "X25519"):
+        base = 3  # classical asymmetric (Shor-vulnerable) — migrate, below RSA-2048
+    if expired:
+        base += 2
+    if self_signed:
+        base += 1
+    if days_until_expiry is None and not_after:
+        try:
+            exp = datetime.fromisoformat(str(not_after).replace("Z", "+00:00"))
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            days_until_expiry = int((exp - datetime.now(timezone.utc)).days)
+        except (TypeError, ValueError):
+            pass
+    if days_until_expiry is not None:
+        try:
+            if 0 < int(days_until_expiry) < 90:
+                base += 1
+        except (TypeError, ValueError):
+            pass
+    if base >= 5:
+        return "critical"
+    if base >= 4:
+        return "high"
+    if base <= 1:
+        return "low"
+    return "medium"
+
+
+def enrich_asset_criticality(a: dict) -> dict:
+    """Attach the scan-derived criticality to a RAW scan finding before
+    ``normalize_asset`` runs. Real TLS CBOMs are stamped with a blanket
+    ``criticality: "medium"`` placeholder by ``scripts/build_real_cboms.py``
+    (the TLS scanner itself does not emit per-cert criticality), which flattens
+    every real asset to one class — and with a single criticality value the RL
+    reward has no order-dependent term, so every completing policy scores
+    identically and PPO has no gradient (the archived "RL beats the heuristic
+    on real estates" headline was not reproducible). This replaces that
+    placeholder with a deterministic label derived from the certificate's real
+    scan fields (algorithm / key size / expiry / self-signed). Labels that are
+    genuinely ``high``/``critical``/``low`` are never overwritten. Apply to the
+    finding dict BEFORE ``normalize_asset`` (mutates and returns ``a``)."""
+    raw_crit = (a.get("criticality") or "").strip().lower()
+    if raw_crit in ("", "medium") and not a.get("_criticality_from_scan"):
+        a["criticality"] = risk_criticality_from_scan(
+            a.get("algorithm", ""),
+            int(a.get("key_size") or 0),
+            expired=bool(a.get("expired")),
+            self_signed=bool(a.get("self_signed")),
+            days_until_expiry=a.get("days_until_expiry"),
+            not_after=a.get("not_after"),
+        )
+        a["_criticality_from_scan"] = True
+    return a
+
+
 def group_by_host(assets: list[dict]) -> list[dict]:
     """One CBOM dict per host (the natural scanning unit)."""
     by_host: dict[str, list[dict]] = {}
@@ -106,9 +201,17 @@ def group_by_host(assets: list[dict]) -> list[dict]:
 
 def pack_graph_cboms(assets: list[dict], n_packs: int, seed: int = 42) -> list[dict]:
     """Pack host groups into GNN-sized CBOMs (20-100 assets) so real graphs
-    match the synthetic generator's node-count distribution."""
+    match the synthetic generator's node-count distribution.
+
+    Deterministic across processes: the host list is built from a SET of
+    scanner hostnames, and Python set iteration order is hash-randomized per
+    process (PYTHONHASHSEED), so hosts are sorted before shuffling with the
+    seeded RNG — same corpus + seed ⇒ same packs on every machine/run.
+    (Without the sort, ``pack_graph_cboms(..., seed=99)`` silently produced a
+    *different* packing every process, which made the RL retrain and the
+    RL benchmark train/eval on different estates.)"""
     rng = random.Random(seed)
-    hosts = list({a["host"] or a["location"] for a in assets})
+    hosts = sorted({a["host"] or a["location"] for a in assets})
     rng.shuffle(hosts)
     packs = []
     cursor = 0

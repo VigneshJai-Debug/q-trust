@@ -7,13 +7,33 @@ real corpus — none are estimates.*
 
 | Model | Protocol | Measured result | Interpretation |
 |---|---|---|---|
-| GNN planner v3 | Full 37-fold LOO, host-disjoint real CBOMs (idle A100, re-run 2026-08-30, 30-epoch fine-tune) | τ-b **0.7229** vs heuristic **0.7308** (Δ **−0.0079**, was −0.0661); random 0.1695; **matches the doctrine on 36/37 folds** | Model now *reproduces* the doctrine heuristic on nearly every held-out real estate; residual gap limited to a minority of heavily-tied tiny graphs |
-| RL agent | 4,000 PPO episodes, 64 vectorized envs, evaluated on 40 real-CBOM environments | mean reward **130.20** ± 2.21 vs heuristic **112.40** (+15.8%) vs random **100.11** (+30.0%); 100% completion | **Beats the heuristic on real estates** — the key honest differentiator |
+| GNN planner v3 | Full **40-fold LOO**, host-disjoint real CBOMs (280 hosts, re-run 2026-09-02 on the deterministic-kernel harness, **30-epoch fine-tune, 2,000 synthetic per fold**, folds sharded across **4 A100s** via `eval_real_cbom_loo.py --fold-start/--fold-end`, merged with `--merge-shards`; 3-fold repro bit-identical) | τ-b **0.7263** vs heuristic **0.7450** (Δ **−0.0188**); random 0.2234 (**+0.503**); **reproduces the doctrine on 38/40 folds** (0 wins / 38 ties / 2 losses — small heavily-tied graphs, n≤8 and n≤13) | Model *reproduces* the doctrine heuristic on essentially every held-out real estate (38/40, Δ≈0); the honest ceiling break requires expert pairwise labels. 60-epoch fine-tunes overfit the synthetic mix (Δ −0.055) — 30 epochs is the operating point. The pre-fix τ-b 0.7377 (39/40) is superseded: deterministic kernels (seeded shuffles, cudnn deterministic, no torch.compile) changed per-fold fine-tune outcomes |
+| RL agent | PPO, 64 vectorized envs, trained on packed real-CBOM estates with **scan-derived risk labels** (RSA-1024 → critical, RSA-2048 → high, expired/near-expiry raise the class), evaluated on 40 packed real-CBOM environments | mean reward **140.34** ± 8.13 vs heuristic **140.62** (Δ −0.28 — **tie**) vs random **136.84** (+**2.6%**); 100% completion, 2/40 wins · 27 ties · 11 losses | **Learns real risk-priority and matches the doctrine on real estates** (archived “beats heuristic 130.20 vs 112.40” was NOT reproducible — the CBOM builder stamped every asset `criticality: medium`, so real environments had zero reward signal; fixed + re-measured 2026-09-02; `pack_graph_cboms` host-set ordering was hash-randomized per process — sorted + re-run, identical across processes) |
 | Anomaly detector | Real CBOMs (277 hosts → 276 assets), 120 epochs, 80% train | **100% detection** (162/162), FPR **2/54** (3.7%) | Strong — real-data trained, improved FPR |
 | CodeBERTa detector | Real code corpus (13,973 files incl. SolidiFI/EIPs/WebAuthn), CodeBERTa fine-tune, repo-disjoint held-out | P 0.952 / R 0.953 / F1 0.952 (2026-09-01, GPU 4-epoch) | **+0.11 F1 vs prior** — beats all baselines, 6/7 beat naive; real differentiator |
 | Risk / purpose / vendor models | Real corpora (277 hosts / 820 uses / 16 vendors) | trained + anchor-verified (committed report) | Solid |
 
-**The honest headline (2026-09-01):** CodeBERTa jumped from F1 0.841 → **0.952** with the expanded 13,973-file real corpus (added 915 real SolidiFI/SmartBugs/EIPs/WebAuthn blockchain contracts) and 4 epochs of GPU fine-tuning on A100. RL agent reward improved to **118.43** (+9.5%). Side-channel detector trained on **real liboqs timing traces** — 5/5 clean → VERIFIED (0.05), 5/5 leak-injected → HIGH_RISK (0.95). Anomaly detector FPR improved to **3.7%** (from 5.4%). The flagship GNN LOO 40-fold benchmark is running on a dedicated A100 (60-epoch fine-tune, 4000 synthetic per fold); preliminary per-fold results show the model matches the doctrine on held-out real estates (τ-b ≈ 0.73, same as heuristic). It still does *not* beat the heuristic — and it cannot, because the heuristic **is** the doctrine the labels encode; only expert pairwise labels (`QTrust-RiskBench`) can break that ceiling. The CodeBERTa discovery model at F1 0.952 and the side-channel anomaly detector remain the genuinely differentiating, real-data-trained assets.
+**The honest headline (2026-09-02):** the **40-fold LOO** completed on the
+**deterministic-kernel harness** with the **30-epoch operating point** (2,000
+synthetic per fold) — the config the 60-epoch experiment showed to be best
+out-of-sample — with the folds **sharded across 4 A100s** (10 folds per GPU,
+merged with `eval_real_cbom_loo.py --merge-shards`): **τ-b 0.7263** vs
+heuristic **0.7450** (Δ **−0.0188**), reproducing the doctrine on **38/40**
+folds (0 wins / 38 ties / 2 losses — small heavily-tied graphs, n≤8 and
+n≤13), **+0.503 vs random** (see `real_cbom_loo_40.json`; a fresh 3-fold run
+is bit-identical to the merged shards). The 60-epoch fine-tune (Δ −0.0545)
+confirms the extra epochs overfit the synthetic mix. CodeBERTa holds at
+**F1 0.9525** on the 13,973-file real corpus (deterministic — same seed →
+same F1); the RL agent, retrained after a 2026-09-02 integrity fix (real
+assets now carry scan-derived risk instead of the builder's blanket
+`criticality: medium`, which had zeroed the reward signal), scores **140.34**
+vs heuristic **140.62** (tie) and **136.84** random (+2.6%) on 40 packed
+real-CBOM estates — it *learns* real risk-priority and matches the doctrine;
+side-channel detector **5/5 clean → VERIFIED (0.05), 5/5 leak-injected →
+HIGH_RISK (0.95)** on real liboqs traces; anomaly detector **100% detection,
+FPR 3.7%**. Neither model beats the doctrine on real estates — and cannot,
+because the heuristic **is** the doctrine the labels encode; only expert
+pairwise labels (`QTrust-RiskBench`) can break that ceiling.
 
 ## 2. The one ML problem that matters
 
@@ -61,14 +81,16 @@ What would actually move the needle (in order of leverage):
 ## 3. What to build next (as the developer)
 
 **0–30 days — make the numbers defensible:**
-- Re-run the full 37-fold LOO and the RL benchmark on a dedicated (non-
-  contended) A100; publish the artifact with wall-clock and device. (Done for
-  the LOO on 2026-08-30 with a 30-epoch real fine-tune:
-  `planner/results/real_cbom_loo.json`, τ-b **0.7229** vs heuristic 0.7308
-  (Δ −0.0079), matching the doctrine on **36/37** folds — the artifact records
+- Re-run the full 40-fold LOO and the RL benchmark on a dedicated A100;
+  publish the artifact with wall-clock, device and deterministic-kernel
+  config. (Done for the LOO on 2026-09-02 with the 30-epoch real fine-tune
+  on the deterministic harness: `planner/results/real_cbom_loo_40.json`,
+  τ-b **0.7263** vs heuristic 0.7450 (Δ −0.0188), reproducing the doctrine on
+  **38/40** folds — a 3-fold repro is bit-identical, and the artifact records
   the probe-verified device and full config.)
 - Train the anomaly detector and CodeBERTa on the *full* real corpus with the
-  GPU properly reserved; commit the reports (models stay gitignored).
+  GPU properly reserved; commit the reports (models stay gitignored). (Done
+  2026-09-02: F1 0.9525 deterministic; anomaly 162/162, FPR 2/54.)
 - Wire the real-data training into CI as a weekly scheduled job (like
   `pqc-scan.yml`) so the artifacts can't rot.
 
@@ -105,16 +127,21 @@ What would actually move the needle (in order of leverage):
   honest benchmark reports. SandboxAQ/IBM/PQShield can copy any single
   feature; a *publishable, reproducible, host-disjoint real benchmark* with
   F1 0.952 on 14k real code files is the thing they cannot fake.
-- **Defensible today (RL):** the RL agent now **beats the heuristic** on
-  40 real-CBOM environments (reward 130.20 vs 112.40, +15.8%) with 100%
-  completion rate — this is the first model that honestly outperforms the
-  doctrine on real estates.
-- The competitive edge is the **data + honesty + real-CBOM RL superiority**,
-  not the architecture. Competitors can build a GNN; they cannot easily
-  publish a real, host-disjoint, expert-labeled migration benchmark without
-  doing the years of scanning and labeling the repo has started — and the
-  RL agent now **beats the heuristic on real estates** (reward 130.20 vs
-  112.40), which is something no competitor has published.
+- **Defensible today (RL):** the RL agent **learns real risk-priority and
+  matches the doctrine heuristic on real estates** — reward 140.34 vs
+  heuristic 140.62 (Δ −0.28, tie) vs random 136.84 (+2.6%), 100% completion,
+  with risk labels derived from the real scan fields. (An archived claim that
+  it *beat* the heuristic (+15.8%) was not reproducible — the CBOM builder
+  stamped every asset `criticality: medium`, zeroing the reward signal; it
+  was fixed and re-measured on 2026-09-02.) The honest RL differentiator is
+  a *reproducible real-estate benchmark with documented reward semantics*,
+  not a victory margin over the doctrine.
+- The competitive edge is the **data + honesty + reproducible real-data
+  discipline**, not the architecture. Competitors can build a GNN or an RL
+  agent; they cannot easily publish a real, host-disjoint, deterministic-kernel
+  LOO benchmark and a real-CBOM RL benchmark with documented reward
+  semantics without doing the years of scanning and labeling the repo has
+  started.
 
 ## 6. Engineering hygiene next
 

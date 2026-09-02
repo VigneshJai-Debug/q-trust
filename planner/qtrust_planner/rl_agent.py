@@ -505,6 +505,12 @@ def train_agent_ppo(
         n_envs = min(n_envs, 8)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.manual_seed(seed)
+    # Deterministic kernels so identical seeds reproduce identical agents
+    # (same rationale as train_gpu.py: non-deterministic BF16/cuBLAS kernels
+    # flip small-fold outcomes run-to-run).
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.use_deterministic_algorithms(True)
     # Try torch.compile for PPO step if available. PyTorch-Geometric graphs have
     # dynamic node counts per step, so torch.compile recompiles on every shape
     # change and can be 10x SLOWER (same finding as train_gpu.py P2-10).
@@ -513,7 +519,8 @@ def train_agent_ppo(
     if init_path and os.path.exists(init_path):
         agent.load_state_dict(torch.load(init_path, map_location=device, weights_only=True))  # REG-04: weights_only=True
         print(f"Initialized from pretrained checkpoint: {init_path}")
-    if not os.environ.get("QTRUST_DISABLE_COMPILE", "0") == "1":
+    if not os.environ.get("QTRUST_DISABLE_COMPILE", "0") == "1" \
+            and not (torch.backends.cudnn.deterministic and torch.are_deterministic_algorithms_enabled()):
         try:
             agent = torch.compile(agent)  # type: ignore[attr-defined]
         except Exception:

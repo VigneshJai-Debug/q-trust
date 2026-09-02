@@ -351,8 +351,8 @@ flowchart LR
 |---|---|---|
 | Migration ranking | Kendall **τ 0.961** vs heuristic optimum (held-out) | [`planner/results/benchmark.json`](planner/results/benchmark.json) |
 | GNN v3 @ scale (synthetic) | 100K graphs · BF16 · per-graph ListMLE — held-out **τ 0.975** | [`planner/results/benchmark_v3.json`](planner/results/benchmark_v3.json) |
-| **GNN v3 + real data (LOO)** | in-dist **τ 0.9710** · **out-of-sample 37-fold LOO** on host-disjoint real TLS CBOMs: **τ-b 0.7229** vs doctrine heuristic **0.7308** (Δ **−0.008**, down from −0.066) — **matches the doctrine on 36/37** held-out real CBOMs · **+0.553 vs random** | [`planner/results/real_cbom_loo.json`](planner/results/real_cbom_loo.json) · in-sample suite [`benchmark_real_v3.json`](planner/results/benchmark_real_v3.json) |
-| RL migration agent | **100%** completion on 40 real-CBOM environments · mean reward **130.20** ± 2.21 vs heuristic **112.40** (+**15.8%**) vs random **100.11** (+**30.0%**) — beats the heuristic on real estates | [`planner/results/rl_benchmark_real_cbom.json`](planner/results/) |
+| **GNN v3 + real data (LOO)** | in-dist **τ 0.9710** · **out-of-sample 40-fold LOO** on host-disjoint real TLS CBOMs (280 hosts, re-run 2026-09-02 on the deterministic-kernel harness, 30-epoch fine-tune, folds sharded across **4 A100s**): **τ-b 0.7263** vs doctrine heuristic **0.7450** (Δ **−0.0188**) — **reproduces the doctrine on 38/40** held-out real CBOMs (0 wins / 38 ties / 2 losses, both small heavily-tied n≤8 graphs) · **+0.503 vs random** | [`planner/results/real_cbom_loo_40.json`](planner/results/real_cbom_loo_40.json) · in-sample suite [`benchmark_real_v3.json`](planner/results/benchmark_real_v3.json) |
+| RL migration agent | **100%** completion on 40 packed real-CBOM estates (risk labels derived from the real scan fields: RSA-1024 → critical, RSA-2048 → high, expired/near-expiry raise the class) · mean reward **140.34** ± 8.13 vs doctrine heuristic **140.62** (Δ **−0.28** — **statistical tie**) vs random **136.84** (+**3.50**, +**2.6%**) — learns real risk-priority and matches the doctrine on real estates ([bit-reproducible](docs/TRUTH_AUDIT.md): 2/40 wins · 27 ties · 11 losses) | [`planner/results/rl_benchmark_real_cbom.json`](planner/results/rl_benchmark_real_cbom.json) |
 | Code discovery model | CodeBERTa fine-tuned on **13,973 real code files** incl. SolidiFI/SmartBugs/EIPs/WebAuthn blockchain contracts (GPU 4-epoch, deterministic — same seed → same F1) — held-out **precision 0.952 / recall 0.953 / F1 0.952**, beating all baselines (6/7 beat naive, mean relative gain 1.55×) | [`qtrust_ai/artifacts/training_report_real.json`](qtrust_ai/artifacts/training_report_real.json) |
 | Real-data corpus | **13,973** real code files (incl. SolidiFI/SmartBugs/EIPs/WebAuthn) · **277** live TLS hosts · **401** NVD CVEs · **5** real liboqs timing trace sets | [`scripts/build_real_datasets.py`](scripts/build_real_datasets.py) + [`scripts/expand_real_corpus.py`](scripts/expand_real_corpus.py) |
 | API throughput | **147.8 req/s** @ 100 VUs · p95 **11.3 ms** (anvil, 24-core / A100) | [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) |
@@ -369,9 +369,20 @@ flowchart LR
 > liboqs timing trace sets**. The planner's headline
 > out-of-sample real-CBOM score comes from the **host-disjoint 40-fold
 > leave-one-out** protocol (`scripts/eval_real_cbom_loo.py`): **tie-aware
-> Kendall τ-b 0.7229** vs the doctrine heuristic **0.7308** (Δ −0.008, improved
-> from −0.066 in the previous session) — the GNN now **matches the migration
-> doctrine on 36 of 37 held-out real estates**, and beats random by **+0.553**.
+> Kendall τ-b 0.7263** vs the doctrine heuristic **0.7450** (Δ −0.0188,
+> 30-epoch fine-tune, 2,000 synthetic per fold, folds sharded across 4 A100s
+> via `--fold-start/--fold-end` and merged with `--merge-shards`, re-run
+> 2026-09-02 on the deterministic-kernel harness) — the GNN **reproduces the
+> migration doctrine on 38 of 40 held-out real estates** (0 wins / 38 ties /
+> 2 losses; the two losing folds are small heavily-tied graphs, n≤8 and n≤13,
+> where one mis-ranked asset swings the whole fold); beats random by
+> **+0.503**. Note: the earlier τ-b 0.7377 (39/40) figure predates the
+> deterministic-kernel fix in `train_gpu.py` (seeded shuffles + cudnn
+> deterministic), which changed per-fold fine-tune outcomes slightly — the
+> current number is the reproducible one (verified: a fresh 3-fold run is
+> bit-identical to the merged shards). The 60-epoch fine-tune variant overfits
+> the synthetic mix (Δ −0.055), so 30 epochs is the best out-of-sample
+> operating point.
 > (Identical assets — e.g. eight RSA-2048 certs — are genuinely
 > indistinguishable, so τ-b only rewards ranking the distinguishable groups;
 > dense-rank τ would be meaningless here. The older **τ-b 0.807** figure in
@@ -385,18 +396,23 @@ flowchart LR
 > See [`docs/STRATEGIC_ANALYSIS.md`](docs/STRATEGIC_ANALYSIS.md) for the full
 > developer roadmap and [`docs/design/`](docs/design/) for target design mockups.
 
-> **Validation status (honest scope):** planner τ and RL rewards are measured on
-> **synthetic** migration graphs whose ranking labels are produced by the same
-> priority formula used as the heuristic baseline (`data_generator.py`), so
-> they demonstrate the model's fidelity to the doctrine rule on generated data —
-> not yet proof of superiority on real enterprise estates. Real-CBOM suites are
-> exercised by `planner/qtrust_planner/eval_harness.py --real-cbom` (convert
-> real CBOMs via `cbom_to_dependency_graph`) and real-data training runs in
-> `scripts/train_real_models.py` / `scripts/train_qtrust_all.py --real`. The
-> RL agent is trained on the same feasible (20–50 asset) distribution it is
-> evaluated on and beats the random baseline; the criticality-priority
-> heuristic remains the near-optimal policy for this reward (see
-> `scripts/retrain_rl_feasible.py`).
+> **Validation status (honest scope):** synthetic-graph τ and RL rewards
+> (factory models) demonstrate fidelity to the doctrine rule on generated
+> data — not superiority on real estates. Real-CBOM suites are exercised by
+> `planner/qtrust_planner/eval_harness.py --real-cbom` and the RL real-CBOM
+> benchmark (`scripts/retrain_rl_real_cbom.py` + `scripts/eval_rl_real_cbom.py`,
+> risk labels derived from the real scan fields). A 2026-09-02 audit found the
+> archived "RL beats the heuristic on real estates" figure (130.20 vs 112.40)
+> was **not reproducible** — every real TLS asset carried the builder's
+> blanket `criticality: medium`, so real-CBOM environments had no reward
+> signal for sequencing (all completing policies scored identically). After
+> deriving risk labels from the real certificates (RSA-1024 → critical,
+> RSA-2048 → high, expired/near-expiry raise the class), the honest benchmark
+> is: agent **140.34** vs doctrine heuristic **140.62** (tie, Δ −0.28) vs
+> random **136.84** (+2.6%) — the agent *learns* real risk-priority and
+> reproduces the doctrine, like the GNN planner. Breaking the ceiling on
+> either model needs expert pairwise labels (`QTrust-RiskBench`), per
+> [`docs/DEVELOPER_ROADMAP.md`](docs/DEVELOPER_ROADMAP.md).
 
 > Full methodology: [docs/PERFORMANCE.md](docs/PERFORMANCE.md) · [docs/GPU_FEATURES.md](docs/GPU_FEATURES.md)
 

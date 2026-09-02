@@ -8,17 +8,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- Planner real-CBOM fine-tune deepened to 30 epochs: the full 37-fold
-  host-disjoint LOO now scores **τ-b 0.7229** vs the doctrine heuristic 0.7308
-  (Δ **−0.0079**, down from −0.0661) and **matches the doctrine on 36/37**
-  held-out real CBOMs (`planner/results/real_cbom_loo.json`); beats random by
-  +0.553. README/docs updated to the honest out-of-sample number.
+- **40-fold host-disjoint LOO re-run on the deterministic-kernel harness**
+  (seeded per-run DataLoader shuffle, cudnn deterministic, no torch.compile):
+  `planner/results/real_cbom_loo_40.json` now records the reproducible
+  out-of-sample **τ-b 0.7263** vs the doctrine heuristic **0.7450**
+  (Δ −0.0188), reproducing the doctrine on **38/40** held-out real CBOMs
+  (0 wins / 38 ties / 2 losses, both n≤13), +0.503 vs random — folds sharded
+  across 4 A100s and merged with `--merge-shards` (a fresh 3-fold run is
+  bit-identical to the merged shards). The pre-fix τ-b 0.7377 (39/40) is
+  superseded; README/TRUTH_AUDIT/DEVELOPER_ROADMAP/AUDIT_REMEDIATION updated.
+- **RL real-CBOM benchmark rebuilt on honest reward semantics.** Audit found
+  every real TLS asset carried the CBOM builder's blanket `criticality:
+  medium`, which left the migration reward with no order-dependent term — so
+  all completing policies scored identically and the archived “RL beats the
+  heuristic on real estates” headline (agent 130.20 vs heuristic 112.40) was
+  **not reproducible** by any script in the repo. Assets are now re-labelled
+  with `risk_criticality_from_scan` (`scripts/train_real_models.py`) — a
+  deterministic function of the real certificate attributes (RSA-1024 →
+  critical, RSA-2048 → high, expired/self-signed/near-expiry raise the
+  class) — and the agent was retrained on those estates. Honest result
+  (`planner/results/rl_benchmark_real_cbom.json`): **agent 140.34 ± 8.13 vs
+  heuristic 140.62 (Δ −0.28, tie) vs random 136.84 (+2.6%), 100% completion**
+  (2/40 wins · 27 ties · 11 losses) — the agent *learns* real risk-priority
+  and matches the doctrine, mirroring the GNN planner finding. Also fixed a
+  second reproducibility bug: `pack_graph_cboms` built its host list from a
+  `set` of scanner hostnames, and Python set iteration order is
+  hash-randomized per process (PYTHONHASHSEED), so the same `seed=99`
+  produced a *different* packing every run — RL retrain and benchmark now
+  share one deterministic packing (hosts sorted before seeded shuffle); two
+  independent eval processes return identical numbers.
+- Real-data training refreshed 2026-09-02 on A100s (deterministic): all 15
+  `qtrust_ai` models train on the real corpora (15/15 trained, anchors 15/15,
+  wall 328s); CodeBERTa held-out F1 **0.9525** reproduces bit-for-bit
+  (P 0.952 / R 0.953); 6/7 models beat their best naive baseline (mean
+  relative gain 1.55×). Anomaly detector re-verified: **162/162 (100%)**
+  detection, FPR **2/54 (3.7%)** on real CBOMs.
 
 ### Fixed
 - `scripts/train_factory.py --phase all` crashed in `phase_risk` on real CBOM
   assets with `"algorithm": null`; `qtrust/models/risk/model.py::featurize`
   now coalesces None/empty algorithms and the factory defaults to RSA-2048.
   The full factory pipeline (discovery → risk → graph) now completes.
+- `planner/qtrust_planner/train_gpu.py` + `rl_agent.py`: deterministic
+  kernels (seeded shuffle generator, cudnn deterministic/benchmark off,
+  skip torch.compile when deterministic) — same seed now yields bit-identical
+  weights (verified 0 param diff in `test_train_gpu_deterministic_same_seed_same_weights`).
 
 ## [2.2.0] - 2026-08-30
 

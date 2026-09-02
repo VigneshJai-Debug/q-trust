@@ -761,6 +761,9 @@ def main() -> None:
     parser.add_argument("--rl-episodes", type=int, default=40, help="episodes for the RL agent")
     parser.add_argument("--report", type=str, default=None,
                         help="output report path (default qtrust_ai/artifacts/training_report[_real].json)")
+    parser.add_argument("--benchmark-out", type=str, default=None,
+                        help="output path for the baseline comparison "
+                             "(default qtrust_ai/artifacts/benchmark_comparison.json)")
     parser.add_argument("--real", action="store_true",
                         help="train on real datasets built by scripts/build_real_datasets.py "
                              "(code corpus / TLS inventory / NVD vendor data); models whose "
@@ -858,7 +861,8 @@ def main() -> None:
             print("\n=== Baseline comparison (models vs naive baselines) ===\n")
             comp = BaselineComparison(seed=42)
             comparison = comp.run_all(real, epochs=args.epochs)
-            comp_path = REPO_ROOT / "qtrust_ai" / "artifacts" / "benchmark_comparison.json"
+            comp_path = Path(args.benchmark_out) if args.benchmark_out else (
+                REPO_ROOT / "qtrust_ai" / "artifacts" / "benchmark_comparison.json")
             comp.to_json(str(comp_path), comparison)
             s = comparison.get("summary", {})
             print(

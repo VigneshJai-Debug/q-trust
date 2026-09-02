@@ -6,6 +6,9 @@
 #   make -f Makefile.gpu train-gnn-quick      # smoke pass for CI / laptops
 #   make -f Makefile.gpu train-rl             # RL migration agent (vectorized PPO)
 #   make -f Makefile.gpu train-rl-quick       # 100-rollout smoke
+#   make -f Makefile.gpu train-rl-real        # RL PPO on 100 packed real-CBOM estates (4K ep)
+#   make -f Makefile.gpu bench-rl-real        # real-CBOM benchmark: agent vs heuristic vs random
+#   make -f Makefile.gpu eval-loo-40          # full 40-fold host-disjoint LOO (30 ep, 2K synth/fold)
 #   make -f Makefile.gpu side-channel-train   # canonical side-channel detector
 #   make -f Makefile.gpu anomaly-train        # canonical anomaly VAE
 
@@ -14,7 +17,7 @@ PLANNER_DIR = planner
 MODEL_DIR ?= planner
 RL_OUT ?= planner/rl_agent.pt
 
-.PHONY: help train-gnn train-gnn-quick train-rl train-rl-quick side-channel-train anomaly-train
+.PHONY: help train-gnn train-gnn-quick train-rl train-rl-quick train-rl-real bench-rl-real eval-loo-40 side-channel-train anomaly-train
 
 help:
 	@echo "QTrust GPU training targets:"
@@ -22,6 +25,9 @@ help:
 	@echo "  make train-gnn-quick      - smoke: 10K graphs, 20 epochs"
 	@echo "  make train-rl             - RL migration agent (PPO, 4K rollouts, 64 envs)"
 	@echo "  make train-rl-quick       - smoke: 100 rollouts"
+	@echo "  make train-rl-real        - RL PPO on 100 packed real-CBOM estates (4K ep)"
+	@echo "  make bench-rl-real        - real-CBOM benchmark (agent vs heuristic vs random)"
+	@echo "  make eval-loo-40          - full 40-fold host-disjoint LOO (30 ep / 2000 synth)"
 	@echo "  make side-channel-train   - canonical side-channel detector (80 epochs)"
 	@echo "  make anomaly-train        - canonical anomaly VAE (80 epochs)"
 	@echo ""
@@ -39,6 +45,23 @@ train-rl:
 
 train-rl-quick:
 	$(PYTHON) scripts/run_rl_train.py 100 $(RL_OUT) 42
+
+## Real-CBOM RL: PPO on packed real estates, then benchmark agent vs
+## criticality-heuristic vs random on 40 packed real environments.
+train-rl-real:
+	$(PYTHON) scripts/retrain_rl_real_cbom.py
+
+bench-rl-real:
+	$(PYTHON) scripts/eval_rl_real_cbom.py
+
+## Full 40-fold host-disjoint LOO on real TLS CBOMs (best OOS operating
+## point: 30-epoch fine-tune, 2000 synthetic/fold). For multi-GPU runs,
+## shard the folds across devices (e.g. four processes with
+## --fold-start 0/10/20/30 --fold-end 10/20/30/40), then merge:
+##   python scripts/eval_real_cbom_loo.py --merge-shards --out planner/results/real_cbom_loo_40.json
+eval-loo-40:
+	$(PYTHON) scripts/eval_real_cbom_loo.py --epochs 30 --n-synthetic 2000 \
+		--out planner/results/real_cbom_loo_40.json
 
 side-channel-train:
 	$(PYTHON) scripts/run_inspector_train.py side_channel

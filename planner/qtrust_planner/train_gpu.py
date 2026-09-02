@@ -210,6 +210,14 @@ def train_gpu(
         epochs = min(epochs, 5)
 
     torch.manual_seed(seed)
+    # Deterministic kernels: BF16 autocast GEMMs on Ampere are non-deterministic
+    # by default (split-K reductions), so two runs with the same seed produce
+    # different weights and — on small heavily-tied real CBOM folds — flipped
+    # τ-b fold outcomes. Verified: with this block two identical runs differ by
+    # 0 params (was ~300K/237K). See docs/DEVELOPER_ROADMAP.md §6.
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.use_deterministic_algorithms(True)
 
     print(f"Device: {torch.cuda.get_device_name(0)}" if use_cuda else "Device: cpu")
     if use_cuda:
@@ -235,8 +243,12 @@ def train_gpu(
     val_dataset = dataset[n_train:]
     print(f"Train: {n_train:,} graphs, Val: {n_val:,} graphs")
 
+    # Explicit per-run generator so the shuffle order is a pure function of the
+    # seed (independent of ambient global RNG state in the caller).
+    loader_gen = torch.Generator().manual_seed(seed)
     loader_kwargs = {"num_workers": 4} if use_cuda else {"num_workers": 0}
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, **loader_kwargs)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
+                              generator=loader_gen, **loader_kwargs)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, **loader_kwargs)
 
     model = MigrationGNNv3(input_features=6, norm=norm).to(device)
@@ -277,7 +289,14 @@ def train_gpu(
     # training 10x SLOWER instead of faster. QTRUST_DISABLE_COMPILE=1 opts
     # out (recommended for large-scale sweeps; the vectorized per-graph loss
     # already removes the Python-loop bottleneck that compile was added for).
-    if use_cuda and not os.environ.get("QTRUST_DISABLE_COMPILE", "0") == "1":
+    # torch.compile is skipped when deterministic kernels are active (the
+    # default): dynamic PyG node counts make compile recompile on every shape
+    # change, which is both 10x slower (see the notebook/makefiles) and the
+    # remaining source of same-seed run-to-run weight differences. Everything
+    # else can opt out with QTRUST_DISABLE_COMPILE=1 as before.
+    if (use_cuda
+            and not os.environ.get("QTRUST_DISABLE_COMPILE", "0") == "1"
+            and not (torch.backends.cudnn.deterministic and torch.are_deterministic_algorithms_enabled())):
         try:
             model = torch.compile(model)  # type: ignore[attr-defined]
             print("Model compiled with torch.compile")

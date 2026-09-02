@@ -147,6 +147,37 @@ def test_train_gpu_cpu_fallback_tiny():
     Path(out).unlink(missing_ok=True)
 
 
+def test_train_gpu_deterministic_same_seed_same_weights():
+    """Regression: with determinism enabled, two runs with the same seed
+    must produce bit-identical weights (flips in the real-CBOM LOO folds were
+    traced to non-deterministic BF16/cuBLAS kernels; fixed in train_gpu.py)."""
+    from qtrust_planner.train_gpu import train_gpu
+
+    kwargs = dict(n_graphs=8, epochs=1, batch_size=2, seed=42,
+                  model_path=str(Path(__file__).parent / "_det_1.pt"),
+                  device_name="cpu" if not torch.cuda.is_available() else None)
+    train_gpu(**kwargs)
+    train_gpu(**{**kwargs, "model_path": str(Path(__file__).parent / "_det_2.pt")})
+
+    import torch as _torch
+    a = _torch.load(Path(__file__).parent / "_det_1.pt", map_location="cpu", weights_only=True)
+    b = _torch.load(Path(__file__).parent / "_det_2.pt", map_location="cpu", weights_only=True)
+    try:
+        sd_a = a["state_dict"]
+        sd_b = b["state_dict"]
+    except (KeyError, TypeError):
+        sd_a, sd_b = a, b
+    n_diff = 0
+    for k in sd_a:
+        try:
+            n_diff += int((sd_a[k] != sd_b[k]).sum())
+        except RuntimeError:  # non-tensor metadata race is not a weight diff
+            continue
+    for _p in (Path(__file__).parent / "_det_1.pt", Path(__file__).parent / "_det_2.pt"):
+        _p.unlink(missing_ok=True)
+    assert n_diff == 0, f"same seed produced {n_diff} differing params"
+
+
 def test_train_gpu_batch_too_small_raises():
     from qtrust_planner.train_gpu import train_gpu
 

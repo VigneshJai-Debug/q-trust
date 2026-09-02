@@ -127,10 +127,11 @@ nothing is estimated. See `docs/DEVELOPER_ROADMAP.md` for interpretation.
 | Run | Command | Measured result | Artifact |
 |---|---|---|---|
 | Real-CBOM LOO (3 folds) | `python scripts/eval_real_cbom_loo.py --quick --epochs 3 --n-synthetic 600` | model τ-b **0.6546** = heuristic **0.6546** (Δ 0.0000); random 0.3416 | `planner/results/real_cbom_loo_cpu_repro.json` |
-| RL agent (20 feasible envs) | `python scripts/eval_rl_agent.py --n-envs 20` | agent reward **108.93** vs heuristic **112.40** vs random **100.11**; completion 100% | `planner/results/rl_benchmark_cpu_repro.json` |
-| Anomaly detector on real CBOMs | `python scripts/train_real_models.py --model anomaly --epochs 30` | detection **168/168 (100%)**, FPR **3/56 (5.4%)** | `inspector/anomaly_model_real.pt` (gitignored) |
-| Full real-data training (all 15 models) | `python scripts/train_qtrust_all.py --real` | **15/15 trained, 15/15 anchors, 6 models beat baselines (mean gain 1.79×)**, wall 255s | `qtrust_ai/artifacts/training_report_real.json` |
-| Full 37-fold LOO (idle A100, 30-epoch fine-tune) | `python scripts/eval_real_cbom_loo.py --epochs 30 --n-synthetic 2000` | model τ-b **0.7229** vs heuristic **0.7308** (Δ **−0.0079**, was −0.0661); random 0.1695; matches the doctrine on **36/37** folds | `planner/results/real_cbom_loo.json` |
+| RL agent (20 synthetic feasible envs, 20-50 assets — reference for sequencing skill under deadline pressure) | `python scripts/eval_rl_agent.py --n-envs 20` | agent reward **108.93** vs heuristic **112.40** vs random **100.11**; completion 100% | `planner/results/rl_benchmark_cpu_repro.json` |
+| Anomaly detector on real CBOMs | `python scripts/train_real_models.py --model anomaly --epochs 120` | detection **162/162 (100%)**, FPR **2/54 (3.7%)** (recorded 2026-09-02; 168/168/3/56 in older logs was a smaller/earlier corpus split) | `inspector/anomaly_model_real.pt` (gitignored) |
+| Full real-data training (all 15 models) | `python scripts/train_qtrust_all.py --real --hf-epochs 4` | **15/15 trained, 15/15 anchors, 6/7 models beat their best naive baseline (mean relative gain 1.55×)**, wall 328s (2026-09-02, deterministic CodeBERTa fine-tune) | `qtrust_ai/artifacts/training_report_real.json` |
+| Full 40-fold LOO (4 A100s, 30-epoch fine-tune, deterministic-kernel harness) | `python scripts/eval_real_cbom_loo.py --epochs 30 --n-synthetic 2000` + `--fold-start/--fold-end` shards + `--merge-shards` | model τ-b **0.7263** vs heuristic **0.7450** (Δ **−0.0188**); random 0.2234 (**+0.503**); reproduces the doctrine on **38/40** folds (0 wins / 38 ties / 2 losses, both n≤13). Supersedes: 37-fold τ-b 0.7229/36-of-37 and the pre-determinism 40-fold τ-b 0.7377/39-of-40 (seeded-shuffle fix changed per-fold fine-tunes; 3-fold repro is bit-identical) | `planner/results/real_cbom_loo_40.json` |
+| RL agent (real-CBOM estates, scan-derived risk) | `python scripts/retrain_rl_real_cbom.py 190 planner/rl_agent_real.pt 42` + `python scripts/eval_rl_real_cbom.py` | agent **140.34** ± 8.13 vs heuristic **140.62** (Δ −0.28, tie) vs random **136.84** (+2.6%); 100% completion, 2/40 wins / 27 ties / 11 losses — learns real risk-priority, matches the doctrine (archived “beats heuristic 130.20” was not reproducible; all-medium criticality bug fixed + `pack_graph_cboms` set-order determinism fixed 2026-09-02; two independent processes give identical results) | `planner/results/rl_benchmark_real_cbom.json` |
 
 One defect was found and fixed during this pass:
 - `scripts/train_factory.py --phase all` crashed in `phase_risk` when a real
@@ -147,11 +148,11 @@ Two integrity fixes were made during reproduction:
   GPU device label even when the device was unusable/busy at runtime. Both now
   use a probe-based resolver (`planner/qtrust_planner/_device.py`) so recorded
   results reflect the device actually used.
-- Environment caveat: the A100 here is real but was **contended** (another
-  process held it), so early CUDA probes intermittently failed. The 15-model
-  training and the full 37-fold LOO above were run once the GPU was idle and
-  are clean measurements on `NVIDIA A100-SXM4-80GB` (device label is now
-  probe-verified, not assumed).
+- Environment caveat: the A100s here are real but shared, so early CUDA
+  probes intermittently failed. The 15-model training and the 40-fold LOO
+  above were run once the GPUs were free and are clean measurements on
+  `NVIDIA A100-SXM4-80GB` (device label is now probe-verified, not assumed;
+  deterministic kernels make repeats bit-identical).
 
 ## 8. Halmos CI job was broken (and is now a real blocking check)
 

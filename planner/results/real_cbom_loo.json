@@ -1,7 +1,7 @@
 {
   "protocol": "leave-one-out (host-disjoint CBOMs, real TLS scan)",
-  "n_cboms": 37,
-  "n_hosts": 277,
+  "n_cboms": 40,
+  "n_hosts": 280,
   "fold_metrics": {
     "real_finance_0.json": {
       "model": {
@@ -248,24 +248,24 @@
         "exact_rank": 0.0,
         "top5": 1.0,
         "top10": 1.0,
-        "kendall": 0.731925,
-        "node_rank": 0.125
+        "kendall": 0.774597,
+        "node_rank": 0.6
       },
       "heuristic": {
         "exact_rank": 1.0,
         "top5": 1.0,
         "top10": 1.0,
-        "kendall": 0.731925,
+        "kendall": 0.774597,
         "node_rank": 1.0
       },
       "random": {
         "exact_rank": 0.0,
-        "top5": 0.0,
+        "top5": 1.0,
         "top10": 1.0,
-        "kendall": 0.341565,
-        "node_rank": 0.25
+        "kendall": 0.0,
+        "node_rank": 0.0
       },
-      "n_assets": 8
+      "n_assets": 5
     },
     "real_infra_1.json": {
       "model": {
@@ -366,26 +366,26 @@
     "real_mixed_0.json": {
       "model": {
         "exact_rank": 0.0,
-        "top5": 0.0,
+        "top5": 1.0,
         "top10": 1.0,
-        "kendall": 0.779194,
-        "node_rank": 0.25
+        "kendall": 1.0,
+        "node_rank": 0.2
       },
       "heuristic": {
         "exact_rank": 1.0,
         "top5": 1.0,
         "top10": 1.0,
-        "kendall": 0.779194,
+        "kendall": 1.0,
         "node_rank": 1.0
       },
       "random": {
         "exact_rank": 0.0,
-        "top5": 0.0,
+        "top5": 1.0,
         "top10": 1.0,
-        "kendall": 0.137505,
-        "node_rank": 0.125
+        "kendall": 1.0,
+        "node_rank": 0.0
       },
-      "n_assets": 8
+      "n_assets": 5
     },
     "real_mixed_1.json": {
       "model": {
@@ -480,6 +480,54 @@
         "top10": 1.0,
         "kendall": 0.774597,
         "node_rank": 0.666667
+      },
+      "n_assets": 6
+    },
+    "real_mixed_13.json": {
+      "model": {
+        "exact_rank": 0.0,
+        "top5": 0.0,
+        "top10": 1.0,
+        "kendall": 0.730297,
+        "node_rank": 0.0
+      },
+      "heuristic": {
+        "exact_rank": 1.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.730297,
+        "node_rank": 1.0
+      },
+      "random": {
+        "exact_rank": 0.0,
+        "top5": 0.0,
+        "top10": 1.0,
+        "kendall": 0.365148,
+        "node_rank": 0.0
+      },
+      "n_assets": 6
+    },
+    "real_mixed_14.json": {
+      "model": {
+        "exact_rank": 0.0,
+        "top5": 0.0,
+        "top10": 1.0,
+        "kendall": 0.774597,
+        "node_rank": 0.0
+      },
+      "heuristic": {
+        "exact_rank": 1.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.774597,
+        "node_rank": 1.0
+      },
+      "random": {
+        "exact_rank": 0.0,
+        "top5": 0.0,
+        "top10": 1.0,
+        "kendall": -0.774597,
+        "node_rank": 0.0
       },
       "n_assets": 6
     },
@@ -753,7 +801,7 @@
         "top5": 1.0,
         "top10": 1.0,
         "kendall": 0.823754,
-        "node_rank": 0.375
+        "node_rank": 0.75
       },
       "heuristic": {
         "exact_rank": 1.0,
@@ -766,34 +814,34 @@
         "exact_rank": 0.0,
         "top5": 0.0,
         "top10": 1.0,
-        "kendall": -0.47691,
-        "node_rank": 0.0
+        "kendall": 0.390199,
+        "node_rank": 0.125
       },
       "n_assets": 8
     },
     "real_tech_1.json": {
       "model": {
-        "exact_rank": 0.0,
-        "top5": 0.0,
+        "exact_rank": 1.0,
+        "top5": 1.0,
         "top10": 1.0,
-        "kendall": 0.823754,
-        "node_rank": 0.125
+        "kendall": 1.0,
+        "node_rank": 1.0
       },
       "heuristic": {
         "exact_rank": 1.0,
         "top5": 1.0,
         "top10": 1.0,
-        "kendall": 0.823754,
+        "kendall": 1.0,
         "node_rank": 1.0
       },
       "random": {
-        "exact_rank": 0.0,
-        "top5": 0.0,
+        "exact_rank": 1.0,
+        "top5": 1.0,
         "top10": 1.0,
-        "kendall": 0.130066,
-        "node_rank": 0.125
+        "kendall": 1.0,
+        "node_rank": 1.0
       },
-      "n_assets": 8
+      "n_assets": 2
     },
     "real_tech_2.json": {
       "model": {
@@ -890,21 +938,45 @@
         "node_rank": 0.222222
       },
       "n_assets": 9
+    },
+    "real_tech_6.json": {
+      "model": {
+        "exact_rank": 1.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.816497,
+        "node_rank": 1.0
+      },
+      "heuristic": {
+        "exact_rank": 1.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.816497,
+        "node_rank": 1.0
+      },
+      "random": {
+        "exact_rank": 0.0,
+        "top5": 1.0,
+        "top10": 1.0,
+        "kendall": 0.816497,
+        "node_rank": 0.333333
+      },
+      "n_assets": 3
     }
   },
   "aggregate": {
     "model": {
       "exact_rank": {
-        "mean": 0.027027,
+        "mean": 0.075,
         "median": 0.0,
-        "stdev": 0.164399,
+        "stdev": 0.266747,
         "min": 0.0,
         "max": 1.0
       },
       "top5": {
-        "mean": 0.405405,
+        "mean": 0.45,
         "median": 0.0,
-        "stdev": 0.497743,
+        "stdev": 0.503831,
         "min": 0.0,
         "max": 1.0
       },
@@ -916,16 +988,16 @@
         "max": 1.0
       },
       "kendall": {
-        "mean": 0.722904,
+        "mean": 0.737714,
         "median": 0.731925,
-        "stdev": 0.131707,
+        "stdev": 0.140513,
         "min": 0.439155,
         "max": 1.0
       },
       "node_rank": {
-        "mean": 0.255405,
+        "mean": 0.303125,
         "median": 0.25,
-        "stdev": 0.194793,
+        "stdev": 0.269488,
         "min": 0.0,
         "max": 1.0
       }
@@ -953,9 +1025,9 @@
         "max": 1.0
       },
       "kendall": {
-        "mean": 0.730817,
+        "mean": 0.745033,
         "median": 0.731925,
-        "stdev": 0.122671,
+        "stdev": 0.131925,
         "min": 0.471405,
         "max": 1.0
       },
@@ -969,16 +1041,16 @@
     },
     "random": {
       "exact_rank": {
-        "mean": 0.0,
+        "mean": 0.025,
         "median": 0.0,
-        "stdev": 0.0,
+        "stdev": 0.158114,
         "min": 0.0,
-        "max": 0.0
+        "max": 1.0
       },
       "top5": {
-        "mean": 0.108108,
+        "mean": 0.2,
         "median": 0.0,
-        "stdev": 0.3148,
+        "stdev": 0.405096,
         "min": 0.0,
         "max": 1.0
       },
@@ -990,23 +1062,23 @@
         "max": 1.0
       },
       "kendall": {
-        "mean": 0.169465,
-        "median": 0.218218,
-        "stdev": 0.427042,
-        "min": -0.595854,
+        "mean": 0.223381,
+        "median": 0.251087,
+        "stdev": 0.475127,
+        "min": -0.774597,
         "max": 1.0
       },
       "node_rank": {
-        "mean": 0.138438,
+        "mean": 0.152014,
         "median": 0.125,
-        "stdev": 0.143694,
+        "stdev": 0.20007,
         "min": 0.0,
-        "max": 0.666667
+        "max": 1.0
       }
     }
   },
-  "model_vs_heuristic_tau_b": -0.007913,
-  "model_vs_random_tau_b": 0.553439,
+  "model_vs_heuristic_tau_b": -0.007319,
+  "model_vs_random_tau_b": 0.514333,
   "config": {
     "init": "planner/model_gpu_v3.pt",
     "epochs": 30,
@@ -1016,5 +1088,11 @@
     "seed": 42
   },
   "device": "NVIDIA A100-SXM4-80GB",
-  "generated_at": "2026-08-31T06:16:31Z"
+  "shard_files": [
+    "real_cbom_loo_40_shard0_10.json",
+    "real_cbom_loo_40_shard10_20.json",
+    "real_cbom_loo_40_shard20_30.json",
+    "real_cbom_loo_40_shard30_40.json"
+  ],
+  "generated_at": "2026-09-01T21:58:48Z"
 }
